@@ -15,7 +15,7 @@ Xの検索結果ではなく、リスト画面に読み込まれた投稿をブ�
 1. Chromeで `chrome://extensions` を開きます。
 2. 右上の「デベロッパー モード」を有効にします。
 3. 「パッケージ化されていない拡張機能を読み込む」を押します。
-4. `C:\Users\apricot\local\dev\sift` を選びます。
+4. `C:\Users\apricot\local\dev\sift\dist` を選びます。
 5. Xで `https://x.com/i/lists/2007329806292267372` を開きます。
 
 右下に抽出状況が表示されます。青い線は通常条件、橙色の線は上昇中です。
@@ -28,10 +28,25 @@ Xの検索結果ではなく、リスト画面に読み込まれた投稿をブ�
 - Xの画面構造が変わると、更新が必要になる場合があります。
 - 非公開投稿、ブロック、地域制限など、リスト画面自体に届かない投稿は表示できません。
 
-## 開発時の確認
+## 開発
 
-Node.jsがある環境では、判定ロジックのテストを実行できます。
+依存関係を入れた後は、次のコマンドで開発サーバーを起動します。
 
 ```powershell
-node .\test.js
+npm install
+npm run dev
+```
+
+初回だけ、Chrome の `chrome://extensions` でデベロッパー モードを有効にして `dist` を読み込みます。その後は `npm run dev` を動かしたまま保存すれば、content script を含めて変更が自動反映されます。
+
+手動読込・配布用のファイルは、次のコマンドで `dist` に作成します。ビルド時には旧 manifest と生成 manifest の権限・対象ホスト・content script 設定を比較します。
+
+```powershell
+npm run build
+```
+
+判定ロジックのテストは次のコマンドで実行できます。
+
+```powershell
+npm test
 ```
