@@ -1,4 +1,9 @@
 import assert from "node:assert/strict";
+import {
+  createDevServerMonitor,
+  getContentScriptPlans,
+  initializeDevRuntime
+} from "./src/background-dev.js";
 import { classifyPost, parseMetric } from "./src/filter-core.js";
 
 const settings = {
@@ -87,5 +92,91 @@ assert.deepEqual(
   ),
   { state: "hidden", reason: "repost" }
 );
+
+const runtimeManifest = {
+  content_scripts: [
+    {
+      matches: ["https://x.com/*", "https://twitter.com/*"],
+      js: ["vendor/content-css-loader.js", "src/content/index.js-loader.js"]
+    }
+  ]
+};
+assert.deepEqual(getContentScriptPlans(runtimeManifest), [
+  {
+    matches: ["https://x.com/*", "https://twitter.com/*"],
+    files: ["vendor/content-css-loader.js", "src/content/index.js-loader.js"]
+  }
+]);
+
+const sessionState = {};
+const queryCalls = [];
+const injectionCalls = [];
+const runtimeApi = {
+  runtime: {
+    getManifest: () => runtimeManifest
+  },
+  scripting: {
+    executeScript: async (options) => {
+      injectionCalls.push(options);
+    }
+  },
+  storage: {
+    session: {
+      get: async (key) => ({ [key]: sessionState[key] }),
+      set: async (values) => Object.assign(sessionState, values)
+    }
+  },
+  tabs: {
+    query: async (options) => {
+      queryCalls.push(options);
+      return [{ id: 10 }, { id: 20 }, { id: null }];
+    }
+  }
+};
+
+assert.deepEqual(await initializeDevRuntime(runtimeApi), {
+  initialized: true,
+  injectedTabCount: 2
+});
+assert.deepEqual(queryCalls, [
+  { url: ["https://x.com/*", "https://twitter.com/*"] }
+]);
+assert.deepEqual(injectionCalls, [
+  {
+    target: { tabId: 10 },
+    files: ["vendor/content-css-loader.js", "src/content/index.js-loader.js"]
+  },
+  {
+    target: { tabId: 20 },
+    files: ["vendor/content-css-loader.js", "src/content/index.js-loader.js"]
+  }
+]);
+
+assert.deepEqual(await initializeDevRuntime(runtimeApi), {
+  initialized: false,
+  injectedTabCount: 0
+});
+assert.equal(queryCalls.length, 1);
+
+let probeSucceeds = true;
+let reloadCount = 0;
+const monitor = createDevServerMonitor({
+  probe: async () => {
+    if (!probeSucceeds) {
+      throw new Error("offline");
+    }
+  },
+  reload: () => {
+    reloadCount += 1;
+  }
+});
+assert.equal(await monitor.check(), "connected");
+probeSucceeds = false;
+assert.equal(await monitor.check(), "disconnected");
+assert.equal(await monitor.check(), "disconnected");
+probeSucceeds = true;
+assert.equal(await monitor.check(), "reloaded");
+assert.equal(reloadCount, 1);
+assert.equal(await monitor.check(), "connected");
 
 console.log("filter-core tests passed");
