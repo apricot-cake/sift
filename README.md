@@ -15,12 +15,12 @@ Xの検索結果ではなく、リスト画面に読み込まれた投稿をブ�
 1. Chromeで `chrome://extensions` を開きます。
 2. 右上の「デベロッパー モード」を有効にします。
 3. 「パッケージ化されていない拡張機能を読み込む」を押します。
-4. `C:\Users\apricot\local\dev\sift\dist` を選びます。
+4. `C:\Users\apricot\local\dev\sift\dist-dev` を選びます。
 5. Xで `https://x.com/i/lists/2007329806292267372` を開きます。
 
 右下に抽出状況が表示されます。青い線は通常条件、橙色の線は上昇中です。
 
-`dist` を作り直した後は、`chrome://extensions` にある Sift の「再読み込み」を押してから、X のリスト画面を再読み込みします。
+初回に `dist-dev` を読み込んだ後は、通常のコード変更で拡張機能を手動再読み込みする必要はありません。開いているタブが「再読み込みしてください」と案内した場合だけ、そのページを再読み込みします。
 
 ## 仕組みと制約
 
@@ -32,18 +32,29 @@ Xの検索結果ではなく、リスト画面に読み込まれた投稿をブ�
 
 ## 開発
 
-依存関係を入れた後は、次のコマンドで開発サーバーを起動します。
+依存関係を入れた後、初回だけ Windows のログオンタスクを登録します。
 
 ```powershell
 npm install
-npm run dev
+npm run ext:register
 ```
 
-初回だけ、Chrome の `chrome://extensions` でデベロッパー モードを有効にして `dist-dev` を読み込みます。その後は `npm run dev` を動かしたまま保存すれば、content script を含めて変更が自動反映されます。開発サーバーは `127.0.0.1:51732` だけで待ち受け、ポートが使用中なら別ポートへ移らず停止します。
+`SiftExtensionDev` タスクが通常ユーザー権限でログオン時に起動し、main リポジトリを監視します。開発サーバーは `127.0.0.1:51732` だけで待ち受け、ポートが使用中なら別ポートへ移らず失敗状態になります。Claude Code / Codex のリポジトリローカルフックも、ファイル変更前にこの状態を確認します。
+
+状態確認と再起動は次のコマンドで行います。
+
+```powershell
+npm run ext:status
+npm run ext:restart
+```
+
+`npm run dev` は常駐タスクの readiness を確認し、停止中ならタスクを起動するコマンドです。前景で Vite を所有しません。`npm run dev:server` は supervisor 専用の内部コマンドなので、日常運用では直接実行しません。
+
+初回だけ、Chrome の `chrome://extensions` でデベロッパー モードを有効にして `dist-dev` を読み込みます。その後は PR のマージと main の同期を常駐 Vite が検知し、content script を含めて変更を自動反映します。worktree 内の未マージ変更は配信対象ではありません。
 
 background 相当の開発ランタイムが更新されても、開いている X のタブは自動再読み込みしません。古い content script は操作部品を片付けて再読み込み案内へ退避するため、そのタブで新しい版を使うときだけページを再読み込みします。
 
-手動読込・配布用のファイルは、次のコマンドで `dist` に作成します。開発用の `dist-dev` とは分離されるため、起動中の開発版を上書きしません。ビルド時には旧 manifest と生成 manifest の権限・対象ホスト・content script 設定を比較します。
+配布・リリース確認用のファイルは、次のコマンドで `dist` に作成します。日常の Chrome 読み込み先は `dist-dev` のままです。開発用の `dist-dev` とは分離されるため、起動中の開発版を上書きしません。ビルド時には旧 manifest と生成 manifest の権限・対象ホスト・content script 設定を比較します。
 
 ```powershell
 npm run build
