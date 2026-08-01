@@ -1,0 +1,23 @@
+[data-xif-filter-state="hidden"] {
+  display: none !important;
+}
+
+body.xif-show-all [data-xif-filter-state="hidden"] {
+  display: block !important;
+  opacity: 0.35 !important;
+}
+
+[data-xif-filter-state="hit"] article[data-testid="tweet"] {
+  box-shadow: inset 3px 0 0 rgb(29, 155, 240);
+}
+
+[data-xif-filter-state="rising"] article[data-testid="tweet"] {
+  box-shadow: inset 3px 0 0 rgb(255, 173, 31);
+}
+
+#xif-toolbar-host {
+  bottom: 18px;
+  position: fixed;
+  right: 18px;
+  z-index: 2147483647;
+}
