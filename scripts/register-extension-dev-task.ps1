@@ -19,7 +19,7 @@ $action = New-ScheduledTaskAction `
 $trigger = New-ScheduledTaskTrigger -AtLogOn -User $userId
 $principal = New-ScheduledTaskPrincipal `
   -UserId $userId `
-  -LogonType Interactive `
+  -LogonType S4U `
   -RunLevel Limited
 $settings = New-ScheduledTaskSettingsSet `
   -Hidden `

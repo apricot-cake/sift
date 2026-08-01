@@ -31,6 +31,7 @@ assert.equal(
 assert.equal(packageJson.scripts["dev:server"], "vite");
 assert.match(taskScript, /SiftExtensionDev/);
 assert.match(taskScript, /-AtLogOn/);
+assert.match(taskScript, /-LogonType S4U/);
 assert.match(taskScript, /-MultipleInstances IgnoreNew/);
 assert.match(taskScript, /-RunLevel Limited/);
 assert.match(taskScript, /PathType Container/);
