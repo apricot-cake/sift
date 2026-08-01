@@ -6,11 +6,11 @@ body.xif-show-all [data-xif-filter-state="hidden"] {
 }
 
 [data-xif-filter-state="hit"] article[data-testid="tweet"] {
-  box-shadow: inset 3px 0 0 rgb(29, 155, 240);
+  box-shadow: inset 3px 0 0 rgb(37, 99, 235);
 }
 
 [data-xif-filter-state="rising"] article[data-testid="tweet"] {
-  box-shadow: inset 3px 0 0 rgb(255, 173, 31);
+  box-shadow: inset 3px 0 0 rgb(217, 119, 6);
 }
 
 #xif-toolbar-host {
