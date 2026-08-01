@@ -161,29 +161,60 @@ export function startContentRuntime() {
     function toolbarMarkup() {
       return `
         <style>
-          :host { color-scheme: dark; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
-          .toolbar { align-items: center; backdrop-filter: blur(14px); background: rgba(20, 22, 25, 0.94); border: 1px solid rgba(255, 255, 255, 0.16); border-radius: 16px; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.32); color: #f2f2f2; display: flex; gap: 8px; padding: 9px; }
-          button { background: #2f3336; border: 0; border-radius: 999px; color: inherit; cursor: pointer; font: inherit; font-size: 12px; font-weight: 650; padding: 7px 10px; white-space: nowrap; }
-          button:hover { background: #3d4246; }
-          button[data-active="true"] { background: #1d9bf0; color: white; }
-          .status { font-size: 12px; font-variant-numeric: tabular-nums; padding: 0 3px; white-space: nowrap; }
-          .panel { background: rgba(20, 22, 25, 0.98); border: 1px solid rgba(255, 255, 255, 0.16); border-radius: 16px; bottom: 54px; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.32); display: grid; gap: 10px; min-width: 260px; padding: 14px; position: absolute; right: 0; }
+          :host {
+            color-scheme: light dark;
+            font-family: "Segoe UI Variable", "Segoe UI", system-ui, sans-serif;
+            --accent: #0f6cbd;
+            --background: #ffffff;
+            --border: #d1d5db;
+            --control-background: #ffffff;
+            --foreground: #1f2328;
+            --muted: #656d76;
+            --subtle-background: #f6f8fa;
+          }
+          @media (prefers-color-scheme: dark) {
+            :host {
+              --accent: #4c9ee8;
+              --background: #202020;
+              --border: #484848;
+              --control-background: #292929;
+              --foreground: #f3f3f3;
+              --muted: #b7b7b7;
+              --subtle-background: #2b2b2b;
+            }
+          }
+          * { box-sizing: border-box; }
+          .toolbar { align-items: center; background: var(--background); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 4px 14px rgb(0 0 0 / 18%); color: var(--foreground); display: flex; gap: 6px; padding: 7px; }
+          button { background: var(--control-background); border: 1px solid var(--border); border-radius: 6px; color: inherit; cursor: pointer; font: inherit; font-size: 12px; font-weight: 600; min-height: 30px; padding: 5px 9px; white-space: nowrap; }
+          button:hover { background: var(--subtle-background); }
+          button:focus-visible, input:focus-visible, select:focus-visible { border-color: var(--accent); outline: 2px solid color-mix(in srgb, var(--accent) 40%, transparent); outline-offset: 1px; }
+          button[data-active="true"] { background: var(--accent); border-color: var(--accent); color: #ffffff; }
+          .status { font-size: 12px; font-variant-numeric: tabular-nums; padding: 0 4px; white-space: nowrap; }
+          .panel { background: var(--background); border: 1px solid var(--border); border-radius: 8px; bottom: 48px; box-shadow: 0 8px 24px rgb(0 0 0 / 22%); color: var(--foreground); min-width: 292px; padding: 14px; position: absolute; right: 0; }
           .panel[hidden] { display: none; }
-          label { align-items: center; display: flex; font-size: 13px; gap: 8px; justify-content: space-between; }
-          input[type="number"], select { background: #000; border: 1px solid #536471; border-radius: 8px; box-sizing: border-box; color: white; font: inherit; padding: 6px 8px; width: 90px; }
-          .hint { color: #8b98a5; font-size: 11px; line-height: 1.4; margin: 0; }
+          .panel-header { align-items: baseline; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; margin-bottom: 7px; padding-bottom: 10px; }
+          .panel-header strong { font-size: 14px; font-weight: 600; }
+          .panel-header span { color: var(--muted); font-size: 11px; }
+          label { align-items: center; display: flex; font-size: 13px; gap: 12px; justify-content: space-between; min-height: 36px; }
+          input, select { font: inherit; }
+          input[type="checkbox"] { accent-color: var(--accent); height: 17px; width: 17px; }
+          input[type="number"], select { background: var(--control-background); border: 1px solid var(--border); border-radius: 6px; color: var(--foreground); height: 30px; padding: 4px 7px; width: 96px; }
+          .input-with-unit { align-items: center; color: var(--muted); display: flex; font-size: 11px; gap: 5px; }
+          .input-with-unit input { width: 66px; }
+          .hint { border-top: 1px solid var(--border); color: var(--muted); font-size: 11px; line-height: 1.45; margin: 8px 0 0; padding-top: 10px; }
         </style>
-        <div class="panel" data-role="panel" hidden>
-          <label>通常の最低いいね<input data-setting="minLikes" type="number" min="0" step="50"></label>
+        <div class="panel" data-role="panel" role="dialog" aria-label="Siftの設定" hidden>
+          <div class="panel-header"><strong>フィルター設定</strong><span>自動保存</span></div>
+          <label>通常の最低いいね数<input data-setting="minLikes" type="number" min="0" step="50"></label>
           <label>上昇中を表示<input data-setting="risingEnabled" type="checkbox"></label>
-          <label>上昇中の最低いいね<input data-setting="risingMinLikes" type="number" min="0" step="10"></label>
-          <label>投稿後の時間<input data-setting="risingMaxAgeHours" type="number" min="1" max="168"></label>
+          <label>上昇中の最低いいね数<input data-setting="risingMinLikes" type="number" min="0" step="10"></label>
+          <label>投稿後の時間<span class="input-with-unit"><input data-setting="risingMaxAgeHours" type="number" min="1" max="168">時間</span></label>
           <label>メディア<select data-setting="mediaMode"><option value="any">画像・動画</option><option value="images">画像のみ</option></select></label>
           <label>リポストを除外<input data-setting="hideReposts" type="checkbox"></label>
-          <p class="hint">設定は自動保存されます。青線が通常、橙線が上昇中です。</p>
+          <p class="hint">青線は通常、橙線は上昇中の投稿です。</p>
         </div>
         <div class="toolbar">
-          <button data-action="toggle-enabled"></button><span class="status" data-role="status">判定中…</span><button data-action="toggle-show-all">全件を一時表示</button><button data-action="toggle-panel">調整</button>
+          <button data-action="toggle-enabled"></button><span class="status" data-role="status" role="status" aria-live="polite">判定中…</span><button data-action="toggle-show-all">全件を一時表示</button><button data-action="toggle-panel" aria-expanded="false">設定</button>
         </div>
       `;
     }
@@ -229,6 +260,7 @@ export function startContentRuntime() {
         } else if (button.dataset.action === "toggle-panel") {
           const panel = shadowRoot.querySelector('[data-role="panel"]');
           panel.hidden = !panel.hidden;
+          button.setAttribute("aria-expanded", String(!panel.hidden));
         }
       });
 
@@ -260,10 +292,25 @@ export function startContentRuntime() {
       shadowRoot = host.attachShadow({ mode: "open" });
       shadowRoot.innerHTML = `
         <style>
-          :host { color-scheme: dark; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
-          .notice { background: rgba(20, 22, 25, 0.96); border: 1px solid rgba(255, 255, 255, 0.16); border-radius: 16px; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.32); color: #f2f2f2; display: grid; gap: 4px; max-width: 260px; padding: 12px 14px; }
+          :host {
+            color-scheme: light dark;
+            font-family: "Segoe UI Variable", "Segoe UI", system-ui, sans-serif;
+            --background: #ffffff;
+            --border: #d1d5db;
+            --foreground: #1f2328;
+            --muted: #656d76;
+          }
+          @media (prefers-color-scheme: dark) {
+            :host {
+              --background: #202020;
+              --border: #484848;
+              --foreground: #f3f3f3;
+              --muted: #b7b7b7;
+            }
+          }
+          .notice { background: var(--background); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 4px 14px rgb(0 0 0 / 18%); color: var(--foreground); display: grid; gap: 4px; max-width: 280px; padding: 12px 14px; }
           strong { font-size: 13px; }
-          span { color: #aab8c2; font-size: 12px; line-height: 1.45; }
+          span { color: var(--muted); font-size: 12px; line-height: 1.45; }
         </style>
         <div class="notice"><strong>Siftを更新しました</strong><span>このページを再読み込みすると、新しい版で復帰します。</span></div>
       `;
