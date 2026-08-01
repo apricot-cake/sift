@@ -1,10 +1,10 @@
 import { classifyPost, parseMetric } from "../filter-core.js";
 import { defaults, normalizeSettings } from "../settings.js";
+import { findPostCell, getPostCards, hasPostCards } from "./post-cards.js";
 import { CONTENT_RUNTIME_KEY } from "./runtime-key.js";
 
 export function startContentRuntime() {
     const toolbarHostId = "xif-toolbar-host";
-    const listPathPattern = /^\/i\/lists\/\d+/;
 
     let settings = normalizeSettings(defaults);
     let observer = null;
@@ -13,14 +13,6 @@ export function startContentRuntime() {
     let showAllTemporarily = false;
     let shadowRoot = null;
     let disposed = false;
-
-    function isListPage() {
-      return listPathPattern.test(window.location.pathname);
-    }
-
-    function findTimelineCell(article) {
-      return article.closest('[data-testid="cellInnerDiv"]') || article;
-    }
 
     function readLikeCount(article) {
       const button = article.querySelector(
@@ -102,19 +94,23 @@ export function startContentRuntime() {
 
     function filterVisiblePosts() {
       filterFrame = null;
-      if (disposed || !isListPage()) {
+      if (disposed) {
         return;
       }
 
+      const articles = getPostCards(document);
+      if (articles.length === 0) {
+        unmountToolbar();
+        return;
+      }
+
+      mountToolbar();
       document.body.classList.toggle("xif-show-all", showAllTemporarily);
 
-      const articles = Array.from(
-        document.querySelectorAll('article[data-testid="tweet"]')
-      );
       const counts = { hit: 0, rising: 0, hidden: 0 };
 
       for (const article of articles) {
-        const cell = findTimelineCell(article);
+        const cell = findPostCell(article);
 
         if (!settings.enabled) {
           clearCellState(cell);
@@ -235,7 +231,11 @@ export function startContentRuntime() {
     }
 
     function mountToolbar() {
-      if (disposed || !isListPage() || document.getElementById(toolbarHostId)) {
+      if (
+        disposed ||
+        !hasPostCards(document) ||
+        document.getElementById(toolbarHostId)
+      ) {
         return;
       }
 
@@ -283,7 +283,7 @@ export function startContentRuntime() {
     }
 
     function mountReloadNotice() {
-      if (!isListPage()) {
+      if (!hasPostCards(document)) {
         return;
       }
 
@@ -318,10 +318,9 @@ export function startContentRuntime() {
     }
 
     function handleRoute() {
-      if (isListPage()) {
-        mountToolbar();
+      if (hasPostCards(document)) {
         scheduleFilter();
-      } else if (document.getElementById(toolbarHostId)) {
+      } else {
         unmountToolbar();
       }
     }
@@ -379,7 +378,6 @@ export function startContentRuntime() {
       }
 
       settings = normalizeSettings(storedSettings);
-      mountToolbar();
       scheduleFilter();
 
       observer = new MutationObserver(scheduleFilter);

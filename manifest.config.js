@@ -9,7 +9,7 @@ export default defineManifest(({ command }) => {
     manifest_version: 3,
     name: "Sift",
     version: "0.1.0",
-    description: "Xのリスト画面を、メディア・いいね数・投稿後の時間で絞り込みます。",
+    description: "Xの投稿画面を、メディア・いいね数・投稿後の時間で絞り込みます。",
     permissions: isDevelopment ? ["storage", "scripting"] : ["storage"],
     ...(isDevelopment
       ? {

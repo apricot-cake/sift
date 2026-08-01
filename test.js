@@ -4,6 +4,13 @@ import {
   getContentScriptPlans,
   initializeDevRuntime
 } from "./src/background-dev.js";
+import {
+  findPostCell,
+  getPostCards,
+  hasPostCards,
+  POST_CARD_SELECTOR,
+  POST_CELL_SELECTOR
+} from "./src/content/post-cards.js";
 import { classifyPost, parseMetric } from "./src/filter-core.js";
 
 const settings = {
@@ -93,6 +100,47 @@ assert.deepEqual(
   { state: "hidden", reason: "repost" }
 );
 
+const postCell = { id: "post-cell" };
+const postCard = {
+  closest(selector) {
+    assert.equal(selector, POST_CELL_SELECTOR);
+    return postCell;
+  }
+};
+const postCardWithoutCell = {
+  closest(selector) {
+    assert.equal(selector, POST_CELL_SELECTOR);
+    return null;
+  }
+};
+const postRoot = {
+  querySelector(selector) {
+    assert.equal(selector, POST_CARD_SELECTOR);
+    return postCard;
+  },
+  querySelectorAll(selector) {
+    assert.equal(selector, POST_CARD_SELECTOR);
+    return [postCard, postCardWithoutCell];
+  }
+};
+const emptyRoot = {
+  querySelector(selector) {
+    assert.equal(selector, POST_CARD_SELECTOR);
+    return null;
+  },
+  querySelectorAll(selector) {
+    assert.equal(selector, POST_CARD_SELECTOR);
+    return [];
+  }
+};
+
+assert.equal(hasPostCards(postRoot), true);
+assert.equal(hasPostCards(emptyRoot), false);
+assert.deepEqual(getPostCards(postRoot), [postCard, postCardWithoutCell]);
+assert.deepEqual(getPostCards(emptyRoot), []);
+assert.equal(findPostCell(postCard), postCell);
+assert.equal(findPostCell(postCardWithoutCell), postCardWithoutCell);
+
 const runtimeManifest = {
   content_scripts: [
     {
@@ -179,4 +227,4 @@ assert.equal(await monitor.check(), "reloaded");
 assert.equal(reloadCount, 1);
 assert.equal(await monitor.check(), "connected");
 
-console.log("filter-core tests passed");
+console.log("Sift tests passed");
