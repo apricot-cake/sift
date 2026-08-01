@@ -2,11 +2,16 @@ import { spawnSync } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
+  claimPreview,
   extensionDevConfig,
   getReadiness,
+  getDesiredRepoRoot,
   isProcessAlive,
   readState,
+  readPreviewClaim,
+  releasePreview,
   readinessSummary,
+  samePath,
   wait
 } from "./extension-dev-common.js";
 
@@ -35,20 +40,26 @@ function stopProcessTree(pid) {
   );
 }
 
-export async function waitForReadiness(timeoutMs = 15_000) {
+export async function waitForReadiness(
+  timeoutMs = 15_000,
+  expectedRepoRoot = null
+) {
   const deadline = Date.now() + timeoutMs;
-  let readiness = await getReadiness();
+  let readiness = await getReadiness({ expectedRepoRoot });
 
   while (!readiness.ready && Date.now() < deadline) {
     await wait(250);
-    readiness = await getReadiness();
+    readiness = await getReadiness({ expectedRepoRoot });
   }
 
   return readiness;
 }
 
-export async function ensureReady({ timeoutMs = 15_000 } = {}) {
-  let readiness = await getReadiness();
+export async function ensureReady({
+  expectedRepoRoot = getDesiredRepoRoot(),
+  timeoutMs = 15_000
+} = {}) {
+  let readiness = await getReadiness({ expectedRepoRoot });
   if (readiness.ready) {
     return readiness;
   }
@@ -69,12 +80,18 @@ export async function ensureReady({ timeoutMs = 15_000 } = {}) {
     };
   }
 
-  return waitForReadiness(timeoutMs);
+  return waitForReadiness(timeoutMs, expectedRepoRoot);
 }
 
 async function statusCommand() {
   const readiness = await getReadiness();
   console.log(readinessSummary(readiness));
+  const claim = readPreviewClaim();
+  console.log(
+    claim
+      ? `preview=${claim.repoRoot}, session=${claim.sessionId}`
+      : `preview=${extensionDevConfig.mainRoot}`
+  );
   if (readiness.state?.logPath) {
     console.log(`log=${readiness.state.logPath}`);
   }
@@ -82,7 +99,27 @@ async function statusCommand() {
 }
 
 async function ensureCommand() {
-  const readiness = await ensureReady();
+  const repoRoot = extensionDevConfig.repoRoot;
+  let expectedRepoRoot = extensionDevConfig.mainRoot;
+
+  if (!samePath(repoRoot, extensionDevConfig.mainRoot)) {
+    const claimResult = await claimPreview({
+      repoRoot,
+      sessionId:
+        process.env.SIFT_DEV_SESSION_ID ?? `manual:${repoRoot}`
+    });
+    if (!claimResult.claimed) {
+      console.error(
+        `Sift preview is owned by ${claimResult.claim.repoRoot} ` +
+          `(session=${claimResult.claim.sessionId}).`
+      );
+      process.exitCode = 1;
+      return;
+    }
+    expectedRepoRoot = repoRoot;
+  }
+
+  const readiness = await ensureReady({ expectedRepoRoot });
   console.log(readinessSummary(readiness));
   if (!readiness.ready) {
     console.error(
@@ -113,7 +150,32 @@ async function restartCommand() {
     return;
   }
 
-  const readiness = await waitForReadiness(20_000);
+  const readiness = await waitForReadiness(
+    20_000,
+    getDesiredRepoRoot()
+  );
+  console.log(readinessSummary(readiness));
+  process.exitCode = readiness.ready ? 0 : 1;
+}
+
+async function releaseCommand({ force = false } = {}) {
+  const result = await releasePreview({
+    force,
+    repoRoot: extensionDevConfig.repoRoot
+  });
+  if (!result.released && result.claim) {
+    console.error(
+      `Sift preview is owned by ${result.claim.repoRoot} ` +
+        `(session=${result.claim.sessionId}).`
+    );
+    process.exitCode = 1;
+    return;
+  }
+
+  const readiness = await waitForReadiness(
+    20_000,
+    extensionDevConfig.mainRoot
+  );
   console.log(readinessSummary(readiness));
   process.exitCode = readiness.ready ? 0 : 1;
 }
@@ -131,8 +193,12 @@ if (isMain) {
     await ensureCommand();
   } else if (command === "restart") {
     await restartCommand();
+  } else if (command === "release") {
+    await releaseCommand({ force: process.argv.includes("--force") });
   } else {
-    console.error("Usage: extension-dev-control.js <status|ensure|restart>");
+    console.error(
+      "Usage: extension-dev-control.js <status|ensure|restart|release>"
+    );
     process.exitCode = 2;
   }
 }
