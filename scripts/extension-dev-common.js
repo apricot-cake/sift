@@ -79,6 +79,10 @@ export const extensionDevPaths = Object.freeze({
   log: path.join(
     extensionDevConfig.stateDirectory,
     "extension-dev-server.log"
+  ),
+  errorLog: path.join(
+    extensionDevConfig.stateDirectory,
+    "extension-errors.log"
   )
 });
 
