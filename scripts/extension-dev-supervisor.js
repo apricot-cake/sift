@@ -4,8 +4,10 @@ import {
   ensureStateDirectory,
   extensionDevConfig,
   extensionDevPaths,
+  getDesiredRepoRoot,
   isProcessAlive,
   probeViteClient,
+  samePath,
   wait,
   writeState
 } from "./extension-dev-common.js";
@@ -65,13 +67,15 @@ function releaseLock() {
   }
 }
 
-function status(status, extra = {}) {
+function status(status, repoRoot, extra = {}) {
   writeState({
     status,
     taskName: extensionDevConfig.taskName,
     host: extensionDevConfig.host,
     port: extensionDevConfig.port,
-    repoRoot: extensionDevConfig.repoRoot,
+    repoRoot,
+    mainRoot: extensionDevConfig.mainRoot,
+    distDevRoot: extensionDevConfig.distDevRoot,
     supervisorPid: process.pid,
     childPid: child?.pid ?? null,
     logPath: extensionDevPaths.log,
@@ -87,7 +91,7 @@ function stopChild() {
   if (process.platform === "win32") {
     spawnSync(
       "taskkill.exe",
-      ["/PID", String(child.pid), "/T"],
+      ["/PID", String(child.pid), "/T", "/F"],
       { stdio: "ignore", windowsHide: true }
     );
   } else {
@@ -112,21 +116,38 @@ async function waitUntilReady(runningChild) {
   return false;
 }
 
-async function runChild() {
+async function waitForSourceChange(repoRoot) {
+  while (!stopping && child?.exitCode === null) {
+    const desiredRepoRoot = getDesiredRepoRoot();
+    if (!samePath(desiredRepoRoot, repoRoot)) {
+      return desiredRepoRoot;
+    }
+    await wait(250);
+  }
+  return repoRoot;
+}
+
+async function runChild(repoRoot) {
   ensureStateDirectory();
   const logDescriptor = fs.openSync(extensionDevPaths.log, "a");
   const startedAt = Date.now();
 
   child = spawn("npm run dev:server", {
-    cwd: extensionDevConfig.repoRoot,
+    cwd: repoRoot,
+    env: {
+      ...process.env,
+      SIFT_DEV_OUT_DIR: extensionDevConfig.distDevRoot
+    },
     shell: true,
     stdio: ["ignore", logDescriptor, logDescriptor],
     windowsHide: true
   });
   fs.closeSync(logDescriptor);
 
-  appendLog(`started Vite (pid=${child.pid}, cwd=${extensionDevConfig.repoRoot})`);
-  status("starting", { startedAt: new Date(startedAt).toISOString() });
+  appendLog(`started Vite (pid=${child.pid}, cwd=${repoRoot})`);
+  status("starting", repoRoot, {
+    startedAt: new Date(startedAt).toISOString()
+  });
 
   const exit = new Promise((resolve) => {
     child.once("error", (error) => {
@@ -142,21 +163,54 @@ async function runChild() {
 
   if (ready) {
     appendLog(`Vite ready on ${extensionDevConfig.host}:${extensionDevConfig.port}`);
-    status("ready", {
+    status("ready", repoRoot, {
       readyAt: new Date().toISOString(),
       startedAt: new Date(startedAt).toISOString()
     });
   } else if (child.exitCode === null && !stopping) {
     appendLog("Vite readiness timed out; stopping child");
-    status("failed", {
+    status("failed", repoRoot, {
       error: "Vite readiness timed out",
       startedAt: new Date(startedAt).toISOString()
     });
     stopChild();
   }
 
-  const result = await exit;
-  return { ...result, runtimeMs: Date.now() - startedAt };
+  if (child.exitCode !== null || stopping) {
+    const result = await exit;
+    return { ...result, runtimeMs: Date.now() - startedAt };
+  }
+
+  const outcome = await Promise.race([
+    exit.then((result) => ({ kind: "exit", result })),
+    waitForSourceChange(repoRoot).then((nextRepoRoot) => ({
+      kind: "source-change",
+      nextRepoRoot
+    }))
+  ]);
+
+  if (outcome.kind === "source-change") {
+    appendLog(
+      `switching Vite source from ${repoRoot} to ${outcome.nextRepoRoot}`
+    );
+    status("switching", repoRoot, {
+      nextRepoRoot: outcome.nextRepoRoot,
+      startedAt: new Date(startedAt).toISOString()
+    });
+    stopChild();
+    const result = await exit;
+    return {
+      ...result,
+      sourceChanged: true,
+      runtimeMs: Date.now() - startedAt
+    };
+  }
+
+  return {
+    ...outcome.result,
+    sourceChanged: false,
+    runtimeMs: Date.now() - startedAt
+  };
 }
 
 async function main() {
@@ -165,18 +219,24 @@ async function main() {
   let backoffMs = 1000;
 
   while (!stopping) {
-    const result = await runChild();
+    const repoRoot = getDesiredRepoRoot();
+    const result = await runChild(repoRoot);
     child = null;
 
     if (stopping) {
       break;
     }
 
+    if (result.sourceChanged) {
+      backoffMs = 1000;
+      continue;
+    }
+
     appendLog(
       `Vite exited (code=${result.code}, signal=${result.signal ?? "none"}); ` +
         `retrying in ${backoffMs}ms`
     );
-    status("restart-wait", {
+    status("restart-wait", repoRoot, {
       backoffMs,
       lastExitCode: result.code,
       lastExitSignal: result.signal
@@ -189,7 +249,7 @@ async function main() {
         : Math.min(backoffMs * 2, maximumBackoffMs);
   }
 
-  status("stopped");
+  status("stopped", getDesiredRepoRoot());
   appendLog("supervisor stopped");
   releaseLock();
 }
@@ -211,7 +271,7 @@ main().catch((error) => {
   appendLog(`supervisor failed: ${error.stack ?? error.message}`);
   try {
     stopChild();
-    status("failed", { error: error.message });
+    status("failed", getDesiredRepoRoot(), { error: error.message });
   } finally {
     releaseLock();
   }

@@ -46,11 +46,14 @@ npm run ext:register
 ```powershell
 npm run ext:status
 npm run ext:restart
+npm run ext:release
 ```
 
-`npm run dev` は常駐タスクの readiness を確認し、停止中ならタスクを起動するコマンドです。前景で Vite を所有しません。`npm run dev:server` は supervisor 専用の内部コマンドなので、日常運用では直接実行しません。
+`npm run dev` は現在の worktree がプレビューを使用中でなければ取得し、常駐タスクの配信元をその worktree へ切り替えます。別 worktree が使用中なら横取りせず失敗します。作業終了時はセッション終了フック、または `npm run ext:release` が配信元を main へ戻します。
 
-初回だけ、Chrome の `chrome://extensions` でデベロッパー モードを有効にして `dist-dev` を読み込みます。その後は PR のマージと main の同期を常駐 Vite が検知し、content script を含めて変更を自動反映します。worktree 内の未マージ変更は配信対象ではありません。
+`npm run dev` は前景で Vite を所有しません。`npm run dev:server` は supervisor 専用の内部コマンドなので、日常運用では直接実行しません。
+
+初回だけ、Chrome の `chrome://extensions` でデベロッパー モードを有効にして main リポジトリの `dist-dev` を読み込みます。その後は、プレビューを取得した worktree の未マージ変更を常駐 Vite が検知し、content script を含めて既存の Chrome へ自動反映します。worktree ごとの拡張追加や、検証前のマージは不要です。
 
 background 相当の開発ランタイムが更新されても、開いている X のタブは自動再読み込みしません。古い content script は操作部品を片付けて再読み込み案内へ退避するため、そのタブで新しい版を使うときだけページを再読み込みします。
 
