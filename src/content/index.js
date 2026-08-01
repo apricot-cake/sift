@@ -1,10 +1,7 @@
 import { classifyPost, parseMetric } from "../filter-core.js";
 import { defaults, normalizeSettings } from "../settings.js";
 
-export default defineContentScript({
-  matches: ["https://x.com/*", "https://twitter.com/*"],
-  runAt: "document_idle",
-  main() {
+function main() {
     const toolbarHostId = "xif-toolbar-host";
     const listPathPattern = /^\/i\/lists\/\d+/;
 
@@ -295,5 +292,6 @@ export default defineContentScript({
         window.clearInterval(routeTimer);
       }
     });
-  }
-});
+}
+
+main();
