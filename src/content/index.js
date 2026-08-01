@@ -1,7 +1,8 @@
 import { classifyPost, parseMetric } from "../filter-core.js";
 import { defaults, normalizeSettings } from "../settings.js";
+import { CONTENT_RUNTIME_KEY } from "./runtime-key.js";
 
-function main() {
+export function startContentRuntime() {
     const toolbarHostId = "xif-toolbar-host";
     const listPathPattern = /^\/i\/lists\/\d+/;
 
@@ -11,6 +12,7 @@ function main() {
     let filterFrame = null;
     let showAllTemporarily = false;
     let shadowRoot = null;
+    let disposed = false;
 
     function isListPage() {
       return listPathPattern.test(window.location.pathname);
@@ -100,7 +102,7 @@ function main() {
 
     function filterVisiblePosts() {
       filterFrame = null;
-      if (!isListPage()) {
+      if (disposed || !isListPage()) {
         return;
       }
 
@@ -138,7 +140,7 @@ function main() {
     }
 
     function scheduleFilter() {
-      if (filterFrame !== null) {
+      if (disposed || filterFrame !== null) {
         return;
       }
       filterFrame = window.requestAnimationFrame(filterVisiblePosts);
@@ -202,7 +204,7 @@ function main() {
     }
 
     function mountToolbar() {
-      if (!isListPage() || document.getElementById(toolbarHostId)) {
+      if (disposed || !isListPage() || document.getElementById(toolbarHostId)) {
         return;
       }
 
@@ -248,6 +250,26 @@ function main() {
       clearAllFiltering();
     }
 
+    function mountReloadNotice() {
+      if (!isListPage()) {
+        return;
+      }
+
+      const host = document.createElement("div");
+      host.id = toolbarHostId;
+      shadowRoot = host.attachShadow({ mode: "open" });
+      shadowRoot.innerHTML = `
+        <style>
+          :host { color-scheme: dark; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+          .notice { background: rgba(20, 22, 25, 0.96); border: 1px solid rgba(255, 255, 255, 0.16); border-radius: 16px; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.32); color: #f2f2f2; display: grid; gap: 4px; max-width: 260px; padding: 12px 14px; }
+          strong { font-size: 13px; }
+          span { color: #aab8c2; font-size: 12px; line-height: 1.45; }
+        </style>
+        <div class="notice"><strong>Siftを更新しました</strong><span>このページを再読み込みすると、新しい版で復帰します。</span></div>
+      `;
+      document.body.append(host);
+    }
+
     function handleRoute() {
       if (isListPage()) {
         mountToolbar();
@@ -257,7 +279,58 @@ function main() {
       }
     }
 
+    function handleStorageChange(changes, areaName) {
+      if (disposed || areaName !== "sync") {
+        return;
+      }
+
+      const changedValues = {};
+      for (const [key, change] of Object.entries(changes)) {
+        changedValues[key] = change.newValue;
+      }
+      settings = normalizeSettings({ ...settings, ...changedValues });
+      syncToolbarForm();
+      scheduleFilter();
+    }
+
+    function dispose({ showReloadNotice = false } = {}) {
+      if (disposed) {
+        return;
+      }
+
+      disposed = true;
+      observer?.disconnect();
+      observer = null;
+      if (routeTimer !== null) {
+        window.clearInterval(routeTimer);
+        routeTimer = null;
+      }
+      if (filterFrame !== null) {
+        window.cancelAnimationFrame(filterFrame);
+        filterFrame = null;
+      }
+      window.removeEventListener("pagehide", handlePageHide);
+      try {
+        chrome.storage.onChanged.removeListener(handleStorageChange);
+      } catch {
+        // The extension context may already be invalidated.
+      }
+      unmountToolbar();
+
+      if (showReloadNotice) {
+        mountReloadNotice();
+      }
+    }
+
+    function handlePageHide() {
+      dispose();
+    }
+
     chrome.storage.sync.get(defaults, (storedSettings) => {
+      if (disposed) {
+        return;
+      }
+
       settings = normalizeSettings(storedSettings);
       mountToolbar();
       scheduleFilter();
@@ -272,26 +345,24 @@ function main() {
       routeTimer = window.setInterval(handleRoute, 750);
     });
 
-    chrome.storage.onChanged.addListener((changes, areaName) => {
-      if (areaName !== "sync") {
-        return;
-      }
+    chrome.storage.onChanged.addListener(handleStorageChange);
+    window.addEventListener("pagehide", handlePageHide);
 
-      const changedValues = {};
-      for (const [key, change] of Object.entries(changes)) {
-        changedValues[key] = change.newValue;
-      }
-      settings = normalizeSettings({ ...settings, ...changedValues });
-      syncToolbarForm();
-      scheduleFilter();
-    });
-
-    window.addEventListener("pagehide", () => {
-      observer?.disconnect();
-      if (routeTimer !== null) {
-        window.clearInterval(routeTimer);
-      }
-    });
+    return { dispose };
 }
 
-main();
+const runtimeSymbol = Symbol.for(CONTENT_RUNTIME_KEY);
+globalThis[runtimeSymbol]?.dispose();
+
+const runtime = startContentRuntime();
+globalThis[runtimeSymbol] = runtime;
+
+if (import.meta.hot) {
+  import.meta.hot.accept();
+  import.meta.hot.dispose(() => {
+    runtime.dispose();
+    if (globalThis[runtimeSymbol] === runtime) {
+      delete globalThis[runtimeSymbol];
+    }
+  });
+}

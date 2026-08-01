@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build && npm run verify:manifest",
-    "test": "node --test test.js",
+    "test": "node --test test.js && npm run verify:dev-client",
+    "verify:dev-client": "node scripts/verify-dev-client.js",
     "verify:manifest": "node scripts/verify-manifest.js"
   },
   "devDependencies": {

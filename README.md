@@ -39,9 +39,11 @@ npm install
 npm run dev
 ```
 
-初回だけ、Chrome の `chrome://extensions` でデベロッパー モードを有効にして `dist` を読み込みます。その後は `npm run dev` を動かしたまま保存すれば、content script を含めて変更が自動反映されます。
+初回だけ、Chrome の `chrome://extensions` でデベロッパー モードを有効にして `dist-dev` を読み込みます。その後は `npm run dev` を動かしたまま保存すれば、content script を含めて変更が自動反映されます。開発サーバーは `127.0.0.1:51732` だけで待ち受け、ポートが使用中なら別ポートへ移らず停止します。
 
-手動読込・配布用のファイルは、次のコマンドで `dist` に作成します。ビルド時には旧 manifest と生成 manifest の権限・対象ホスト・content script 設定を比較します。
+background 相当の開発ランタイムが更新されても、開いている X のタブは自動再読み込みしません。古い content script は操作部品を片付けて再読み込み案内へ退避するため、そのタブで新しい版を使うときだけページを再読み込みします。
+
+手動読込・配布用のファイルは、次のコマンドで `dist` に作成します。開発用の `dist-dev` とは分離されるため、起動中の開発版を上書きしません。ビルド時には旧 manifest と生成 manifest の権限・対象ホスト・content script 設定を比較します。
 
 ```powershell
 npm run build
