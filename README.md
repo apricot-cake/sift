@@ -15,7 +15,7 @@ Xの検索結果ではなく、リスト画面に読み込まれた投稿をブ�
 1. Chromeで `chrome://extensions` を開きます。
 2. 右上の「デベロッパー モード」を有効にします。
 3. 「パッケージ化されていない拡張機能を読み込む」を押します。
-4. `C:\Users\apricot\local\dev\x-list-illustration-filter` を選びます。
+4. `C:\Users\apricot\local\dev\sift` を選びます。
 5. Xで `https://x.com/i/lists/2007329806292267372` を開きます。
 
 右下に抽出状況が表示されます。青い線は通常条件、橙色の線は上昇中です。
