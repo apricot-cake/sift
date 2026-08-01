@@ -1,7 +1,5 @@
-"use strict";
-
-const assert = require("node:assert/strict");
-const { classifyPost, parseMetric } = require("./filter-core.js");
+import assert from "node:assert/strict";
+import { classifyPost, parseMetric } from "./src/filter-core.js";
 
 const settings = {
   minLikes: 500,

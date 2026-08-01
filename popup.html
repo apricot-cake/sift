@@ -4,64 +4,30 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Sift</title>
-    <link rel="stylesheet" href="popup.css">
+    <link rel="stylesheet" href="/src/popup/style.css">
   </head>
   <body>
     <main>
       <h1>Sift</h1>
-
-      <label class="toggle">
-        <span>フィルターを有効化</span>
-        <input data-setting="enabled" type="checkbox">
-      </label>
-
+      <label class="toggle"><span>フィルターを有効化</span><input data-setting="enabled" type="checkbox"></label>
       <section>
         <h2>通常</h2>
-        <label>
-          <span>最低いいね数</span>
-          <input data-setting="minLikes" type="number" min="0" step="50">
-        </label>
+        <label><span>最低いいね数</span><input data-setting="minLikes" type="number" min="0" step="50"></label>
       </section>
-
       <section>
         <h2>上昇中</h2>
-        <label class="toggle">
-          <span>上昇中を表示</span>
-          <input data-setting="risingEnabled" type="checkbox">
-        </label>
-        <label>
-          <span>最低いいね数</span>
-          <input data-setting="risingMinLikes" type="number" min="0" step="10">
-        </label>
-        <label>
-          <span>投稿後の時間</span>
-          <span class="input-with-unit">
-            <input data-setting="risingMaxAgeHours" type="number" min="1" max="168">
-            時間
-          </span>
-        </label>
+        <label class="toggle"><span>上昇中を表示</span><input data-setting="risingEnabled" type="checkbox"></label>
+        <label><span>最低いいね数</span><input data-setting="risingMinLikes" type="number" min="0" step="10"></label>
+        <label><span>投稿後の時間</span><span class="input-with-unit"><input data-setting="risingMaxAgeHours" type="number" min="1" max="168">時間</span></label>
       </section>
-
       <section>
         <h2>投稿</h2>
-        <label>
-          <span>メディア</span>
-          <select data-setting="mediaMode">
-            <option value="any">画像・動画</option>
-            <option value="images">画像のみ</option>
-          </select>
-        </label>
-        <label class="toggle">
-          <span>リポストを除外</span>
-          <input data-setting="hideReposts" type="checkbox">
-        </label>
+        <label><span>メディア</span><select data-setting="mediaMode"><option value="any">画像・動画</option><option value="images">画像のみ</option></select></label>
+        <label class="toggle"><span>リポストを除外</span><input data-setting="hideReposts" type="checkbox"></label>
       </section>
-
       <p class="status" data-role="status">読み込み中…</p>
       <p class="note">Xのリスト画面で動作します。画面右下からも調整できます。</p>
     </main>
-
-    <script src="settings.js"></script>
-    <script src="popup.js"></script>
+    <script type="module" src="/src/popup/main.js"></script>
   </body>
 </html>

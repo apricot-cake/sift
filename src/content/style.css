@@ -1,6 +1,4 @@
-[data-xif-filter-state="hidden"] {
-  display: none !important;
-}
+[data-xif-filter-state="hidden"] { display: none !important; }
 
 body.xif-show-all [data-xif-filter-state="hidden"] {
   display: block !important;
