@@ -1,8 +1,10 @@
-import { startUncaughtReporting } from "../error-log.js";
-import { classifyPost, parseMetric } from "../filter-core.js";
-import { defaults, normalizeSettings } from "../settings.js";
-import { findPostCell, getPostCards, hasPostCards } from "./post-cards.js";
-import { CONTENT_RUNTIME_KEY } from "./runtime-key.js";
+import { startUncaughtReporting } from "../../utils/error-log.js";
+import { classifyPost, parseMetric } from "../../utils/filter-core.js";
+import { findPostCell, getPostCards, hasPostCards } from "../../utils/post-cards.js";
+import { CONTENT_RUNTIME_KEY } from "../../utils/runtime-key.js";
+import { defaults, normalizeSettings } from "../../utils/settings.js";
+import { SITE_MATCHES } from "../../utils/site-matches.js";
+import "./style.css";
 
 export function startContentRuntime() {
     const toolbarHostId = "xif-toolbar-host";
@@ -294,41 +296,6 @@ export function startContentRuntime() {
       clearAllFiltering();
     }
 
-    function mountReloadNotice() {
-      if (!hasPostCards(document)) {
-        return;
-      }
-
-      const host = document.createElement("div");
-      host.id = toolbarHostId;
-      shadowRoot = host.attachShadow({ mode: "open" });
-      shadowRoot.innerHTML = `
-        <style>
-          :host {
-            color-scheme: light dark;
-            font-family: "Segoe UI Variable", "Segoe UI", system-ui, sans-serif;
-            --background: #ffffff;
-            --border: #d1d5db;
-            --foreground: #1f2328;
-            --muted: #656d76;
-          }
-          @media (prefers-color-scheme: dark) {
-            :host {
-              --background: #202020;
-              --border: #484848;
-              --foreground: #f3f3f3;
-              --muted: #b7b7b7;
-            }
-          }
-          .notice { background: var(--background); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 4px 14px rgb(0 0 0 / 18%); color: var(--foreground); display: grid; gap: 4px; max-width: 280px; padding: 12px 14px; }
-          strong { font-size: 13px; }
-          span { color: var(--muted); font-size: 12px; line-height: 1.45; }
-        </style>
-        <div class="notice"><strong>Siftを更新しました</strong><span>このページを再読み込みすると、新しい版で復帰します。</span></div>
-      `;
-      document.body.append(host);
-    }
-
     function handleRoute() {
       if (hasPostCards(document)) {
         scheduleFilter();
@@ -351,7 +318,7 @@ export function startContentRuntime() {
       scheduleFilter();
     }
 
-    function dispose({ showReloadNotice = false } = {}) {
+    function dispose() {
       if (disposed) {
         return;
       }
@@ -375,10 +342,6 @@ export function startContentRuntime() {
         // The extension context may already be invalidated.
       }
       unmountToolbar();
-
-      if (showReloadNotice) {
-        mountReloadNotice();
-      }
     }
 
     function handlePageHide() {
@@ -409,18 +372,17 @@ export function startContentRuntime() {
     return { dispose };
 }
 
-const runtimeSymbol = Symbol.for(CONTENT_RUNTIME_KEY);
-globalThis[runtimeSymbol]?.dispose();
-
-const runtime = startContentRuntime();
-globalThis[runtimeSymbol] = runtime;
-
-if (import.meta.hot) {
-  import.meta.hot.accept();
-  import.meta.hot.dispose(() => {
-    runtime.dispose();
-    if (globalThis[runtimeSymbol] === runtime) {
-      delete globalThis[runtimeSymbol];
-    }
-  });
-}
+export default defineContentScript({
+  matches: SITE_MATCHES,
+  runAt: "document_idle",
+  main() {
+    // A re-injection — WXT's dev mode injecting a fresh copy into a tab the
+    // previous generation still holds — runs this file again in a realm that may
+    // still carry the old listeners and DOM. The owner symbol is how the incoming
+    // generation finds the outgoing one and takes it down first; without it the
+    // two draw the same toolbar twice and both filter the same posts.
+    const runtimeSymbol = Symbol.for(CONTENT_RUNTIME_KEY);
+    globalThis[runtimeSymbol]?.dispose();
+    globalThis[runtimeSymbol] = startContentRuntime();
+  }
+});

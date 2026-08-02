@@ -1,10 +1,5 @@
 import assert from "node:assert/strict";
-import {
-  drainErrorLog,
-  ERROR_LOG_DRAINED_SEQ_KEY,
-  getContentScriptPlans,
-  initializeDevRuntime
-} from "./src/background-dev.js";
+import { drainErrorLog, ERROR_LOG_DRAINED_SEQ_KEY } from "./utils/error-drain.js";
 import {
   appendErrorEntry,
   collectUndrainedEntries,
@@ -13,16 +8,16 @@ import {
   installUncaughtReporting,
   isOwnExtensionError,
   recordErrorEntry
-} from "./src/error-log.js";
-import { formatErrorLogLines } from "./vite-plugins/dev-error-log.js";
+} from "./utils/error-log.js";
+import { formatErrorLogLines } from "./scripts/dev-error-log.js";
 import {
   findPostCell,
   getPostCards,
   hasPostCards,
   POST_CARD_SELECTOR,
   POST_CELL_SELECTOR
-} from "./src/content/post-cards.js";
-import { classifyPost, parseMetric } from "./src/filter-core.js";
+} from "./utils/post-cards.js";
+import { classifyPost, parseMetric } from "./utils/filter-core.js";
 
 const settings = {
   minLikes: 500,
@@ -151,71 +146,6 @@ assert.deepEqual(getPostCards(postRoot), [postCard, postCardWithoutCell]);
 assert.deepEqual(getPostCards(emptyRoot), []);
 assert.equal(findPostCell(postCard), postCell);
 assert.equal(findPostCell(postCardWithoutCell), postCardWithoutCell);
-
-const runtimeManifest = {
-  content_scripts: [
-    {
-      matches: ["https://x.com/*", "https://twitter.com/*"],
-      js: ["vendor/content-css-loader.js", "src/content/index.js-loader.js"]
-    }
-  ]
-};
-assert.deepEqual(getContentScriptPlans(runtimeManifest), [
-  {
-    matches: ["https://x.com/*", "https://twitter.com/*"],
-    files: ["vendor/content-css-loader.js", "src/content/index.js-loader.js"]
-  }
-]);
-
-const sessionState = {};
-const queryCalls = [];
-const injectionCalls = [];
-const runtimeApi = {
-  runtime: {
-    getManifest: () => runtimeManifest
-  },
-  scripting: {
-    executeScript: async (options) => {
-      injectionCalls.push(options);
-    }
-  },
-  storage: {
-    session: {
-      get: async (key) => ({ [key]: sessionState[key] }),
-      set: async (values) => Object.assign(sessionState, values)
-    }
-  },
-  tabs: {
-    query: async (options) => {
-      queryCalls.push(options);
-      return [{ id: 10 }, { id: 20 }, { id: null }];
-    }
-  }
-};
-
-assert.deepEqual(await initializeDevRuntime(runtimeApi), {
-  initialized: true,
-  injectedTabCount: 2
-});
-assert.deepEqual(queryCalls, [
-  { url: ["https://x.com/*", "https://twitter.com/*"] }
-]);
-assert.deepEqual(injectionCalls, [
-  {
-    target: { tabId: 10 },
-    files: ["vendor/content-css-loader.js", "src/content/index.js-loader.js"]
-  },
-  {
-    target: { tabId: 20 },
-    files: ["vendor/content-css-loader.js", "src/content/index.js-loader.js"]
-  }
-]);
-
-assert.deepEqual(await initializeDevRuntime(runtimeApi), {
-  initialized: false,
-  injectedTabCount: 0
-});
-assert.equal(queryCalls.length, 1);
 
 const extensionPrefix = "chrome-extension://abcdefghijklmnopabcdefghijklmnop/";
 

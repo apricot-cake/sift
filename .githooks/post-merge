@@ -1,0 +1,51 @@
+#!/bin/sh
+# Promote a freshly merged build into the daily Chrome (#20).
+#
+# The daily browser carries RELEASE builds only, so "the extension the author
+# browses with" has to be refreshed by something. This is that something: pulling
+# main into the main working tree is already the moment the local checkout
+# becomes the newly merged code, and it is the only such moment that happens
+# reliably.
+#
+# NEVER FAILS THE MERGE. A build problem must not leave the working tree in a
+# half-pulled state, and the previously deployed build keeps running until a good
+# one replaces it.
+#
+# Enabled by `git config core.hooksPath .githooks`, which scripts/setup.js does
+# (npm run prepare, which npm install runs on its own).
+
+set -u
+
+# Linked worktrees deploy into their own .output, which no browser has loaded.
+# `.git` is a directory in the main working tree and a FILE in a linked one.
+if [ ! -d .git ]; then
+  exit 0
+fi
+
+if [ -z "${ORIG_HEAD:-}" ]; then
+  ORIG_HEAD=$(git rev-parse --verify --quiet ORIG_HEAD || true)
+fi
+if [ -z "$ORIG_HEAD" ]; then
+  exit 0
+fi
+
+changed=$(git diff --name-only "$ORIG_HEAD" HEAD -- \
+  entrypoints \
+  utils \
+  wxt.config.js \
+  package.json \
+  scripts/deploy-extension.js \
+  scripts/verify-manifest.js)
+
+if [ -z "$changed" ]; then
+  exit 0
+fi
+
+echo "[sift] merged changes touch the extension — deploying a verified release into the daily Chrome"
+if npm run deploy; then
+  exit 0
+fi
+
+echo "[sift] deploy failed. The daily Chrome keeps running the previously deployed build." >&2
+echo "[sift] fix the build, then run: npm run deploy" >&2
+exit 0

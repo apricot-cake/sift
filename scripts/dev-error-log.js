@@ -1,8 +1,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-
-export const ERROR_LOG_ENDPOINT = "/__sift_error_log";
+import { ERROR_LOG_ENDPOINT } from "../utils/dev-server.js";
 
 export const DEFAULT_ERROR_LOG_PATH = path.join(
   os.homedir(),

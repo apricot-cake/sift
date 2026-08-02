@@ -1,0 +1,3 @@
+# Git hooks are run by sh. A CRLF checkout makes every line end in \r, which sh
+# reports as a command not found for a command that is plainly there.
+.githooks/* text eol=lf

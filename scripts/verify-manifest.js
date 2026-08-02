@@ -1,9 +1,13 @@
+// The release manifest WXT generates has to keep meaning the same thing as the
+// hand-written one this extension started from: same permissions, same sites,
+// same content script shape. Everything else about the build has changed twice
+// (CRXJS, then back to WXT) and this is what did not.
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
 const legacyManifest = JSON.parse(await readFile("manifest.legacy.json", "utf8"));
 const generatedManifest = JSON.parse(
-  await readFile("dist/manifest.json", "utf8")
+  await readFile(".output/chrome-mv3-release/manifest.json", "utf8")
 );
 
 assert.equal(generatedManifest.manifest_version, legacyManifest.manifest_version);
