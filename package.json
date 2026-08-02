@@ -4,16 +4,10 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "node scripts/extension-dev-control.js ensure",
-    "dev:server": "vite",
-    "ext:register": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/register-extension-dev-task.ps1",
-    "ext:release": "node scripts/extension-dev-control.js release",
-    "ext:restart": "node scripts/extension-dev-control.js restart",
-    "ext:status": "node scripts/extension-dev-control.js status",
+    "dev": "vite",
     "build": "vite build && npm run verify:manifest",
-    "test": "node --test test.js && npm run verify:dev-client && npm run verify:extension-dev",
+    "test": "node --test test.js && npm run verify:dev-client",
     "verify:dev-client": "node scripts/verify-dev-client.js",
-    "verify:extension-dev": "node scripts/verify-extension-dev.js",
     "verify:manifest": "node scripts/verify-manifest.js"
   },
   "devDependencies": {

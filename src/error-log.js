@@ -8,7 +8,7 @@
 // global event subscriptions a Sentry-style SDK installs inside an extension —
 // with a local destination instead of a server. Every surface writes to a ring
 // buffer in chrome.storage.local. In development the service worker forwards
-// that buffer to the resident Vite server, which appends it to
+// that buffer to the development server, which appends it to
 // ~/.sift/extension-errors.log (see the sift:dev-error-log plugin).
 //
 // Best-effort by construction: nothing here throws, and nothing here is awaited

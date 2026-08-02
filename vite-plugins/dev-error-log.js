@@ -1,11 +1,14 @@
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
-import {
-  ensureStateDirectory,
-  extensionDevPaths
-} from "../scripts/extension-dev-common.js";
 
 export const ERROR_LOG_ENDPOINT = "/__sift_error_log";
+
+export const DEFAULT_ERROR_LOG_PATH = path.join(
+  os.homedir(),
+  ".sift",
+  "extension-errors.log"
+);
 
 const BODY_LIMIT_BYTES = 512 * 1024;
 
@@ -54,7 +57,7 @@ function allowExtensionOrigin(request, response) {
 // The endpoint is registered ahead of Vite's own middlewares, which is why it
 // answers CORS itself rather than relying on the server's cors option running
 // first.
-export function devErrorLog({ logPath = extensionDevPaths.errorLog } = {}) {
+export function devErrorLog({ logPath = DEFAULT_ERROR_LOG_PATH } = {}) {
   return {
     name: "sift:dev-error-log",
     apply: "serve",
@@ -80,7 +83,6 @@ export function devErrorLog({ logPath = extensionDevPaths.errorLog } = {}) {
           const entries = JSON.parse(await readBody(request));
           const lines = formatErrorLogLines(entries);
           if (lines !== "") {
-            ensureStateDirectory();
             fs.mkdirSync(path.dirname(logPath), { recursive: true });
             fs.appendFileSync(logPath, lines, "utf8");
           }
