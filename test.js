@@ -336,8 +336,53 @@ assert.equal(
 );
 assert.equal(Number.isNaN(blueskyAdapter.readCreatedAt(createFakeNode())), true);
 
+// The post a detail screen is about has no permalink — it is where the link
+// would point. Its first links are to its own sub-pages, whose labels are
+// actions rather than times, and the record key rides in the middle of the path.
+assert.equal(
+  blueskyAdapter.readCreatedAt(
+    createFakeNode({
+      [BLUESKY_SELECTORS.postLink]: [
+        createFakeAttributeNode({
+          "aria-label": "この投稿をリポストする",
+          href: `${blueskyPostHref}/reposted-by`
+        }),
+        createFakeAttributeNode({
+          "aria-label": "この投稿をいいねする",
+          href: `${blueskyPostHref}/liked-by`
+        })
+      ]
+    })
+  ),
+  recordKeyTime
+);
+
+// A quoting post carries the quoted post's permalink too, after its own.
+assert.equal(
+  blueskyAdapter.readCreatedAt(
+    createFakeNode({
+      [BLUESKY_SELECTORS.postLink]: [
+        createFakeAttributeNode({
+          "aria-label": "2026年7月10日 20:46",
+          href: blueskyPostHref
+        }),
+        createFakeAttributeNode({
+          href: "/profile/quoted.bsky.social/post/3ms3mmsbt223e"
+        })
+      ]
+    })
+  ),
+  recordKeyTime
+);
+
 assert.equal(timestampFromRecordKey(blueskyPostHref), recordKeyTime);
 assert.equal(timestampFromRecordKey(`${blueskyPostHref}?foo=1`), recordKeyTime);
+// The key is the segment after /post/, so a link to one of the post's own
+// sub-pages carries it just as well as the permalink does.
+assert.equal(
+  timestampFromRecordKey(`${blueskyPostHref}/reposted-by`),
+  recordKeyTime
+);
 assert.equal(
   timestampFromRecordKey(`https://bsky.app${blueskyPostHref}#anchor`),
   recordKeyTime

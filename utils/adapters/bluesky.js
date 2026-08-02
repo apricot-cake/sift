@@ -30,6 +30,10 @@ export const BLUESKY_SELECTORS = Object.freeze({
 const TID_ALPHABET = "234567abcdefghijklmnopqrstuvwxyz";
 const TID_LENGTH = 13;
 const TID_CLOCK_ID_BITS = 10n;
+// The record key is the segment after /post/, not the last one: on the post
+// detail screen the only links carrying it are the ones to that post's own
+// sub-pages ("/reposted-by", "/quotes", "/liked-by").
+const RECORD_KEY_IN_PATH = /\/post\/([^/?#]+)/;
 // Nothing on Bluesky predates the network itself, and nothing was posted after
 // now. A record key that is not a TID but happens to be spelled with these
 // characters decodes to a value outside that window, which is what makes it
@@ -46,8 +50,7 @@ const FUTURE_TOLERANCE_MS = 6 * 60 * 1000;
 // Being a TID is a convention of the official client, not a guarantee of the
 // protocol, so this stays the fallback and never the primary reading.
 export function timestampFromRecordKey(href, nowMs = Date.now()) {
-  const path = String(href ?? "").split(/[?#]/)[0];
-  const recordKey = path.slice(path.lastIndexOf("/") + 1);
+  const recordKey = RECORD_KEY_IN_PATH.exec(String(href ?? ""))?.[1] ?? "";
 
   if (recordKey.length !== TID_LENGTH) {
     return Number.NaN;
@@ -110,21 +113,29 @@ export const blueskyAdapter = Object.freeze({
     return parseMetric(button.getAttribute("aria-label") || "");
   },
 
+  // Bluesky writes no <time datetime>. What it has is a localized absolute time
+  // on the permalink, which Date.parse accepts for some locales and not others,
+  // and the record key, which is machine-readable but only a convention.
+  //
+  // The first readable link wins rather than the first link: a post in a feed
+  // leads with its own permalink, but the post a detail screen is *about* has
+  // no permalink at all — being where the link would point — and leads with the
+  // links to its own sub-pages instead.
   readCreatedAt(postCard) {
-    const link = postCard.querySelector(BLUESKY_SELECTORS.postLink);
-    if (!link) {
-      return Number.NaN;
+    for (const link of postCard.querySelectorAll(BLUESKY_SELECTORS.postLink)) {
+      const label = link.getAttribute("aria-label");
+      const displayed = label ? Date.parse(label) : Number.NaN;
+      if (Number.isFinite(displayed)) {
+        return displayed;
+      }
+
+      const decoded = timestampFromRecordKey(link.getAttribute("href"));
+      if (Number.isFinite(decoded)) {
+        return decoded;
+      }
     }
 
-    // Bluesky writes no <time datetime>. What it has is a localized absolute
-    // time on the permalink, which Date.parse accepts for some locales and not
-    // others, and the record key, which is machine-readable but only a
-    // convention.
-    const label = link.getAttribute("aria-label");
-    const timestamp = label ? Date.parse(label) : Number.NaN;
-    return Number.isFinite(timestamp)
-      ? timestamp
-      : timestampFromRecordKey(link.getAttribute("href"));
+    return Number.NaN;
   },
 
   // Image and video are reported separately: which of them counts as media is
