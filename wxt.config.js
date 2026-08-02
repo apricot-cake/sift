@@ -1,19 +1,39 @@
+import { homedir } from "node:os";
+import { basename, dirname, resolve } from "node:path";
 import { defineConfig } from "wxt";
 import { devErrorLog } from "./scripts/dev-error-log.js";
 import { DEV_SERVER_PORT } from "./utils/dev-server.js";
+
+// Where a DEVELOPMENT build lands. Deliberately outside the working tree and
+// identical for every tree: the dedicated development Chrome profile loads one
+// unpacked folder once, and re-pointing it every time work moves to another
+// worktree would be a click nobody remembers to make.
+//
+// SIFT_DEV_OUTPUT is set by `npm run dev`, and by nothing else — a bare `wxt`
+// leaves it unset and writes into .output like a release does, which is the
+// right answer for a build nobody's profile has loaded.
+const developmentOutput =
+  process.env.SIFT_DEV_OUTPUT || resolve(homedir(), ".sift-dev", "chrome-mv3-dev");
 
 export default defineConfig({
   // Firefox too. WXT would default Firefox to MV2, and one manifest version
   // keeps one set of release checks.
   manifestVersion: 3,
   // Two outputs that must never be confused for each other:
-  //   dev     → a fixed path outside the tree, set by scripts/dev.js, read only
-  //             by the development Chrome profile
+  //   dev     → the fixed path above, read only by the development profile
   //   release → .output/<browser>-mv3-release, which scripts/deploy-extension.js
   //             promotes into .output/chrome-mv3 — the folder the daily Chrome
   //             has loaded. `wxt build` therefore CANNOT write to the daily
   //             folder: only a promoted build gets there.
-  outDirTemplate: "{{browser}}-mv{{manifestVersion}}-release{{modeSuffix}}",
+  //
+  // Keyed on the env var rather than on dev-vs-build, because the config is read
+  // before either is known. `npm run dev` sets it; `wxt build` does not.
+  outDir: process.env.SIFT_DEV_OUTPUT
+    ? dirname(developmentOutput)
+    : resolve(import.meta.dirname, ".output"),
+  outDirTemplate: process.env.SIFT_DEV_OUTPUT
+    ? basename(developmentOutput)
+    : "{{browser}}-mv{{manifestVersion}}-release{{modeSuffix}}",
   // WXT must NOT launch a browser. Two independent reasons:
   //   - anything opened through an automation stack carries the automation-flag
   //     fingerprint, and X reads it as a bot and refuses sign-in. The development
