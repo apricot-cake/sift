@@ -1,12 +1,18 @@
+import { selectAdapter } from "../../utils/adapters/index.js";
 import { startUncaughtReporting } from "../../utils/error-log.js";
-import { classifyPost, parseMetric } from "../../utils/filter-core.js";
-import { findPostCell, getPostCards, hasPostCards } from "../../utils/post-cards.js";
+import { classifyPost } from "../../utils/filter-core.js";
 import { CONTENT_RUNTIME_KEY } from "../../utils/runtime-key.js";
 import { defaults, normalizeSettings } from "../../utils/settings.js";
 import { SITE_MATCHES } from "../../utils/site-matches.js";
 import "./style.css";
 
-export function startContentRuntime() {
+export function startContentRuntime(adapter) {
+    // Nothing to read here. The runtime still answers dispose() so the caller
+    // does not have to know whether it started.
+    if (!adapter) {
+      return { dispose() {} };
+    }
+
     const toolbarHostId = "xif-toolbar-host";
 
     // Tied to the runtime's life rather than the world's: the injection that
@@ -28,49 +34,11 @@ export function startContentRuntime() {
     let shadowRoot = null;
     let disposed = false;
 
-    function readLikeCount(article) {
-      const button = article.querySelector(
-        'button[data-testid="like"], button[data-testid="unlike"]'
-      );
-      if (!button) {
-        return 0;
-      }
-
-      const accessibleText = button.getAttribute("aria-label") || "";
-      const visibleText = button.textContent.trim();
-      return parseMetric(accessibleText || visibleText);
-    }
-
-    function readCreatedAt(article) {
-      const dateTime = article.querySelector("time[datetime]")?.getAttribute("datetime");
-      const timestamp = dateTime ? Date.parse(dateTime) : Number.NaN;
-      return Number.isFinite(timestamp) ? timestamp : Number.NaN;
-    }
-
-    function readMedia(article) {
-      const hasImage = Boolean(
-        article.querySelector('[data-testid="tweetPhoto"], a[href*="/photo/"]')
-      );
-      const hasVideo = Boolean(
-        article.querySelector(
-          '[data-testid="videoPlayer"], [data-testid="videoComponent"], video, a[href*="/video/"]'
-        )
-      );
-
-      return {
-        hasImage,
-        hasVideo,
-        hasMedia: settings.mediaMode === "images" ? hasImage : hasImage || hasVideo
-      };
-    }
-
-    function readIsRepost(article) {
-      const socialContext = article.querySelector('[data-testid="socialContext"]');
-      if (!socialContext) {
-        return false;
-      }
-
-      return /repost|retweeted|リポスト/i.test(socialContext.textContent);
+    // Which of image and video counts as media is the reader's setting, so the
+    // two arrive separately from the adapter and are folded together here.
+    function hasMedia(postCard) {
+      const { hasImage, hasVideo } = adapter.readMedia(postCard);
+      return settings.mediaMode === "images" ? hasImage : hasImage || hasVideo;
     }
 
     function setCellState(cell, state, reason) {
@@ -112,8 +80,8 @@ export function startContentRuntime() {
         return;
       }
 
-      const articles = getPostCards(document);
-      if (articles.length === 0) {
+      const postCards = adapter.getPostCards(document);
+      if (postCards.length === 0) {
         unmountToolbar();
         return;
       }
@@ -123,21 +91,20 @@ export function startContentRuntime() {
 
       const counts = { hit: 0, rising: 0, hidden: 0 };
 
-      for (const article of articles) {
-        const cell = findPostCell(article);
+      for (const postCard of postCards) {
+        const cell = adapter.findPostCell(postCard);
 
         if (!settings.enabled) {
           clearCellState(cell);
           continue;
         }
 
-        const media = readMedia(article);
         const result = classifyPost(
           {
-            hasMedia: media.hasMedia,
-            likeCount: readLikeCount(article),
-            createdAtMs: readCreatedAt(article),
-            isRepost: readIsRepost(article)
+            hasMedia: hasMedia(postCard),
+            likeCount: adapter.readReactionCount(postCard),
+            createdAtMs: adapter.readCreatedAt(postCard),
+            isRepost: adapter.readIsRepost(postCard)
           },
           settings
         );
@@ -215,9 +182,9 @@ export function startContentRuntime() {
         </style>
         <div class="panel" data-role="panel" role="dialog" aria-label="Siftの設定" hidden>
           <div class="panel-header"><strong>フィルター設定</strong><span>自動保存</span></div>
-          <label>通常の最低いいね数<input data-setting="minLikes" type="number" min="0" step="50"></label>
+          <label>通常の最低${adapter.reactionLabel}数<input data-setting="minLikes" type="number" min="0" step="50"></label>
           <label>上昇中を表示<input data-setting="risingEnabled" type="checkbox"></label>
-          <label>上昇中の最低いいね数<input data-setting="risingMinLikes" type="number" min="0" step="10"></label>
+          <label>上昇中の最低${adapter.reactionLabel}数<input data-setting="risingMinLikes" type="number" min="0" step="10"></label>
           <label>投稿後の時間<span class="input-with-unit"><input data-setting="risingMaxAgeHours" type="number" min="1" max="168">時間</span></label>
           <label>メディア<select data-setting="mediaMode"><option value="any">画像・動画</option><option value="images">画像のみ</option></select></label>
           <label>リポストを除外<input data-setting="hideReposts" type="checkbox"></label>
@@ -247,7 +214,7 @@ export function startContentRuntime() {
     function mountToolbar() {
       if (
         disposed ||
-        !hasPostCards(document) ||
+        !adapter.hasPostCards(document) ||
         document.getElementById(toolbarHostId)
       ) {
         return;
@@ -297,7 +264,7 @@ export function startContentRuntime() {
     }
 
     function handleRoute() {
-      if (hasPostCards(document)) {
+      if (adapter.hasPostCards(document)) {
         scheduleFilter();
       } else {
         unmountToolbar();
@@ -383,6 +350,8 @@ export default defineContentScript({
     // two draw the same toolbar twice and both filter the same posts.
     const runtimeSymbol = Symbol.for(CONTENT_RUNTIME_KEY);
     globalThis[runtimeSymbol]?.dispose();
-    globalThis[runtimeSymbol] = startContentRuntime();
+    globalThis[runtimeSymbol] = startContentRuntime(
+      selectAdapter(location.hostname)
+    );
   }
 });

@@ -10,13 +10,9 @@ import {
   recordErrorEntry
 } from "./utils/error-log.js";
 import { formatErrorLogLines } from "./scripts/dev-error-log.js";
-import {
-  findPostCell,
-  getPostCards,
-  hasPostCards,
-  POST_CARD_SELECTOR,
-  POST_CELL_SELECTOR
-} from "./utils/post-cards.js";
+import { ADAPTERS, hostMatchesPattern, selectAdapter } from "./utils/adapters/index.js";
+import { X_SELECTORS, xAdapter } from "./utils/adapters/x.js";
+import { SITE_MATCHES } from "./utils/site-matches.js";
 import { classifyPost, parseMetric } from "./utils/filter-core.js";
 
 const settings = {
@@ -106,46 +102,156 @@ assert.deepEqual(
   { state: "hidden", reason: "repost" }
 );
 
-const postCell = { id: "post-cell" };
-const postCard = {
-  closest(selector) {
-    assert.equal(selector, POST_CELL_SELECTOR);
-    return postCell;
-  }
-};
-const postCardWithoutCell = {
-  closest(selector) {
-    assert.equal(selector, POST_CELL_SELECTOR);
-    return null;
-  }
-};
-const postRoot = {
-  querySelector(selector) {
-    assert.equal(selector, POST_CARD_SELECTOR);
-    return postCard;
-  },
-  querySelectorAll(selector) {
-    assert.equal(selector, POST_CARD_SELECTOR);
-    return [postCard, postCardWithoutCell];
-  }
-};
-const emptyRoot = {
-  querySelector(selector) {
-    assert.equal(selector, POST_CARD_SELECTOR);
-    return null;
-  },
-  querySelectorAll(selector) {
-    assert.equal(selector, POST_CARD_SELECTOR);
-    return [];
-  }
-};
+// A node that answers only the selectors it was given, keyed by the adapter's
+// own selector table so the test never restates a selector.
+function createFakeNode(responses = {}) {
+  return {
+    querySelector(selector) {
+      return responses[selector] ?? null;
+    },
+    querySelectorAll(selector) {
+      const value = responses[selector];
+      if (!value) {
+        return [];
+      }
+      return Array.isArray(value) ? value : [value];
+    },
+    closest(selector) {
+      return responses[selector] ?? null;
+    }
+  };
+}
 
-assert.equal(hasPostCards(postRoot), true);
-assert.equal(hasPostCards(emptyRoot), false);
-assert.deepEqual(getPostCards(postRoot), [postCard, postCardWithoutCell]);
-assert.deepEqual(getPostCards(emptyRoot), []);
-assert.equal(findPostCell(postCard), postCell);
-assert.equal(findPostCell(postCardWithoutCell), postCardWithoutCell);
+function createFakeAttributeNode(attributes = {}, textContent = "") {
+  return {
+    getAttribute(name) {
+      return attributes[name] ?? null;
+    },
+    textContent
+  };
+}
+
+// Every adapter answers for each of its own match patterns, and for no other
+// adapter's: the host name has to pick one adapter, not a set.
+for (const adapter of ADAPTERS) {
+  for (const pattern of adapter.matches) {
+    const host = pattern
+      .slice(pattern.indexOf("://") + 3)
+      .replace(/\/.*$/, "")
+      .replace(/^\*\./, "");
+    assert.equal(selectAdapter(host), adapter, `${pattern} selects ${adapter.id}`);
+  }
+}
+
+assert.equal(selectAdapter("x.com"), xAdapter);
+assert.equal(selectAdapter("twitter.com"), xAdapter);
+assert.equal(selectAdapter("bsky.app"), null);
+assert.equal(selectAdapter("notx.com"), null);
+// A match pattern without the "*." prefix does not cover subdomains.
+assert.equal(selectAdapter("mobile.x.com"), null);
+
+assert.equal(hostMatchesPattern("https://*.example.com/*", "example.com"), true);
+assert.equal(hostMatchesPattern("https://*.example.com/*", "a.example.com"), true);
+assert.equal(hostMatchesPattern("https://*.example.com/*", "notexample.com"), false);
+assert.equal(hostMatchesPattern("https://*/*", "anything.test"), true);
+
+// The registration and the adapters cannot drift: one is derived from the other.
+assert.deepEqual(SITE_MATCHES, ADAPTERS.flatMap((adapter) => [...adapter.matches]));
+
+const postCell = { id: "post-cell" };
+const postCard = createFakeNode({ [X_SELECTORS.postCell]: postCell });
+const postCardWithoutCell = createFakeNode();
+const postRoot = createFakeNode({
+  [X_SELECTORS.postCard]: [postCard, postCardWithoutCell]
+});
+const emptyRoot = createFakeNode();
+
+assert.equal(xAdapter.hasPostCards(postRoot), true);
+assert.equal(xAdapter.hasPostCards(emptyRoot), false);
+assert.deepEqual(xAdapter.getPostCards(postRoot), [postCard, postCardWithoutCell]);
+assert.deepEqual(xAdapter.getPostCards(emptyRoot), []);
+assert.equal(xAdapter.findPostCell(postCard), postCell);
+assert.equal(xAdapter.findPostCell(postCardWithoutCell), postCardWithoutCell);
+
+// The reaction count prefers the accessible label, which carries the exact
+// number, over the rounded text on the button.
+assert.equal(
+  xAdapter.readReactionCount(
+    createFakeNode({
+      [X_SELECTORS.reactionButton]: createFakeAttributeNode(
+        { "aria-label": "11788 件のいいね。いいねする" },
+        "1.1万"
+      )
+    })
+  ),
+  11788
+);
+assert.equal(
+  xAdapter.readReactionCount(
+    createFakeNode({
+      [X_SELECTORS.reactionButton]: createFakeAttributeNode({}, " 1,234 ")
+    })
+  ),
+  1234
+);
+assert.equal(xAdapter.readReactionCount(createFakeNode()), 0);
+
+assert.equal(
+  xAdapter.readCreatedAt(
+    createFakeNode({
+      [X_SELECTORS.createdAt]: createFakeAttributeNode({
+        datetime: "2026-08-01T12:00:00.000Z"
+      })
+    })
+  ),
+  Date.parse("2026-08-01T12:00:00.000Z")
+);
+assert.equal(Number.isNaN(xAdapter.readCreatedAt(createFakeNode())), true);
+assert.equal(
+  Number.isNaN(
+    xAdapter.readCreatedAt(
+      createFakeNode({
+        [X_SELECTORS.createdAt]: createFakeAttributeNode({ datetime: "not a date" })
+      })
+    )
+  ),
+  true
+);
+
+// Image and video stay separate: folding them into one answer is the reader's
+// media setting, which is not this adapter's to apply.
+assert.deepEqual(
+  xAdapter.readMedia(createFakeNode({ [X_SELECTORS.image]: { id: "photo" } })),
+  { hasImage: true, hasVideo: false }
+);
+assert.deepEqual(
+  xAdapter.readMedia(createFakeNode({ [X_SELECTORS.video]: { id: "video" } })),
+  { hasImage: false, hasVideo: true }
+);
+assert.deepEqual(xAdapter.readMedia(createFakeNode()), {
+  hasImage: false,
+  hasVideo: false
+});
+
+assert.equal(
+  xAdapter.readIsRepost(
+    createFakeNode({
+      [X_SELECTORS.socialContext]: { textContent: "さんがリポストしました" }
+    })
+  ),
+  true
+);
+assert.equal(
+  xAdapter.readIsRepost(
+    createFakeNode({ [X_SELECTORS.socialContext]: { textContent: "固定されたポスト" } })
+  ),
+  false
+);
+assert.equal(xAdapter.readIsRepost(createFakeNode()), false);
+
+// The toolbar and its settings panel take this word from the adapter rather
+// than spelling out X's.
+assert.equal(xAdapter.reactionLabel, "いいね");
 
 const extensionPrefix = "chrome-extension://abcdefghijklmnopabcdefghijklmnop/";
 
