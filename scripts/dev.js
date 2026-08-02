@@ -22,7 +22,7 @@
 // The extension id is the same as the release build's (the signing key is
 // fixed), so do not load both into the SAME profile — that is what the separate
 // profile is for.
-import { execFileSync } from "node:child_process";
+import { spawn } from "node:child_process";
 import { homedir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -34,12 +34,31 @@ const output =
 console.log(`[sift] development build folder: ${output}`);
 console.log("[sift] load THAT folder as an unpacked extension in the development Chrome profile (once).");
 
+// WXT's CLI reads stdin for its key bindings, and a CLOSED stdin ends the
+// server: started from anything without a terminal — an agent, a task runner,
+// CI — it printed its first build and exited, and no save was ever rebuilt
+// (measured 2026-08-02). A pipe is an stdin that stays open and delivers
+// nothing, which is exactly what those callers want.
+//
+// A real terminal still gets `inherit`, because that is what makes the key
+// bindings work for a person who typed `npm run dev` themselves.
+const stdin = process.stdin.isTTY ? "inherit" : "pipe";
+
 // One string, no argument array: on Windows `npx` is a .cmd, which Node will not
 // spawn without a shell and refuses to spawn through execFileSync with one — and
 // passing an argument array alongside `shell: true` prints DEP0190.
-execFileSync("npx wxt", {
+const child = spawn("npx wxt", {
   cwd: ROOT,
   shell: true,
-  stdio: "inherit",
+  stdio: [stdin, "inherit", "inherit"],
   env: { ...process.env, SIFT_DEV_OUTPUT: output }
+});
+
+// Ctrl+C has to reach the server rather than orphan it behind a dead parent.
+for (const signal of ["SIGINT", "SIGTERM"]) {
+  process.on(signal, () => child.kill(signal));
+}
+
+child.on("exit", (code, signal) => {
+  process.exit(signal ? 1 : (code ?? 0));
 });
