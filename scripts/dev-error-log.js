@@ -57,7 +57,10 @@ function allowExtensionOrigin(request, response) {
 // The endpoint is registered ahead of Vite's own middlewares, which is why it
 // answers CORS itself rather than relying on the server's cors option running
 // first.
-export function devErrorLog({ logPath = DEFAULT_ERROR_LOG_PATH } = {}) {
+export function devErrorLog({
+  logPath = DEFAULT_ERROR_LOG_PATH,
+  isBuilt = () => true
+} = {}) {
   // Identifies this server process to the extension. A worker that sees an id it
   // did not start with knows its HMR socket belongs to a server that is gone,
   // and that only restarting itself will attach it to the one that is up (#31).
@@ -75,7 +78,13 @@ export function devErrorLog({ logPath = DEFAULT_ERROR_LOG_PATH } = {}) {
         allowExtensionOrigin(request, response);
         response.setHeader("content-type", "application/json");
         response.setHeader("cache-control", "no-store");
-        response.end(JSON.stringify({ boot }));
+        // `ready` gates the worker's self-reload. The server answers as soon as
+        // it is listening, but starting it wipes and rewrites the build folder —
+        // and reloading an unpacked extension whose folder is momentarily empty
+        // does not retry, it FAILS: Chrome unloads the extension and puts up a
+        // dialog about a missing manifest (measured 2026-08-02, #31). So the
+        // worker is told to hold until there is something to reload into.
+        response.end(JSON.stringify({ boot, ready: isBuilt() }));
       });
 
       server.middlewares.use(ERROR_LOG_ENDPOINT, async (request, response, next) => {

@@ -51,14 +51,16 @@ export const DEV_FILTER_PASS = "sift:dev-filter-pass";
  *
  * @param {object} probe
  * @param {string|null} probe.boot        server generation, null when it is down
+ * @param {boolean} probe.ready           has a build been written to disk
  * @param {boolean} probe.isFirstProbe    is this the worker's first probe
  * @param {string} [probe.bootAtStart]    generation adopted when the worker started
  * @param {number} probe.registeredCount  content scripts registered right now
  * @param {string} [probe.reloadedForBoot] generation already reloaded for
- * @returns {"server-down"|"adopt"|"linked"|"reload"|"waiting"}
+ * @returns {"server-down"|"building"|"adopt"|"linked"|"reload"|"waiting"}
  */
 export function decideDevLinkAction({
   boot,
+  ready,
   isFirstProbe,
   bootAtStart,
   registeredCount,
@@ -66,6 +68,13 @@ export function decideDevLinkAction({
 }) {
   if (boot == null) {
     return "server-down";
+  }
+
+  // The server answers before it has written the build. Reloading an unpacked
+  // extension whose folder is momentarily empty is not a retry — Chrome unloads
+  // the extension and tells the person so in a dialog. Nothing to do but wait.
+  if (!ready) {
+    return "building";
   }
 
   // The worker's socket was opened moments ago against this same server, so it

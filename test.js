@@ -789,6 +789,7 @@ assert.equal(formatErrorLogLines(undefined), "");
 // reaching on demand inside a browser, which is why the decision is a function.
 const linked = {
   boot: "server-1",
+  ready: true,
   isFirstProbe: false,
   bootAtStart: "server-1",
   registeredCount: 1,
@@ -799,6 +800,22 @@ assert.equal(decideDevLinkAction(linked), "linked");
 
 // Nothing to attach to.
 assert.equal(decideDevLinkAction({ ...linked, boot: null }), "server-down");
+
+// The server is up but has not written the build yet. Reloading into an empty
+// folder unloads the extension outright, so every state waits behind this one.
+assert.equal(
+  decideDevLinkAction({
+    ...linked,
+    ready: false,
+    bootAtStart: undefined,
+    registeredCount: 0
+  }),
+  "building"
+);
+assert.equal(
+  decideDevLinkAction({ ...linked, ready: false, boot: "server-2" }),
+  "building"
+);
 
 // The worker just started and the server answered, so its socket went to this
 // same server. Whatever it saw before does not matter.

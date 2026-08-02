@@ -79,10 +79,13 @@ WXTが張るソケットはworkerの起動時に1回だけで、張り直しま�
 
 **開発ビルドはこの状態を自分で検出して抜けます。** workerが5秒ごとに開発サーバーへ問い合わせ、「起動時に見たサーバー」と違うもの（または登録が無い状態）を見つけたら `chrome.runtime.reload()` で自分を起動し直します。同じサーバー世代に対して試すのは1回だけです。
 
+**ビルドが書き終わるまでは起動し直しません。** 開発サーバーは起動時に出力フォルダを作り直すため、その間フォルダは空です。**空のフォルダへunpacked拡張をリロードすると、Chromeは待たずに失敗し、拡張を読み込み解除してダイアログを出します。** サーバーは問い合わせに「ビルドが置かれているか」を添えて答え、workerはそれまで待ちます。
+
 **Chromeの外から状態を読めます。** `~\.sift\extension-errors.log` に `"kind":"dev-link"` の行が出ます。
 
 - `development link: linked` — つながっていて登録もある
 - `development link: server-down` — 開発サーバーが落ちている
+- `development link: building` — サーバーは居るがビルドがまだ置かれていない
 - `content script started on <URL>` — そのページにcontent scriptが実際に入った
 - `filter pass: <n> hit, <n> rising, <n> hidden, toolbar mounted` — 最初の判定が通り、ツールバーが出た
 

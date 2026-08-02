@@ -134,8 +134,8 @@ export default defineBackground(() => {
       if (!response.ok) {
         return null;
       }
-      const { boot } = await response.json();
-      return typeof boot === "string" ? boot : null;
+      const { boot, ready } = await response.json();
+      return typeof boot === "string" ? { boot, ready: ready === true } : null;
     } catch {
       // Down, or not answering. Either way there is nothing to attach to.
       return null;
@@ -143,22 +143,28 @@ export default defineBackground(() => {
   };
 
   const checkDevLink = async () => {
-    const boot = await probeDevServer();
+    const probe = await probeDevServer();
     const [registered, stored] = await Promise.all([
-      boot == null
+      probe == null
         ? Promise.resolve([])
         : chrome.scripting.getRegisteredContentScripts(),
       chrome.storage.session.get(DEV_LINK_RELOAD_KEY)
     ]);
 
+    const boot = probe?.boot ?? null;
     const action = decideDevLinkAction({
       boot,
+      ready: probe?.ready === true,
       isFirstProbe,
       bootAtStart,
       registeredCount: registered.length,
       reloadedForBoot: stored?.[DEV_LINK_RELOAD_KEY]
     });
-    isFirstProbe = false;
+    // A server that has not written its build yet tells us nothing about
+    // whether this worker is attached, so the first probe stays unspent.
+    if (action !== "building") {
+      isFirstProbe = false;
+    }
 
     if (action === "adopt") {
       bootAtStart = boot;
