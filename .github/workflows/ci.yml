@@ -1,0 +1,37 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# A push that supersedes an earlier one on the same branch does not need the
+# earlier run to finish.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+
+      # Pulls in the two install hooks: postinstall (`wxt prepare`, which
+      # generates the WXT config this build needs) and prepare
+      # (`scripts/setup.js`, which only points git at .githooks and is written
+      # to never fail an install).
+      - run: npm ci
+
+      - run: npm test
+
+      # `wxt build` followed by verify:manifest — the generated release manifest
+      # has to keep matching the hand-written manifest.legacy.json.
+      - run: npm run build
