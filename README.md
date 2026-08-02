@@ -84,10 +84,20 @@ WXTが張るソケットはworkerの起動時に1回だけで、張り直しま�
 **Chromeの外から状態を読めます。** `~\.sift\extension-errors.log` に `"kind":"dev-link"` の行が出ます。
 
 - `development link: linked` — つながっていて登録もある
-- `development link: server-down` — 開発サーバーが落ちている
 - `development link: building` — サーバーは居るがビルドがまだ置かれていない
+- `development link: reload` — つながりを取り戻すために自分を起動し直した
 - `content script started on <URL>` — そのページにcontent scriptが実際に入った
 - `filter pass: <n> hit, <n> rising, <n> hidden, toolbar mounted` — 最初の判定が通り、ツールバーが出た
+
+**開発サーバーが落ちている間は何も出ません。** このログを書く先がその開発サーバーだからです。開発サーバーを起こし直したときの復帰は、次のように残ります。
+
+```
+development link: linked      … 正常
+development link: building    … サーバーは戻ったがビルドはまだ（ここで待つ）
+development link: reload      … ビルドが揃ったので自分を起動し直す
+development link: adopt       … 新しいサーバーにつながった
+development link: linked      … content scriptの登録も戻った
+```
 
 このログはdevelopmentビルドだけが書きます。ブラウザを見なくても「拡張がページに入ったか」を確かめられるのは、いまのところこの経路だけです。
 
