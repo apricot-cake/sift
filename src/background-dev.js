@@ -1,5 +1,13 @@
+import {
+  collectUndrainedEntries,
+  ERROR_LOG_KEY,
+  startUncaughtReporting
+} from "./error-log.js";
+
 export const RUNTIME_SESSION_KEY = "siftDevRuntimeInitialized";
+export const ERROR_LOG_DRAINED_SEQ_KEY = "siftErrorLogDrainedSeq";
 const DEV_SERVER_PROBE_INTERVAL_MS = 750;
+const ERROR_LOG_ENDPOINT = "/__sift_error_log";
 
 export function getContentScriptPlans(manifest) {
   return (manifest.content_scripts ?? [])
@@ -67,6 +75,36 @@ export async function initializeDevRuntime(api) {
   return { initialized: true, injectedTabCount };
 }
 
+// Carries the error ring buffer out of chrome.storage.local and into a file the
+// resident Vite server owns, which is the only form of it a diagnosis running
+// outside Chrome can read. The mark of what has already been forwarded lives in
+// session storage: it survives the worker being torn down and restarted, and is
+// gone by the time a new browser session starts over.
+//
+// A failed post leaves the mark untouched on purpose — the entries stay in the
+// buffer and go out on the next attempt.
+export async function drainErrorLog({ storage, post }) {
+  const [stored, drained] = await Promise.all([
+    storage.local.get(ERROR_LOG_KEY),
+    storage.session.get(ERROR_LOG_DRAINED_SEQ_KEY)
+  ]);
+
+  const pending = collectUndrainedEntries(
+    stored?.[ERROR_LOG_KEY],
+    drained?.[ERROR_LOG_DRAINED_SEQ_KEY]
+  );
+  if (pending.length === 0) {
+    return { forwarded: 0 };
+  }
+
+  await post(pending);
+  await storage.session.set({
+    [ERROR_LOG_DRAINED_SEQ_KEY]: pending.at(-1).seq
+  });
+
+  return { forwarded: pending.length };
+}
+
 export function createDevServerMonitor({ probe, reload }) {
   let disconnected = false;
 
@@ -94,12 +132,48 @@ if (
   globalThis.chrome?.runtime?.getManifest &&
   globalThis.chrome?.storage?.session
 ) {
+  startUncaughtReporting({
+    target: globalThis,
+    source: "background",
+    filterToOwnCode: false
+  });
+
   void initializeDevRuntime(globalThis.chrome).catch((error) => {
     console.error(
       "[sift] Could not initialize the development runtime:",
       error
     );
   });
+
+  const errorLogUrl = new URL(ERROR_LOG_ENDPOINT, import.meta.url);
+  const requestErrorLogDrain = () => {
+    void drainErrorLog({
+      storage: globalThis.chrome.storage,
+      post: async (entries) => {
+        const response = await fetch(errorLogUrl, {
+          method: "POST",
+          // text/plain keeps this a simple request, so the post never depends
+          // on a preflight being answered.
+          headers: { "content-type": "text/plain;charset=UTF-8" },
+          body: JSON.stringify(entries)
+        });
+        if (!response.ok) {
+          throw new Error(
+            `The development error log returned HTTP ${response.status}.`
+          );
+        }
+      }
+    }).catch(() => {
+      // The development server may be down. The entries stay in the buffer.
+    });
+  };
+
+  globalThis.chrome.storage.onChanged.addListener((changes, areaName) => {
+    if (areaName === "local" && ERROR_LOG_KEY in changes) {
+      requestErrorLogDrain();
+    }
+  });
+  requestErrorLogDrain();
 
   const probeUrl = new URL("/__vite_ping", import.meta.url);
   const monitor = createDevServerMonitor({

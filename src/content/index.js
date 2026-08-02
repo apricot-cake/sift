@@ -1,3 +1,4 @@
+import { startUncaughtReporting } from "../error-log.js";
 import { classifyPost, parseMetric } from "../filter-core.js";
 import { defaults, normalizeSettings } from "../settings.js";
 import { findPostCell, getPostCards, hasPostCards } from "./post-cards.js";
@@ -5,6 +6,17 @@ import { CONTENT_RUNTIME_KEY } from "./runtime-key.js";
 
 export function startContentRuntime() {
     const toolbarHostId = "xif-toolbar-host";
+
+    // Tied to the runtime's life rather than the world's: the injection that
+    // replaces this script disposes the previous runtime first, so there is no
+    // window in which both are subscribed.
+    const stopUncaughtReporting = startUncaughtReporting({
+      target: window,
+      source: "content",
+      // X's own exceptions reach this same window, and recording them would be
+      // a false report. Only frames naming the extension's origin are Sift's.
+      filterToOwnCode: true
+    });
 
     let settings = normalizeSettings(defaults);
     let observer = null;
@@ -356,6 +368,7 @@ export function startContentRuntime() {
         filterFrame = null;
       }
       window.removeEventListener("pagehide", handlePageHide);
+      stopUncaughtReporting();
       try {
         chrome.storage.onChanged.removeListener(handleStorageChange);
       } catch {

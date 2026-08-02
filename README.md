@@ -57,6 +57,14 @@ npm run ext:release
 
 background 相当の開発ランタイムが更新されても、開いている X のタブは自動再読み込みしません。古い content script は操作部品を片付けて再読み込み案内へ退避するため、そのタブで新しい版を使うときだけページを再読み込みします。
 
+### 未捕捉例外の記録
+
+拡張が投げた例外のうちコードが受け止めそこねたものは、Chrome の `chrome://extensions` のエラー欄にしか残らず、ブラウザの外からは読めません。そこで拡張自身が例外を捕まえ、`chrome.storage.local` の環状バッファ（新しい50件）へ書きます。開発中は service worker がそれを常駐 Vite へ送り、`~/.sift/extension-errors.log` へ1行1件の JSON で追記します。落ちた原因を後から調べるときはこのファイルを読みます。
+
+content script は X 自身の例外と同じ window に載るため、発生元が拡張のものだと分かる例外だけを記録します。popup と service worker は全件を記録します。
+
+service worker は自分が起動し直したときに新しいコードを読みます。worker 側のコードを変えた直後は、`chrome://extensions` で一度拡張を再読み込みするまで古い版が動いたままになることがあります。バッファは残るので、再読み込み後にまとめて追記されます。
+
 配布・リリース確認用のファイルは、次のコマンドで `dist` に作成します。日常の Chrome 読み込み先は `dist-dev` のままです。開発用の `dist-dev` とは分離されるため、起動中の開発版を上書きしません。ビルド時には旧 manifest と生成 manifest の権限・対象ホスト・content script 設定を比較します。
 
 ```powershell

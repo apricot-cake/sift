@@ -1,4 +1,13 @@
+import { startUncaughtReporting } from "../error-log.js";
 import { defaults, normalizeSettings } from "../settings.js";
+
+// Everything running on this page is the extension's own, so nothing is
+// filtered out. The subscription lives as long as the popup does.
+startUncaughtReporting({
+  target: window,
+  source: "popup",
+  filterToOwnCode: false
+});
 
 const status = document.querySelector('[data-role="status"]');
 let settings = normalizeSettings(defaults);
