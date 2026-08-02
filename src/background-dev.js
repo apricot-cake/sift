@@ -6,7 +6,6 @@ import {
 
 export const RUNTIME_SESSION_KEY = "siftDevRuntimeInitialized";
 export const ERROR_LOG_DRAINED_SEQ_KEY = "siftErrorLogDrainedSeq";
-const DEV_SERVER_PROBE_INTERVAL_MS = 750;
 const ERROR_LOG_ENDPOINT = "/__sift_error_log";
 
 export function getContentScriptPlans(manifest) {
@@ -76,7 +75,7 @@ export async function initializeDevRuntime(api) {
 }
 
 // Carries the error ring buffer out of chrome.storage.local and into a file the
-// resident Vite server owns, which is the only form of it a diagnosis running
+// development server owns, which is the only form of it a diagnosis running
 // outside Chrome can read. The mark of what has already been forwarded lives in
 // session storage: it survives the worker being torn down and restarted, and is
 // gone by the time a new browser session starts over.
@@ -103,29 +102,6 @@ export async function drainErrorLog({ storage, post }) {
   });
 
   return { forwarded: pending.length };
-}
-
-export function createDevServerMonitor({ probe, reload }) {
-  let disconnected = false;
-
-  return {
-    async check() {
-      try {
-        await probe();
-      } catch {
-        disconnected = true;
-        return "disconnected";
-      }
-
-      if (!disconnected) {
-        return "connected";
-      }
-
-      disconnected = false;
-      reload();
-      return "reloaded";
-    }
-  };
 }
 
 if (
@@ -174,18 +150,4 @@ if (
     }
   });
   requestErrorLogDrain();
-
-  const probeUrl = new URL("/__vite_ping", import.meta.url);
-  const monitor = createDevServerMonitor({
-    probe: async () => {
-      const response = await fetch(probeUrl, { cache: "no-store" });
-      if (!response.ok) {
-        throw new Error(`Vite readiness returned HTTP ${response.status}.`);
-      }
-    },
-    reload: () => globalThis.chrome.runtime.reload()
-  });
-  setInterval(() => {
-    void monitor.check();
-  }, DEV_SERVER_PROBE_INTERVAL_MS);
 }

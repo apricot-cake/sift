@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import {
-  createDevServerMonitor,
   drainErrorLog,
   ERROR_LOG_DRAINED_SEQ_KEY,
   getContentScriptPlans,
@@ -217,27 +216,6 @@ assert.deepEqual(await initializeDevRuntime(runtimeApi), {
   injectedTabCount: 0
 });
 assert.equal(queryCalls.length, 1);
-
-let probeSucceeds = true;
-let reloadCount = 0;
-const monitor = createDevServerMonitor({
-  probe: async () => {
-    if (!probeSucceeds) {
-      throw new Error("offline");
-    }
-  },
-  reload: () => {
-    reloadCount += 1;
-  }
-});
-assert.equal(await monitor.check(), "connected");
-probeSucceeds = false;
-assert.equal(await monitor.check(), "disconnected");
-assert.equal(await monitor.check(), "disconnected");
-probeSucceeds = true;
-assert.equal(await monitor.check(), "reloaded");
-assert.equal(reloadCount, 1);
-assert.equal(await monitor.check(), "connected");
 
 const extensionPrefix = "chrome-extension://abcdefghijklmnopabcdefghijklmnop/";
 
