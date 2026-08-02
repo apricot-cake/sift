@@ -11,6 +11,11 @@ import {
 } from "./utils/error-log.js";
 import { formatErrorLogLines } from "./scripts/dev-error-log.js";
 import { ADAPTERS, hostMatchesPattern, selectAdapter } from "./utils/adapters/index.js";
+import {
+  BLUESKY_SELECTORS,
+  blueskyAdapter,
+  timestampFromRecordKey
+} from "./utils/adapters/bluesky.js";
 import { X_SELECTORS, xAdapter } from "./utils/adapters/x.js";
 import { SITE_MATCHES } from "./utils/site-matches.js";
 import { classifyPost, parseMetric } from "./utils/filter-core.js";
@@ -103,8 +108,9 @@ assert.deepEqual(
 );
 
 // A node that answers only the selectors it was given, keyed by the adapter's
-// own selector table so the test never restates a selector.
-function createFakeNode(responses = {}) {
+// own selector table so the test never restates a selector. `extras` carries
+// the properties an adapter reads directly rather than through a selector.
+function createFakeNode(responses = {}, extras = {}) {
   return {
     querySelector(selector) {
       return responses[selector] ?? null;
@@ -118,7 +124,8 @@ function createFakeNode(responses = {}) {
     },
     closest(selector) {
       return responses[selector] ?? null;
-    }
+    },
+    ...extras
   };
 }
 
@@ -145,7 +152,7 @@ for (const adapter of ADAPTERS) {
 
 assert.equal(selectAdapter("x.com"), xAdapter);
 assert.equal(selectAdapter("twitter.com"), xAdapter);
-assert.equal(selectAdapter("bsky.app"), null);
+assert.equal(selectAdapter("bsky.app"), blueskyAdapter);
 assert.equal(selectAdapter("notx.com"), null);
 // A match pattern without the "*." prefix does not cover subdomains.
 assert.equal(selectAdapter("mobile.x.com"), null);
@@ -252,6 +259,220 @@ assert.equal(xAdapter.readIsRepost(createFakeNode()), false);
 // The toolbar and its settings panel take this word from the adapter rather
 // than spelling out X's.
 assert.equal(xAdapter.reactionLabel, "いいね");
+
+// Notification rows reuse the post card's testid. What they do not have is a
+// like button, and that is what keeps them out of the reading.
+const blueskyPostCard = createFakeNode({
+  [BLUESKY_SELECTORS.reactionButton]: createFakeAttributeNode(
+    { "aria-label": "いいねする（63,561件のいいね）" },
+    "6万"
+  )
+});
+const blueskyNotificationRow = createFakeNode();
+const blueskyRoot = createFakeNode({
+  [BLUESKY_SELECTORS.postCard]: [blueskyPostCard, blueskyNotificationRow]
+});
+const blueskyNotificationsRoot = createFakeNode({
+  [BLUESKY_SELECTORS.postCard]: [blueskyNotificationRow]
+});
+
+assert.deepEqual(blueskyAdapter.getPostCards(blueskyRoot), [blueskyPostCard]);
+assert.deepEqual(blueskyAdapter.getPostCards(emptyRoot), []);
+assert.equal(blueskyAdapter.hasPostCards(blueskyRoot), true);
+assert.equal(blueskyAdapter.hasPostCards(blueskyNotificationsRoot), false);
+assert.equal(blueskyAdapter.hasPostCards(emptyRoot), false);
+
+// Bluesky keeps the separator and the padding inside the card, so the card is
+// the unit that gets hidden.
+assert.equal(blueskyAdapter.findPostCell(blueskyPostCard), blueskyPostCard);
+
+// The accessible label carries the exact count; the text on the button is
+// rounded to "6万" and could never be compared against a threshold.
+assert.equal(blueskyAdapter.readReactionCount(blueskyPostCard), 63561);
+assert.equal(blueskyAdapter.readReactionCount(createFakeNode()), 0);
+
+const blueskyPostHref = "/profile/example.bsky.social/post/3mqcze2d6k23e";
+const recordKeyTime = Date.parse("2026-07-10T20:46:00.000Z");
+
+function createBlueskyPostWithLink(attributes) {
+  return createFakeNode({
+    [BLUESKY_SELECTORS.postLink]: createFakeAttributeNode(attributes)
+  });
+}
+
+// A label Date.parse understands is the reading; the record key is not
+// consulted, and its time differs here so the test can tell which one won.
+assert.equal(
+  blueskyAdapter.readCreatedAt(
+    createBlueskyPostWithLink({
+      "aria-label": "2026-08-01T12:00:00.000Z",
+      href: blueskyPostHref
+    })
+  ),
+  Date.parse("2026-08-01T12:00:00.000Z")
+);
+
+// The label Bluesky actually writes is a localized absolute time, which
+// Date.parse rejects — so in practice the record key is what carries the time.
+assert.equal(Number.isNaN(Date.parse("2026年7月10日 20:46")), true);
+assert.equal(
+  blueskyAdapter.readCreatedAt(
+    createBlueskyPostWithLink({
+      "aria-label": "2026年7月10日 20:46",
+      href: blueskyPostHref
+    })
+  ),
+  recordKeyTime
+);
+
+// Neither reading available: the post still classifies, only "rising" drops.
+assert.equal(
+  Number.isNaN(
+    blueskyAdapter.readCreatedAt(
+      createBlueskyPostWithLink({ href: "/profile/example.bsky.social/post/self" })
+    )
+  ),
+  true
+);
+assert.equal(Number.isNaN(blueskyAdapter.readCreatedAt(createFakeNode())), true);
+
+// The post a detail screen is about has no permalink — it is where the link
+// would point. Its first links are to its own sub-pages, whose labels are
+// actions rather than times, and the record key rides in the middle of the path.
+assert.equal(
+  blueskyAdapter.readCreatedAt(
+    createFakeNode({
+      [BLUESKY_SELECTORS.postLink]: [
+        createFakeAttributeNode({
+          "aria-label": "この投稿をリポストする",
+          href: `${blueskyPostHref}/reposted-by`
+        }),
+        createFakeAttributeNode({
+          "aria-label": "この投稿をいいねする",
+          href: `${blueskyPostHref}/liked-by`
+        })
+      ]
+    })
+  ),
+  recordKeyTime
+);
+
+// A quoting post carries the quoted post's permalink too, after its own.
+assert.equal(
+  blueskyAdapter.readCreatedAt(
+    createFakeNode({
+      [BLUESKY_SELECTORS.postLink]: [
+        createFakeAttributeNode({
+          "aria-label": "2026年7月10日 20:46",
+          href: blueskyPostHref
+        }),
+        createFakeAttributeNode({
+          href: "/profile/quoted.bsky.social/post/3ms3mmsbt223e"
+        })
+      ]
+    })
+  ),
+  recordKeyTime
+);
+
+assert.equal(timestampFromRecordKey(blueskyPostHref), recordKeyTime);
+assert.equal(timestampFromRecordKey(`${blueskyPostHref}?foo=1`), recordKeyTime);
+// The key is the segment after /post/, so a link to one of the post's own
+// sub-pages carries it just as well as the permalink does.
+assert.equal(
+  timestampFromRecordKey(`${blueskyPostHref}/reposted-by`),
+  recordKeyTime
+);
+assert.equal(
+  timestampFromRecordKey(`https://bsky.app${blueskyPostHref}#anchor`),
+  recordKeyTime
+);
+// A record key is only a TID by convention, so anything that does not decode to
+// a plausible post time is refused: wrong length, a character outside the
+// alphabet, or a time that cannot belong to a post.
+assert.equal(Number.isNaN(timestampFromRecordKey("/post/tooshort")), true);
+assert.equal(Number.isNaN(timestampFromRecordKey("/post/3111111111111")), true);
+assert.equal(Number.isNaN(timestampFromRecordKey("")), true);
+assert.equal(Number.isNaN(timestampFromRecordKey(null)), true);
+// "aaaaaaaaaaaaa" decodes to the year 2190 — the reason the upper bound exists.
+assert.equal(Number.isNaN(timestampFromRecordKey("/post/aaaaaaaaaaaaa")), true);
+// A time before the network existed.
+assert.equal(Number.isNaN(timestampFromRecordKey("/post/3i5p64yyc222b")), true);
+// And a post cannot predate the clock reading it by more than a small skew.
+assert.equal(
+  Number.isNaN(timestampFromRecordKey(blueskyPostHref, recordKeyTime - 3600000)),
+  true
+);
+assert.equal(
+  timestampFromRecordKey(blueskyPostHref, recordKeyTime - 60000),
+  recordKeyTime
+);
+
+assert.deepEqual(
+  blueskyAdapter.readMedia(createFakeNode({ [BLUESKY_SELECTORS.image]: { id: "photo" } })),
+  { hasImage: true, hasVideo: false }
+);
+// An unplayed video has no <video> at all: the thumbnail is a CSS background.
+assert.deepEqual(
+  blueskyAdapter.readMedia(createFakeNode({ [BLUESKY_SELECTORS.video]: { id: "video" } })),
+  { hasImage: false, hasVideo: true }
+);
+assert.deepEqual(
+  blueskyAdapter.readMedia(
+    createFakeNode({ [BLUESKY_SELECTORS.animatedImage]: { id: "gif" } })
+  ),
+  { hasImage: false, hasVideo: true }
+);
+assert.deepEqual(blueskyAdapter.readMedia(createFakeNode()), {
+  hasImage: false,
+  hasVideo: false
+});
+// An external link card's thumbnail is served from the same path as a post's
+// image and is told apart only by what encloses it: a link, not a button.
+assert.match(BLUESKY_SELECTORS.image, /^button /);
+
+// A repost is marked by a header whose profile link wraps an icon, where an
+// author's profile link wraps an avatar image. The displayed word is localized
+// and carries no testid, so the shape is what the reading can rely on.
+function createFakeProfileLink({ hasAvatar = false, firstChildTag = null } = {}) {
+  return createFakeNode(hasAvatar ? { img: { id: "avatar" } } : {}, {
+    firstElementChild: firstChildTag === null ? null : { tagName: firstChildTag }
+  });
+}
+
+function createBlueskyPostWithProfileLink(options) {
+  return createFakeNode({
+    [BLUESKY_SELECTORS.profileLink]: createFakeProfileLink(options)
+  });
+}
+
+assert.equal(
+  blueskyAdapter.readIsRepost(
+    createBlueskyPostWithProfileLink({ firstChildTag: "svg" })
+  ),
+  true
+);
+assert.equal(
+  blueskyAdapter.readIsRepost(
+    createBlueskyPostWithProfileLink({ hasAvatar: true, firstChildTag: "svg" })
+  ),
+  false
+);
+assert.equal(
+  blueskyAdapter.readIsRepost(
+    createBlueskyPostWithProfileLink({ firstChildTag: "div" })
+  ),
+  false
+);
+assert.equal(
+  blueskyAdapter.readIsRepost(createBlueskyPostWithProfileLink()),
+  false
+);
+assert.equal(blueskyAdapter.readIsRepost(createFakeNode()), false);
+
+// Bluesky's like is X's like, so the threshold and the word are shared rather
+// than duplicated per service.
+assert.equal(blueskyAdapter.reactionLabel, xAdapter.reactionLabel);
 
 const extensionPrefix = "chrome-extension://abcdefghijklmnopabcdefghijklmnop/";
 

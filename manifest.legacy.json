@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Sift",
   "version": "0.1.0",
-  "description": "Xの投稿画面を、メディア・いいね数・投稿後の時間で絞り込みます。",
+  "description": "XとBlueskyの投稿画面を、メディア・いいね数・投稿後の時間で絞り込みます。",
   "permissions": ["storage"],
   "action": {
     "default_title": "Sift",
@@ -10,7 +10,7 @@
   },
   "content_scripts": [
     {
-      "matches": ["https://x.com/*", "https://twitter.com/*"],
+      "matches": ["https://x.com/*", "https://twitter.com/*", "https://bsky.app/*"],
       "css": ["content.css"],
       "js": ["filter-core.js", "settings.js", "content.js"],
       "run_at": "document_idle"

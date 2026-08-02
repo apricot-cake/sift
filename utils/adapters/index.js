@@ -1,9 +1,10 @@
 // The services Sift knows how to read. One adapter per service; the content
 // script picks exactly one of them from the host name and then runs the same
 // loop regardless of which it got.
+import { blueskyAdapter } from "./bluesky.js";
 import { xAdapter } from "./x.js";
 
-export const ADAPTERS = Object.freeze([xAdapter]);
+export const ADAPTERS = Object.freeze([xAdapter, blueskyAdapter]);
 
 // Chrome's match-pattern host: "*" for any, "*.example.com" for a domain and
 // its subdomains, or a literal host.

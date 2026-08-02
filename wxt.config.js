@@ -62,7 +62,8 @@ export default defineConfig({
     // same id cannot collide with itself.
     key: "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA7HRMGxpsFxVmyHkVNzHAtaSVuu6vJVFCC0gSSYBT9t31XfT68U7NYyn15N3rLuvZRhRAXYBgZiouzH619jVc2lbHGRzRUPYjm8o0XW70TW6NB+g7P510902pHXw1TmcrN9wqFfFsFhV50DObPKfY+GYfgNzWo+A4raQ4+sCQaCv9TNR78CU2HAi81oGJthhxPYRfdZdqLiZ7FWSnz+Nv9Ie0Q0RAn6W21ekSRpN6wfJf4AjgBe5sj3zRRTGH6CcUSvfUehjKjSbsS5KX5OhL4KWsio4GYRmUZa3SJxWexZN3kLSo4ugA+0AaT0rFjLTZhxOl/ULBeMvBvnnZ+xEqyQIDAQAB",
     name: "Sift",
-    description: "Xの投稿画面を、メディア・いいね数・投稿後の時間で絞り込みます。",
+    description:
+      "XとBlueskyの投稿画面を、メディア・いいね数・投稿後の時間で絞り込みます。",
     // Only what the release needs. WXT adds `scripting` in development on its
     // own, because that is how its dev mode registers content scripts.
     permissions: ["storage"],
