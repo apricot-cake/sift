@@ -68,6 +68,39 @@ npm run dev
 
 保存した変更は、拡張の再読み込みと開いているタブの再読み込みを伴って反映されます。`chrome://extensions` を手で押す必要はありません。
 
+### 開発ビルドと開発サーバーのつながり
+
+**開発ビルドのcontent scriptは、manifestに載っていません。** WXTのdevモードはファイルだけを作り、service workerが開発サーバーへWebSocketで接続した後に `chrome.scripting.registerContentScripts()` で登録します。**つながっていないworkerは、content scriptが存在しないのと同じ**です。ページを開いても拡張は1行も動きません。
+
+WXTが張るソケットはworkerの起動時に1回だけで、張り直しません。そのため次の2つでつながりが切れたままになります。
+
+- 開発サーバーより先にブラウザが起きていた
+- 開発サーバーを起こし直した
+
+**開発ビルドはこの状態を自分で検出して抜けます。** workerが5秒ごとに開発サーバーへ問い合わせ、「起動時に見たサーバー」と違うもの（または登録が無い状態）を見つけたら `chrome.runtime.reload()` で自分を起動し直します。同じサーバー世代に対して試すのは1回だけです。
+
+**ビルドが書き終わるまでは起動し直しません。** 開発サーバーは起動時に出力フォルダを作り直すため、その間フォルダは空です。**空のフォルダへunpacked拡張をリロードすると、Chromeは待たずに失敗し、拡張を読み込み解除してダイアログを出します。** サーバーは問い合わせに「ビルドが置かれているか」を添えて答え、workerはそれまで待ちます。
+
+**Chromeの外から状態を読めます。** `~\.sift\extension-errors.log` に `"kind":"dev-link"` の行が出ます。
+
+- `development link: linked` — つながっていて登録もある
+- `development link: building` — サーバーは居るがビルドがまだ置かれていない
+- `development link: reload` — つながりを取り戻すために自分を起動し直した
+- `content script started on <URL>` — そのページにcontent scriptが実際に入った
+- `filter pass: <n> hit, <n> rising, <n> hidden, toolbar mounted` — 最初の判定が通り、ツールバーが出た
+
+**開発サーバーが落ちている間は何も出ません。** このログを書く先がその開発サーバーだからです。開発サーバーを起こし直したときの復帰は、次のように残ります。
+
+```
+development link: linked      … 正常
+development link: building    … サーバーは戻ったがビルドはまだ（ここで待つ）
+development link: reload      … ビルドが揃ったので自分を起動し直す
+development link: adopt       … 新しいサーバーにつながった
+development link: linked      … content scriptの登録も戻った
+```
+
+このログはdevelopmentビルドだけが書きます。ブラウザを見なくても「拡張がページに入ったか」を確かめられるのは、いまのところこの経路だけです。
+
 ### 開発プロファイル
 
 ```powershell
@@ -77,6 +110,8 @@ npm run dev:browser
 専用の `--user-data-dir` でChromeを開きます。日常のChromeとは別プロセスで、並べて使えます。
 
 初回だけ、開いたChromeで `chrome://extensions` → デベロッパー モード → 「パッケージ化されていない拡張機能を読み込む」→ `~\.sift-dev\chrome-mv3-dev` を選びます。以後はプロファイルが覚えます。Xへのログインも初回に行います。
+
+**手で操作するのはここだけです。** ただしservice workerの中身を差し替えたときは、いま動いているworkerが古いままなので、`chrome://extensions` のリロード（または開発プロファイルのウィンドウで `Alt+R`）を1回だけ押します。unpacked拡張のファイルをChromeが自分で読み直すことはありません。
 
 **このビルドを日常のプロファイルへ読み込まないでください。** developmentとreleaseは同じ拡張IDを持つため、同じプロファイルには同居できません。
 

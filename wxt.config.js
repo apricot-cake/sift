@@ -1,8 +1,9 @@
+import { existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, dirname, resolve } from "node:path";
 import { defineConfig } from "wxt";
 import { devErrorLog } from "./scripts/dev-error-log.js";
-import { DEV_SERVER_PORT } from "./utils/dev-server.js";
+import { DEV_SERVER_HOST, DEV_SERVER_PORT } from "./utils/dev-server.js";
 
 // Where a DEVELOPMENT build lands. Deliberately outside the working tree and
 // identical for every tree: the dedicated development Chrome profile loads one
@@ -14,6 +15,16 @@ import { DEV_SERVER_PORT } from "./utils/dev-server.js";
 // right answer for a build nobody's profile has loaded.
 const developmentOutput =
   process.env.SIFT_DEV_OUTPUT || resolve(homedir(), ".sift-dev", "chrome-mv3-dev");
+
+// Whether the folder above currently holds a build. The development worker asks
+// before it reloads itself: starting the server wipes and rewrites that folder,
+// and reloading an unpacked extension into an empty one does not retry — Chrome
+// unloads the extension and puts up a dialog about a missing manifest (measured
+// 2026-08-02, #31). Both halves matter: the hook says a build finished in THIS
+// server's lifetime, the file check says it is still on disk.
+let developmentBuildWritten = false;
+const developmentBuildIsReady = () =>
+  developmentBuildWritten && existsSync(resolve(developmentOutput, "manifest.json"));
 
 export default defineConfig({
   // Firefox too. WXT would default Firefox to MV2, and one manifest version
@@ -49,8 +60,27 @@ export default defineConfig({
   dev: {
     server: {
       // utils/dev-server.js is the single source: the development worker posts
-      // its error buffer to this same address.
-      port: DEV_SERVER_PORT
+      // its error buffer and its liveness probe to this same address.
+      //
+      // The HOST is pinned for the same reason as the port. WXT's default is
+      // `localhost`, which resolved to ::1 here and bound there only, so the
+      // worker's posts to 127.0.0.1 were refused and every diagnostic the
+      // extension produced was lost in silence (#31). Naming the address makes
+      // the HMR socket, the CSP, the host permission and the worker's fetches
+      // agree on one host.
+      //
+      // `origin` is a SEPARATE option in WXT, and defaults to localhost on its
+      // own — setting only `host` moves what the server binds without moving
+      // what the extension is built to call, which is the same mismatch again.
+      host: DEV_SERVER_HOST,
+      origin: DEV_SERVER_HOST,
+      port: DEV_SERVER_PORT,
+      // Without this WXT quietly takes the next free port when 51732 is busy.
+      // The extension is built against one address it cannot renegotiate, so a
+      // server on another port is a server nothing will ever talk to — a failure
+      // that looks exactly like the extension being broken. Refusing to start is
+      // how the second dev server finds out it is the second one.
+      strictPort: true
     }
   },
   manifest: {
@@ -71,10 +101,16 @@ export default defineConfig({
       default_title: "Sift"
     }
   },
+  hooks: {
+    // Fires after every build the dev server writes, including the first one.
+    "build:done": () => {
+      developmentBuildWritten = true;
+    }
+  },
   vite: (env) => ({
     // Answers the endpoint the development worker posts its error buffer to.
     // The plugin applies to `serve` only, so a release build never carries it.
-    plugins: [devErrorLog()],
+    plugins: [devErrorLog({ isBuilt: developmentBuildIsReady })],
     define: {
       // Which build this bundle IS. Keyed on the COMMAND, deliberately:
       // `import.meta.env.DEV` follows NODE_ENV, so a release built from a test
