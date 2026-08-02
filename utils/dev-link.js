@@ -34,6 +34,13 @@ export const DEV_LINK_RELOAD_KEY = "siftDevLinkReloadedBoot";
 // wakes a sleeping worker when a matching page loads.
 export const DEV_CONTENT_STARTED = "sift:dev-content-started";
 
+// The first filter pass a content script completes on a page. "The script
+// loaded" and "the script did its job" are different claims, and only the second
+// one answers whether the extension works — so the counts and whether the
+// toolbar mounted go out too. Once per runtime: the pass runs on every frame
+// that changes the timeline.
+export const DEV_FILTER_PASS = "sift:dev-filter-pass";
+
 /**
  * What to do about the link, given one probe of the development server.
  *

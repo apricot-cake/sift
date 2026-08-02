@@ -84,6 +84,7 @@ WXTが張るソケットはworkerの起動時に1回だけで、張り直しま�
 - `development link: linked` — つながっていて登録もある
 - `development link: server-down` — 開発サーバーが落ちている
 - `content script started on <URL>` — そのページにcontent scriptが実際に入った
+- `filter pass: <n> hit, <n> rising, <n> hidden, toolbar mounted` — 最初の判定が通り、ツールバーが出た
 
 このログはdevelopmentビルドだけが書きます。ブラウザを見なくても「拡張がページに入ったか」を確かめられるのは、いまのところこの経路だけです。
 

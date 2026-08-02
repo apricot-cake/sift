@@ -1,5 +1,6 @@
 import {
   DEV_CONTENT_STARTED,
+  DEV_FILTER_PASS,
   DEV_LINK_RELOAD_KEY,
   decideDevLinkAction
 } from "../utils/dev-link.js";
@@ -104,6 +105,14 @@ export default defineBackground(() => {
   chrome.runtime.onMessage.addListener((message) => {
     if (message?.type === DEV_CONTENT_STARTED) {
       note(`content script started on ${message.page}`);
+    }
+    if (message?.type === DEV_FILTER_PASS) {
+      const { hit, rising, hidden } = message.counts;
+      note(
+        `filter pass: ${hit} hit, ${rising} rising, ${hidden} hidden, toolbar ${
+          message.toolbar ? "mounted" : "absent"
+        }`
+      );
     }
   });
 
