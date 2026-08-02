@@ -52,6 +52,21 @@
           <input data-setting="hideReposts" type="checkbox">
         </label>
       </section>
+      <section aria-labelledby="misskey-heading">
+        <h2 id="misskey-heading">Misskeyインスタンス</h2>
+        <ul class="instance-list" data-role="instance-list"></ul>
+        <form class="instance-form" data-role="instance-form">
+          <input
+            data-role="instance-input"
+            type="text"
+            placeholder="例: misskey.io"
+            aria-label="追加するMisskeyインスタンスのホスト名"
+          >
+          <button type="submit">追加</button>
+        </form>
+        <p class="instance-error" data-role="instance-error" role="alert"></p>
+        <p class="note">追加すると、そのホストだけへのアクセス許可をChromeが確認します。</p>
+      </section>
       <footer>
         <p class="status" data-role="status" role="status" aria-live="polite">読み込み中…</p>
         <p class="note">設定は自動保存され、対応している投稿一覧に反映されます。</p>

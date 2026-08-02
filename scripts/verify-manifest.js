@@ -15,6 +15,10 @@ assert.equal(generatedManifest.name, legacyManifest.name);
 assert.equal(generatedManifest.version, legacyManifest.version);
 assert.equal(generatedManifest.description, legacyManifest.description);
 assert.deepEqual(generatedManifest.permissions, legacyManifest.permissions);
+assert.deepEqual(
+  generatedManifest.optional_host_permissions,
+  legacyManifest.optional_host_permissions
+);
 assert.deepEqual(generatedManifest.action, legacyManifest.action);
 
 assert.equal(generatedManifest.content_scripts.length, 1);

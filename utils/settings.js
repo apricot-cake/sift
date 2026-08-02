@@ -1,3 +1,4 @@
+import { normalizeInstanceHost } from "./instances.js";
 
 export const defaults = Object.freeze({
   enabled: true,
@@ -6,7 +7,8 @@ export const defaults = Object.freeze({
   risingMinLikes: 100,
   risingMaxAgeHours: 6,
   mediaMode: "any",
-  hideReposts: true
+  hideReposts: true,
+  misskeyInstances: Object.freeze([])
 });
 
 function clampInteger(value, fallback, minimum, maximum) {
@@ -15,6 +17,26 @@ function clampInteger(value, fallback, minimum, maximum) {
     return fallback;
   }
   return Math.min(maximum, Math.max(minimum, parsed));
+}
+
+// Re-validated on every read, not just on write: storage can hold whatever an
+// older version of this extension put there, or whatever chrome://extensions
+// left behind after a permission was revoked out of step with settings.
+function normalizeInstanceList(value) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  const seen = new Set();
+  const hosts = [];
+  for (const entry of value) {
+    const host = normalizeInstanceHost(entry);
+    if (host !== null && !seen.has(host)) {
+      seen.add(host);
+      hosts.push(host);
+    }
+  }
+  return hosts;
 }
 
 export function normalizeSettings(value) {
@@ -37,6 +59,7 @@ export function normalizeSettings(value) {
       168
     ),
     mediaMode: source.mediaMode === "images" ? "images" : "any",
-    hideReposts: source.hideReposts !== false
+    hideReposts: source.hideReposts !== false,
+    misskeyInstances: normalizeInstanceList(source.misskeyInstances)
   };
 }
