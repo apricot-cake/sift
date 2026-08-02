@@ -7,9 +7,10 @@
 // What follows is the capture half of ordinary error telemetry — the same two
 // global event subscriptions a Sentry-style SDK installs inside an extension —
 // with a local destination instead of a server. Every surface writes to a ring
-// buffer in chrome.storage.local. In development the service worker forwards
-// that buffer to the development server, which appends it to
-// ~/.sift/extension-errors.log (see the sift:dev-error-log plugin).
+// buffer in chrome.storage.local, in every build. In development the service
+// worker forwards that buffer to the development server, which appends it to
+// ~/.sift/extension-errors.log (scripts/dev-error-log.js). A release build keeps
+// filling the buffer and has nobody to forward it to.
 //
 // Best-effort by construction: nothing here throws, and nothing here is awaited
 // by the code it watches. A lost diagnostic line is always better than a
@@ -44,10 +45,9 @@ function readMessage(reason) {
 
 // Whether an error raised on a shared window came from Sift rather than from the
 // page hosting it. `chrome.runtime.getURL("")` is the right prefix in both
-// builds: CRXJS emits the development content script as real files inside the
-// extension and its loader imports them through chrome.runtime.getURL, so only
-// the HMR socket ever talks to the Vite server. Sift's own frames always carry
-// chrome-extension://<id>/.
+// builds: WXT bundles the content script into the extension in development too,
+// so Sift's own frames always carry chrome-extension://<id>/ and only the dev
+// server's own socket ever names localhost.
 export function isOwnExtensionError(details, extensionUrlPrefix) {
   if (typeof extensionUrlPrefix !== "string" || extensionUrlPrefix === "") {
     return false;

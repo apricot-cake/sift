@@ -1,5 +1,5 @@
-import { startUncaughtReporting } from "../error-log.js";
-import { defaults, normalizeSettings } from "../settings.js";
+import { startUncaughtReporting } from "../../utils/error-log.js";
+import { defaults, normalizeSettings } from "../../utils/settings.js";
 
 // Everything running on this page is the extension's own, so nothing is
 // filtered out. The subscription lives as long as the popup does.

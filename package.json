@@ -4,14 +4,17 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "vite build && npm run verify:manifest",
-    "test": "node --test test.js && npm run verify:dev-client",
-    "verify:dev-client": "node scripts/verify-dev-client.js",
-    "verify:manifest": "node scripts/verify-manifest.js"
+    "dev": "node scripts/dev.js",
+    "dev:browser": "node scripts/dev-browser.js",
+    "build": "wxt build -b chrome && npm run verify:manifest",
+    "deploy": "node scripts/deploy-extension.js",
+    "test": "node --test test.js",
+    "verify:manifest": "node scripts/verify-manifest.js",
+    "postinstall": "wxt prepare",
+    "prepare": "node scripts/setup.js"
   },
   "devDependencies": {
-    "@crxjs/vite-plugin": "2.7.1",
-    "vite": "8.2.0"
+    "vite": "8.2.0",
+    "wxt": "0.21.3"
   }
 }
