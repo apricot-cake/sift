@@ -18,7 +18,7 @@
 // itself is possible — a build id file it fetches would be enough — but it buys
 // exactly one click, at the cost of a release service worker and a hold-off rule
 // for tabs that are mid-filter.
-import { execFileSync } from "node:child_process";
+import { execSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -83,7 +83,14 @@ if (!isMainWorkingTree()) {
 
 // Build and verify first: what reaches the daily folder is never an unchecked
 // bundle.
-execFileSync("npm", ["run", "build"], { cwd: ROOT, stdio: "inherit", shell: true });
+//
+// One string, no argument array. On Windows `npm` is `npm.cmd`, which Node will
+// not spawn without a shell at all, and refuses to spawn with `execFileSync` and
+// a shell (EINVAL, since the .cmd injection fix in 18.20/20.12). Passing an
+// argument array alongside `shell: true` does work, and prints a DEP0190
+// deprecation warning on every deploy — including the ones the post-merge hook
+// runs, where the noise lands in the middle of a git pull.
+execSync("npm run build", { cwd: ROOT, stdio: "inherit" });
 
 swapIn(RELEASE, DAILY);
 console.log(`[sift] deployed the verified release to ${DAILY}`);
