@@ -1,7 +1,8 @@
+import { randomUUID } from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { ERROR_LOG_ENDPOINT } from "../utils/dev-server.js";
+import { DEV_PING_ENDPOINT, ERROR_LOG_ENDPOINT } from "../utils/dev-server.js";
 
 export const DEFAULT_ERROR_LOG_PATH = path.join(
   os.homedir(),
@@ -57,10 +58,26 @@ function allowExtensionOrigin(request, response) {
 // answers CORS itself rather than relying on the server's cors option running
 // first.
 export function devErrorLog({ logPath = DEFAULT_ERROR_LOG_PATH } = {}) {
+  // Identifies this server process to the extension. A worker that sees an id it
+  // did not start with knows its HMR socket belongs to a server that is gone,
+  // and that only restarting itself will attach it to the one that is up (#31).
+  const boot = randomUUID();
+
   return {
     name: "sift:dev-error-log",
     apply: "serve",
     configureServer(server) {
+      server.middlewares.use(DEV_PING_ENDPOINT, (request, response, next) => {
+        if (request.method !== "GET") {
+          next();
+          return;
+        }
+        allowExtensionOrigin(request, response);
+        response.setHeader("content-type", "application/json");
+        response.setHeader("cache-control", "no-store");
+        response.end(JSON.stringify({ boot }));
+      });
+
       server.middlewares.use(ERROR_LOG_ENDPOINT, async (request, response, next) => {
         if (request.method === "OPTIONS") {
           allowExtensionOrigin(request, response);

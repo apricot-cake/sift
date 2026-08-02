@@ -1,4 +1,5 @@
 import { selectAdapter } from "../../utils/adapters/index.js";
+import { DEV_CONTENT_STARTED } from "../../utils/dev-link.js";
 import { startUncaughtReporting } from "../../utils/error-log.js";
 import { classifyPost } from "../../utils/filter-core.js";
 import { CONTENT_RUNTIME_KEY } from "../../utils/runtime-key.js";
@@ -353,5 +354,21 @@ export default defineContentScript({
     globalThis[runtimeSymbol] = startContentRuntime(
       selectAdapter(location.hostname)
     );
+
+    // Tell the development worker this page got the script. It is the one piece
+    // of evidence for "the extension is actually on the page" that can be read
+    // without a person looking at the browser, and in dev mode that question has
+    // a real answer either way (#31). Compiled out of a release with the guard.
+    // The path only — a log file has no business holding query strings.
+    if (__SIFT_DEV__) {
+      chrome.runtime
+        .sendMessage({
+          type: DEV_CONTENT_STARTED,
+          page: `${location.origin}${location.pathname}`
+        })
+        .catch(() => {
+          // No worker awake to hear it, and starting one is the point.
+        });
+    }
   }
 });

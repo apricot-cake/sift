@@ -10,6 +10,7 @@ import {
   recordErrorEntry
 } from "./utils/error-log.js";
 import { formatErrorLogLines } from "./scripts/dev-error-log.js";
+import { decideDevLinkAction } from "./utils/dev-link.js";
 import { ADAPTERS, hostMatchesPattern, selectAdapter } from "./utils/adapters/index.js";
 import {
   BLUESKY_SELECTORS,
@@ -783,5 +784,66 @@ assert.equal(
   '{"seq":1,"message":"first"}\n{"seq":2}\n'
 );
 assert.equal(formatErrorLogLines(undefined), "");
+
+// The development link. Each case is a state the worker cannot be talked into
+// reaching on demand inside a browser, which is why the decision is a function.
+const linked = {
+  boot: "server-1",
+  isFirstProbe: false,
+  bootAtStart: "server-1",
+  registeredCount: 1,
+  reloadedForBoot: undefined
+};
+
+assert.equal(decideDevLinkAction(linked), "linked");
+
+// Nothing to attach to.
+assert.equal(decideDevLinkAction({ ...linked, boot: null }), "server-down");
+
+// The worker just started and the server answered, so its socket went to this
+// same server. Whatever it saw before does not matter.
+assert.equal(
+  decideDevLinkAction({
+    ...linked,
+    isFirstProbe: true,
+    bootAtStart: undefined,
+    registeredCount: 0
+  }),
+  "adopt"
+);
+
+// The browser was open before the server was: the worker's first probe found
+// nothing, so it never adopted a generation, and the socket it opened is dead.
+assert.equal(
+  decideDevLinkAction({ ...linked, bootAtStart: undefined, registeredCount: 0 }),
+  "reload"
+);
+
+// The server was restarted under a live worker.
+assert.equal(decideDevLinkAction({ ...linked, boot: "server-2" }), "reload");
+
+// Attached to the right server, but the registration never happened.
+assert.equal(decideDevLinkAction({ ...linked, registeredCount: 0 }), "reload");
+
+// One reload per generation. Coming back to the same state means something else
+// is wrong, and a loop would only hide it.
+assert.equal(
+  decideDevLinkAction({
+    ...linked,
+    boot: "server-2",
+    reloadedForBoot: "server-2"
+  }),
+  "waiting"
+);
+
+// A generation reloaded for earlier does not excuse the next one.
+assert.equal(
+  decideDevLinkAction({
+    ...linked,
+    boot: "server-3",
+    reloadedForBoot: "server-2"
+  }),
+  "reload"
+);
 
 console.log("Sift tests passed");
