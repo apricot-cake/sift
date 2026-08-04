@@ -1,5 +1,4 @@
-
-const unitMultipliers = Object.freeze({
+const unitMultipliers: Record<string, number> = Object.freeze({
   K: 1000,
   M: 1000000,
   B: 1000000000,
@@ -7,13 +6,13 @@ const unitMultipliers = Object.freeze({
   "億": 100000000
 });
 
-export function normalizeDigits(value) {
+export function normalizeDigits(value: unknown): string {
   return String(value ?? "").replace(/[０-９]/g, (character) =>
     String.fromCharCode(character.charCodeAt(0) - 0xfee0)
   );
 }
 
-export function parseMetric(value) {
+export function parseMetric(value: unknown): number {
   const normalized = normalizeDigits(value)
     .replace(/\u00a0/g, " ")
     .trim();
@@ -24,7 +23,10 @@ export function parseMetric(value) {
   }
 
   const unit = match[2] ? match[2].toUpperCase() : "";
-  let numericText = match[1];
+  // The capturing group is mandatory in the pattern above, so it is always
+  // present whenever `match` itself is — the fallback only satisfies the
+  // indexed-access type, it never actually fires.
+  let numericText = match[1] ?? "";
 
   if (unit) {
     numericText = numericText.replace(",", ".");
@@ -40,7 +42,39 @@ export function parseMetric(value) {
   return Math.round(numericValue * (unitMultipliers[unit] ?? 1));
 }
 
-export function classifyPost(post, settings, nowMs = Date.now()) {
+export interface Post {
+  hasMedia: boolean;
+  likeCount: number;
+  createdAtMs: number;
+  isRepost: boolean;
+}
+
+export interface ClassifyThresholds {
+  hideReposts: boolean;
+  minLikes: number;
+  risingEnabled: boolean;
+  risingMinLikes: number;
+  risingMaxAgeHours: number;
+}
+
+export type ClassifyState = "hit" | "rising" | "hidden";
+export type ClassifyReason =
+  | "no-media"
+  | "repost"
+  | "minimum-likes"
+  | "rising"
+  | "below-threshold";
+
+export interface ClassifyResult {
+  state: ClassifyState;
+  reason: ClassifyReason;
+}
+
+export function classifyPost(
+  post: Post,
+  settings: ClassifyThresholds,
+  nowMs = Date.now()
+): ClassifyResult {
   if (!post.hasMedia) {
     return { state: "hidden", reason: "no-media" };
   }

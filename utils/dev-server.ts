@@ -1,5 +1,5 @@
 // The development server's address, in one place because three parties have to
-// agree on it: wxt.config.js (which starts the server), the development service
+// agree on it: wxt.config.ts (which starts the server), the development service
 // worker (which posts to it), and the Vite plugin that answers the endpoints.
 //
 // Fixed rather than negotiated. The extension is built against this address, and
@@ -18,5 +18,5 @@ export const DEV_SERVER_PORT = 51732;
 export const DEV_SERVER_ORIGIN = `http://${DEV_SERVER_HOST}:${DEV_SERVER_PORT}`;
 export const ERROR_LOG_ENDPOINT = "/__sift_error_log";
 // Answers which server process is up, so the worker can tell "the server I am
-// connected to" from "a server that started after I did". See utils/dev-link.js.
+// connected to" from "a server that started after I did". See utils/dev-link.ts.
 export const DEV_PING_ENDPOINT = "/__sift_dev_ping";

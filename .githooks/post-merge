@@ -11,7 +11,7 @@
 # half-pulled state, and the previously deployed build keeps running until a good
 # one replaces it.
 #
-# Enabled by `git config core.hooksPath .githooks`, which scripts/setup.js does
+# Enabled by `git config core.hooksPath .githooks`, which scripts/setup.ts does
 # (npm run prepare, which npm install runs on its own).
 
 set -u
@@ -32,10 +32,10 @@ fi
 changed=$(git diff --name-only "$ORIG_HEAD" HEAD -- \
   entrypoints \
   utils \
-  wxt.config.js \
+  wxt.config.ts \
   package.json \
-  scripts/deploy-extension.js \
-  scripts/verify-manifest.js)
+  scripts/deploy-extension.ts \
+  scripts/verify-manifest.ts)
 
 if [ -z "$changed" ]; then
   exit 0

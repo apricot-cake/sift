@@ -1,4 +1,4 @@
-import { ADAPTERS } from "./adapters/index.js";
+import { ADAPTERS } from "./adapters/index.ts";
 
 // The sites Sift runs on. Derived from the adapters rather than declared a
 // second time: a service Sift cannot read must not be a page it loads into, and

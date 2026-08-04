@@ -2,20 +2,27 @@ import {
   DEV_CONTENT_STARTED,
   DEV_FILTER_PASS,
   DEV_LINK_RELOAD_KEY,
-  decideDevLinkAction
-} from "../utils/dev-link.js";
+  decideDevLinkAction,
+  type DevLinkAction,
+  type DevLinkMessage
+} from "../utils/dev-link.ts";
 import {
   DEV_PING_ENDPOINT,
   DEV_SERVER_ORIGIN,
   ERROR_LOG_ENDPOINT
-} from "../utils/dev-server.js";
-import { drainErrorLog } from "../utils/error-drain.js";
-import { ERROR_LOG_KEY, startUncaughtReporting } from "../utils/error-log.js";
+} from "../utils/dev-server.ts";
+import { drainErrorLog } from "../utils/error-drain.ts";
+import {
+  ERROR_LOG_KEY,
+  startUncaughtReporting,
+  type ErrorLogEntry
+} from "../utils/error-log.ts";
 import {
   handlePermissionsAdded,
   handlePermissionsRemoved,
-  reconcileInstances
-} from "../utils/instances.js";
+  reconcileInstances,
+  type InstanceDeps
+} from "../utils/instances.ts";
 
 // Three jobs share this file. Keeping Misskey instance registrations correct
 // runs in every build; forwarding the development error log and tracking the
@@ -29,18 +36,18 @@ import {
 //     while running (see the code below, outside the __SIFT_DEV__ guard).
 //     It also listens for permissions.onAdded, which is not the mirror image
 //     it looks like: it is the backstop for addInstance() losing its own
-//     popup mid-flight (see utils/instances.js).
+//     popup mid-flight (see utils/instances.ts).
 //   - uncaught exceptions reach only the error box of chrome://extensions, which
 //     nothing outside Chrome can read. Every surface writes them to a ring
-//     buffer in chrome.storage.local (utils/error-log.js); this worker carries
+//     buffer in chrome.storage.local (utils/error-log.ts); this worker carries
 //     that buffer out to ~/.sift/extension-errors.log through the development
 //     server's endpoint.
 //   - in dev mode the content script only exists while this worker is attached
-//     to the development server (utils/dev-link.js). Whether it is attached, and
+//     to the development server (utils/dev-link.ts). Whether it is attached, and
 //     whether a page actually got the script, go to the same file.
 //
 // WHY THE RELEASE BUILD STILL CARRIES THIS FILE: `__SIFT_DEV__` is folded to a
-// constant at build time (wxt.config.js, keyed on Vite's command), so in a
+// constant at build time (wxt.config.ts, keyed on Vite's command), so in a
 // release build everything below the guard is dead code and drops out. What
 // ships is the Misskey instance reconciliation and its permissions.onRemoved
 // listener — real listeners Chrome has a reason to start the worker for —
@@ -58,14 +65,14 @@ import {
 const DEV_LINK_INTERVAL_MS = 5000;
 
 export default defineBackground(() => {
-  const instanceDeps = {
+  const instanceDeps: InstanceDeps = {
     permissions: chrome.permissions,
     scripting: chrome.scripting,
     storage: chrome.storage
   };
 
   // Repairs drift between settings and what Chrome actually still grants —
-  // see utils/instances.js for the three ways that happens. Best-effort: a
+  // see utils/instances.ts for the three ways that happens. Best-effort: a
   // failure here gets another chance at the next startup.
   reconcileInstances(instanceDeps).catch(() => {});
 
@@ -98,7 +105,7 @@ export default defineBackground(() => {
   });
 
   const errorLogUrl = `${DEV_SERVER_ORIGIN}${ERROR_LOG_ENDPOINT}`;
-  const postEntries = async (entries) => {
+  const postEntries = async (entries: unknown) => {
     const response = await fetch(errorLogUrl, {
       method: "POST",
       // text/plain keeps this a simple request, so the post never depends on a
@@ -125,7 +132,7 @@ export default defineBackground(() => {
   // both what the extension is doing and what went wrong doing it. They are not
   // buffered: a note nobody was listening for is a note about a server that was
   // down, and the next note will say so anyway.
-  const note = (message) => {
+  const note = (message: string) => {
     void postEntries([
       {
         at: new Date().toISOString(),
@@ -147,7 +154,7 @@ export default defineBackground(() => {
   // evidence from outside the browser that the runtime registration took effect
   // — and worth a listener: Chrome starts a sleeping worker to deliver this, so
   // opening a matching page is one of the things that can bring the link back.
-  chrome.runtime.onMessage.addListener((message) => {
+  chrome.runtime.onMessage.addListener((message: DevLinkMessage | undefined) => {
     if (message?.type === DEV_CONTENT_STARTED) {
       note(`content script started on ${message.page}`);
     }
@@ -167,9 +174,9 @@ export default defineBackground(() => {
   // with no content script on any page (#31).
   chrome.runtime.onStartup.addListener(() => {});
 
-  let bootAtStart;
+  let bootAtStart: string | undefined;
   let isFirstProbe = true;
-  let lastAction;
+  let lastAction: DevLinkAction | undefined;
 
   const probeDevServer = async () => {
     try {
@@ -197,13 +204,15 @@ export default defineBackground(() => {
     ]);
 
     const boot = probe?.boot ?? null;
+    const reloadedForBootRaw = stored[DEV_LINK_RELOAD_KEY];
     const action = decideDevLinkAction({
       boot,
       ready: probe?.ready === true,
       isFirstProbe,
       bootAtStart,
       registeredCount: registered.length,
-      reloadedForBoot: stored?.[DEV_LINK_RELOAD_KEY]
+      reloadedForBoot:
+        typeof reloadedForBootRaw === "string" ? reloadedForBootRaw : undefined
     });
     // A server that has not written its build yet tells us nothing about
     // whether this worker is attached, so the first probe stays unspent.
@@ -212,7 +221,10 @@ export default defineBackground(() => {
     }
 
     if (action === "adopt") {
-      bootAtStart = boot;
+      // decideDevLinkAction() only returns "adopt" once boot is confirmed
+      // non-null (it returns "server-down" first otherwise) — the fallback
+      // here only satisfies the type.
+      bootAtStart = boot ?? undefined;
     }
     if (action !== lastAction) {
       lastAction = action;

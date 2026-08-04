@@ -6,7 +6,7 @@
 // why host_permissions and a hard-coded instance were both rejected).
 //
 // Adding a host requests exactly its origin — chrome.permissions.request()
-// against the wildcard declared in optional_host_permissions (wxt.config.js)
+// against the wildcard declared in optional_host_permissions (wxt.config.ts)
 // — and, once granted, registers a content script through
 // chrome.scripting.registerContentScripts() pointing at the same built files
 // WXT already produces for the static X/Bluesky entry (entrypoints/content).
@@ -15,7 +15,9 @@
 //
 // Every function here takes the chrome.permissions/scripting/storage
 // surfaces as parameters, so tests can supply fakes instead of a real
-// browser — the same shape utils/error-drain.js uses for chrome.storage.
+// browser — the same shape utils/error-drain.ts uses for chrome.storage.
+
+import type { ErrorLogStorage } from "./error-log.ts";
 
 export const MISSKEY_INSTANCES_KEY = "misskeyInstances";
 
@@ -24,10 +26,47 @@ export const MISSKEY_CONTENT_SCRIPT_FILES = Object.freeze({
   css: Object.freeze(["content-scripts/content.css"])
 });
 
-const RUN_AT = "document_idle";
+const RUN_AT: chrome.extensionTypes.RunAt = "document_idle";
 const REGISTRATION_ID_PREFIX = "misskey-";
 
-export function originForHost(host) {
+export interface RegisteredContentScript {
+  id: string;
+  matches: string[];
+  js: string[];
+  css: string[];
+  runAt: chrome.extensionTypes.RunAt;
+  persistAcrossSessions: boolean;
+}
+
+// What reconcileInstances() and the permission listeners actually read back
+// off a registration — never more than its id.
+export interface RegisteredContentScriptRef {
+  id: string;
+}
+
+export interface InstancePermissions {
+  request(permissions: { origins: string[] }): Promise<boolean>;
+  remove(permissions: { origins: string[] }): Promise<boolean>;
+  contains(permissions: { origins: string[] }): Promise<boolean>;
+}
+
+export interface InstanceScripting {
+  registerContentScripts(scripts: RegisteredContentScript[]): Promise<void>;
+  unregisterContentScripts(filter?: { ids?: string[] }): Promise<void>;
+  getRegisteredContentScripts(): Promise<RegisteredContentScriptRef[]>;
+}
+
+export interface InstanceDeps {
+  permissions: InstancePermissions;
+  scripting: InstanceScripting;
+  storage: { sync: ErrorLogStorage };
+}
+
+export type AddInstanceResult =
+  | { added: true }
+  | { added: false; reason: "invalid-host" | "permission-denied" };
+
+export function originForHost(host: string): string {
   return `https://${host}/*`;
 }
 
@@ -36,12 +75,12 @@ export function originForHost(host) {
 // normalizeInstanceHost() rather than trusted as-is, so an origin this module
 // did not mint (something a future feature grants, or Chrome re-adding a
 // static host_permissions entry) is ignored instead of registering garbage.
-function hostForOrigin(origin) {
+function hostForOrigin(origin: string): string | null {
   const match = /^https:\/\/([^/]+)\/\*$/.exec(origin);
   return match ? normalizeInstanceHost(match[1]) : null;
 }
 
-export function registrationIdForHost(host) {
+export function registrationIdForHost(host: string): string {
   return `${REGISTRATION_ID_PREFIX}${host}`;
 }
 
@@ -53,7 +92,7 @@ export function registrationIdForHost(host) {
 // rejected too, even though nothing above asked for it — Chrome match
 // patterns cannot represent one, so keeping it would silently grant the
 // whole host on every port while the UI still shows just the host typed in.
-export function normalizeInstanceHost(input) {
+export function normalizeInstanceHost(input: unknown): string | null {
   if (typeof input !== "string") {
     return null;
   }
@@ -63,7 +102,7 @@ export function normalizeInstanceHost(input) {
     return null;
   }
 
-  let url;
+  let url: URL;
   try {
     url = new URL(trimmed.includes("://") ? trimmed : `https://${trimmed}`);
   } catch {
@@ -85,7 +124,7 @@ export function normalizeInstanceHost(input) {
   return url.hostname;
 }
 
-function contentScriptDefinition(host) {
+function contentScriptDefinition(host: string): RegisteredContentScript {
   return {
     id: registrationIdForHost(host),
     matches: [originForHost(host)],
@@ -99,10 +138,13 @@ function contentScriptDefinition(host) {
   };
 }
 
-async function readInstances(storage) {
+async function readInstances(storage: InstanceDeps["storage"]): Promise<string[]> {
   const stored = await storage.sync.get(MISSKEY_INSTANCES_KEY);
   const value = stored?.[MISSKEY_INSTANCES_KEY];
-  return Array.isArray(value) ? value : [];
+  // Only this module ever writes this key, always as a list of hosts already
+  // validated by normalizeInstanceHost() — trusted rather than re-checked
+  // element by element on every read.
+  return Array.isArray(value) ? (value as string[]) : [];
 }
 
 // Requests the one origin the host needs and, only if the user grants it,
@@ -110,7 +152,10 @@ async function readInstances(storage) {
 // from within a user gesture (a click handler) — chrome.permissions.request()
 // rejects otherwise — so this cannot be relayed through a background message
 // without losing that gesture; the popup calls it directly.
-export async function addInstance(host, { permissions, scripting, storage }) {
+export async function addInstance(
+  host: string,
+  { permissions, scripting, storage }: InstanceDeps
+): Promise<AddInstanceResult> {
   const normalizedHost = normalizeInstanceHost(host);
   if (normalizedHost === null) {
     return { added: false, reason: "invalid-host" };
@@ -162,7 +207,10 @@ export async function addInstance(host, { permissions, scripting, storage }) {
 // Drops the registration and the permission before dropping the host from
 // storage, so a failure partway through leaves the host still listed rather
 // than silently keeping access the UI no longer shows.
-export async function removeInstance(host, { permissions, scripting, storage }) {
+export async function removeInstance(
+  host: string,
+  { permissions, scripting, storage }: InstanceDeps
+): Promise<void> {
   await scripting
     .unregisterContentScripts({ ids: [registrationIdForHost(host)] })
     .catch(() => {
@@ -186,9 +234,9 @@ export async function removeInstance(host, { permissions, scripting, storage }) 
 // addInstance() ever requests one of these origins, and that call cannot run
 // without the service worker already up to hold the popup's message port.
 export async function handlePermissionsAdded(
-  addedPermissions,
-  { scripting, storage }
-) {
+  addedPermissions: { origins?: string[] } | undefined,
+  { scripting, storage }: Pick<InstanceDeps, "scripting" | "storage">
+): Promise<void> {
   const addedOrigins = addedPermissions?.origins ?? [];
   if (addedOrigins.length === 0) {
     return;
@@ -223,9 +271,9 @@ export async function handlePermissionsAdded(
 // outlive that. Only fires while the service worker is alive to hear it —
 // reconcileInstances() below covers the gap left when it was not.
 export async function handlePermissionsRemoved(
-  removedPermissions,
-  { scripting, storage }
-) {
+  removedPermissions: { origins?: string[] } | undefined,
+  { scripting, storage }: Pick<InstanceDeps, "scripting" | "storage">
+): Promise<void> {
   const removedOrigins = new Set(removedPermissions?.origins ?? []);
   if (removedOrigins.size === 0) {
     return;
@@ -258,13 +306,17 @@ export async function handlePermissionsRemoved(
 // while Sift was not running to hear permissions.onRemoved, a registration
 // lost across an extension update, and a previous addInstance() that
 // granted the permission but died before it registered.
-export async function reconcileInstances({ permissions, scripting, storage }) {
+export async function reconcileInstances({
+  permissions,
+  scripting,
+  storage
+}: InstanceDeps): Promise<void> {
   const instances = await readInstances(storage);
   const registered = await scripting.getRegisteredContentScripts();
   const registeredIds = new Set(registered.map((script) => script.id));
 
-  const kept = [];
-  const idsToUnregister = [];
+  const kept: string[] = [];
+  const idsToUnregister: string[] = [];
 
   for (const host of instances) {
     const hasPermission = await permissions.contains({

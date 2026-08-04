@@ -1,0 +1,16 @@
+{
+  "extends": "./.wxt/tsconfig.json",
+  "compilerOptions": {
+    // Node's built-in type stripping (scripts/*.ts, test.ts) cannot erase enums,
+    // runtime namespaces, parameter properties or decorators — it only strips
+    // type-only syntax. Failing on those here, instead of discovering it at
+    // `node --test`, keeps every .ts file in this repo directly runnable by node.
+    "erasableSyntaxOnly": true,
+    // Ambient globals the extension code and the Node scripts each need —
+    // `chrome.*` (used directly rather than through WXT's polyfilled `browser`)
+    // and Node's own globals (`process`, `Buffer`, `node:*` built-ins). Named
+    // explicitly because this project has no other @types package whose
+    // presence would pull them in automatically.
+    "types": ["chrome", "node"]
+  }
+}

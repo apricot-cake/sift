@@ -27,7 +27,7 @@ import net from "node:net";
 import { homedir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { DEV_SERVER_HOST, DEV_SERVER_PORT } from "../utils/dev-server.js";
+import { DEV_SERVER_HOST, DEV_SERVER_PORT } from "../utils/dev-server.ts";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const output =
@@ -36,15 +36,15 @@ const output =
 // Is one already up? A TCP connect is enough — this only needs to know whether
 // something owns the port.
 //
-// The host comes from utils/dev-server.js rather than being spelled here, for the
+// The host comes from utils/dev-server.ts rather than being spelled here, for the
 // reason that file gives: `localhost` resolves to ::1 on this machine, so a probe
 // that hardcodes 127.0.0.1 against a server bound the other way reports a running
 // server as down. The sibling project had exactly that, and its "the dev server is
 // not responding" warning was wrong every time it fired (2026-08-04).
-function devServerAlive() {
+function devServerAlive(): Promise<boolean> {
   return new Promise((resolve) => {
     const socket = net.createConnection({ port: DEV_SERVER_PORT, host: DEV_SERVER_HOST });
-    const finish = (alive) => {
+    const finish = (alive: boolean) => {
       socket.removeAllListeners();
       socket.destroy();
       resolve(alive);
@@ -88,7 +88,7 @@ console.log("[sift] load THAT folder as an unpacked extension in the development
 // The window-opening rules (one command string, no `cmd /k`, the pause below) are
 // Windows-wide, not sift's: skill `windows-scripting`.
 if (process.platform === "win32" && !process.stdout.isTTY && !process.env.CI && !process.env.SIFT_DEV_WINDOW) {
-  spawn('start "sift dev" node scripts/dev.js', {
+  spawn('start "sift dev" node scripts/dev.ts', {
     cwd: ROOT,
     shell: true,
     detached: true,
@@ -122,7 +122,8 @@ const child = spawn("npx wxt", {
 });
 
 // Ctrl+C has to reach the server rather than orphan it behind a dead parent.
-for (const signal of ["SIGINT", "SIGTERM"]) {
+const forwardedSignals: NodeJS.Signals[] = ["SIGINT", "SIGTERM"];
+for (const signal of forwardedSignals) {
   process.on(signal, () => child.kill(signal));
 }
 
