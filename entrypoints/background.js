@@ -11,11 +11,25 @@ import {
 } from "../utils/dev-server.js";
 import { drainErrorLog } from "../utils/error-drain.js";
 import { ERROR_LOG_KEY, startUncaughtReporting } from "../utils/error-log.js";
+import {
+  handlePermissionsAdded,
+  handlePermissionsRemoved,
+  reconcileInstances
+} from "../utils/instances.js";
 
-// The development worker, and nothing else. It does two jobs, both of which
-// exist because Chrome shows this information to a person looking at a screen
-// and to nobody else:
+// Three jobs share this file. Keeping Misskey instance registrations correct
+// runs in every build; forwarding the development error log and tracking the
+// dev-link both run only in development builds, because Chrome shows that
+// information to a person looking at a screen and to nobody else:
 //
+//   - chrome.permissions can be revoked outside the extension (a reader
+//     clearing it from chrome://extensions, or Chrome revoking it itself), so
+//     every build reconciles Misskey instance registrations against granted
+//     permissions at startup and keeps listening for permissions.onRemoved
+//     while running (see the code below, outside the __SIFT_DEV__ guard).
+//     It also listens for permissions.onAdded, which is not the mirror image
+//     it looks like: it is the backstop for addInstance() losing its own
+//     popup mid-flight (see utils/instances.js).
 //   - uncaught exceptions reach only the error box of chrome://extensions, which
 //     nothing outside Chrome can read. Every surface writes them to a ring
 //     buffer in chrome.storage.local (utils/error-log.js); this worker carries
@@ -25,13 +39,15 @@ import { ERROR_LOG_KEY, startUncaughtReporting } from "../utils/error-log.js";
 //     to the development server (utils/dev-link.js). Whether it is attached, and
 //     whether a page actually got the script, go to the same file.
 //
-// WHY THE RELEASE STILL CARRIES IT: `__SIFT_DEV__` is folded to a constant at
-// build time (wxt.config.js, keyed on Vite's command), so in a release build
-// everything below the guard is dead code and drops out — what ships is an empty
-// worker with no listeners, which Chrome never has a reason to start. The
-// capture half stays in every build: the buffer keeps filling in the daily
-// browser, it simply has nobody to forward it until a development build reads
-// it.
+// WHY THE RELEASE BUILD STILL CARRIES THIS FILE: `__SIFT_DEV__` is folded to a
+// constant at build time (wxt.config.js, keyed on Vite's command), so in a
+// release build everything below the guard is dead code and drops out. What
+// ships is the Misskey instance reconciliation and its permissions.onRemoved
+// listener — real listeners Chrome has a reason to start the worker for —
+// plus an otherwise empty worker for the dev-only half. The capture half of
+// error reporting stays active in every build regardless: the buffer keeps
+// filling in the daily browser, it simply has nobody to forward it until a
+// development build reads it.
 //
 // Re-injecting content scripts into open tabs, which this file used to do, is
 // now WXT's dev mode doing it.
@@ -42,6 +58,35 @@ import { ERROR_LOG_KEY, startUncaughtReporting } from "../utils/error-log.js";
 const DEV_LINK_INTERVAL_MS = 5000;
 
 export default defineBackground(() => {
+  const instanceDeps = {
+    permissions: chrome.permissions,
+    scripting: chrome.scripting,
+    storage: chrome.storage
+  };
+
+  // Repairs drift between settings and what Chrome actually still grants —
+  // see utils/instances.js for the three ways that happens. Best-effort: a
+  // failure here gets another chance at the next startup.
+  reconcileInstances(instanceDeps).catch(() => {});
+
+  // A reader can revoke a Misskey origin from chrome://extensions directly,
+  // bypassing removeInstance() entirely. This is the one build-independent
+  // way Sift hears about it while running; reconcileInstances() above covers
+  // the case where it was not running to hear it.
+  chrome.permissions.onRemoved.addListener((removed) => {
+    handlePermissionsRemoved(removed, instanceDeps).catch(() => {});
+  });
+
+  // The backstop for addInstance(): Chrome tears the popup down the instant
+  // its permission dialog appears, which can silently abort addInstance()
+  // before it registers the content script or saves the host (measured
+  // 2026-08-04, #28) even though the grant itself already went through. This
+  // listener reacts to the grant Chrome actually made, not to the popup
+  // call surviving long enough to hear its own answer.
+  chrome.permissions.onAdded.addListener((added) => {
+    handlePermissionsAdded(added, instanceDeps).catch(() => {});
+  });
+
   if (!__SIFT_DEV__) {
     return;
   }

@@ -94,9 +94,19 @@ export default defineConfig({
     name: "Sift",
     description:
       "XとBlueskyの投稿画面を、メディア・いいね数・投稿後の時間で絞り込みます。",
-    // Only what the release needs. WXT adds `scripting` in development on its
-    // own, because that is how its dev mode registers content scripts.
-    permissions: ["storage"],
+    // `scripting` is also what WXT's dev mode adds on its own to register
+    // content scripts — declaring it here is no longer dev-only, since a
+    // release build now registers Misskey instances the reader adds the same
+    // way (utils/instances.js).
+    permissions: ["storage", "scripting"],
+    // The origin a reader can grant is never wider than the single host they
+    // add: chrome.permissions.request() only ever asks for one origin at a
+    // time (utils/instances.js), and Chrome's runtime dialog is scoped to
+    // that origin regardless of how wide this wildcard is. Declaring the
+    // wildcard here is what makes ANY host requestable at all — the
+    // alternative, host_permissions, is a set fixed at build time and cannot
+    // grow at runtime (see #2's issue comment, section 5).
+    optional_host_permissions: ["https://*/*"],
     action: {
       default_title: "Sift"
     }

@@ -3,7 +3,8 @@
   "name": "Sift",
   "version": "0.1.0",
   "description": "XとBlueskyの投稿画面を、メディア・いいね数・投稿後の時間で絞り込みます。",
-  "permissions": ["storage"],
+  "permissions": ["storage", "scripting"],
+  "optional_host_permissions": ["https://*/*"],
   "action": {
     "default_title": "Sift",
     "default_popup": "popup.html"

@@ -132,6 +132,72 @@ input[type="checkbox"]:focus-visible {
   width: 78px;
 }
 
+.instance-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  list-style: none;
+  margin: 0 0 8px;
+  padding: 0;
+}
+
+.instance-row {
+  align-items: center;
+  background: var(--control-background);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  display: flex;
+  font-size: 13px;
+  gap: 8px;
+  justify-content: space-between;
+  padding: 6px 8px;
+}
+
+.instance-row button {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  padding: 3px 8px;
+}
+
+.instance-form {
+  display: flex;
+  gap: 6px;
+}
+
+.instance-form input {
+  background: var(--control-background);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--foreground);
+  flex: 1;
+  height: 32px;
+  padding: 4px 8px;
+}
+
+.instance-form button {
+  background: var(--accent);
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  color: #ffffff;
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 4px 12px;
+}
+
+.instance-error {
+  color: #c4314b;
+  font-size: 12px;
+  margin: 6px 0 0;
+  min-height: 1.3em;
+}
+
 footer {
   border-top: 1px solid var(--border);
   margin-top: 10px;
