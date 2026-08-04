@@ -1,7 +1,8 @@
 // Bluesky (bsky.app). Everything in this file is Bluesky's page structure —
 // which element is a post, and where each classification input is written. The
-// classification itself lives in filter-core.js and is shared by every service.
-import { parseMetric } from "../filter-core.js";
+// classification itself lives in filter-core.ts and is shared by every service.
+import { parseMetric } from "../filter-core.ts";
+import type { ServiceAdapter } from "./types.ts";
 
 // Named so a test can build a fake node keyed by the same selectors the adapter
 // asks for, without restating them.
@@ -49,7 +50,7 @@ const FUTURE_TOLERANCE_MS = 6 * 60 * 1000;
 //
 // Being a TID is a convention of the official client, not a guarantee of the
 // protocol, so this stays the fallback and never the primary reading.
-export function timestampFromRecordKey(href, nowMs = Date.now()) {
+export function timestampFromRecordKey(href: unknown, nowMs = Date.now()): number {
   const recordKey = RECORD_KEY_IN_PATH.exec(String(href ?? ""))?.[1] ?? "";
 
   if (recordKey.length !== TID_LENGTH) {
@@ -75,12 +76,13 @@ export function timestampFromRecordKey(href, nowMs = Date.now()) {
 // Notifications reuse the post card's testid for rows that are not posts — a
 // like, a follow. Those rows carry no like button, which is the one part of a
 // post every post has and no notification row does.
-function readablePostCards(root) {
+function readablePostCards(root: ParentNode): Element[] {
   return Array.from(root.querySelectorAll(BLUESKY_SELECTORS.postCard)).filter(
     (postCard) => postCard.querySelector(BLUESKY_SELECTORS.reactionButton)
   );
 }
 
+// `satisfies` rather than a `:` annotation — see x.ts for why.
 export const blueskyAdapter = Object.freeze({
   id: "bluesky",
   matches: Object.freeze(["https://bsky.app/*"]),
@@ -88,21 +90,21 @@ export const blueskyAdapter = Object.freeze({
   // reaction as X's, so the two share the thresholds as well.
   reactionLabel: "いいね",
 
-  getPostCards(root) {
+  getPostCards(root: ParentNode) {
     return readablePostCards(root);
   },
 
-  hasPostCards(root) {
+  hasPostCards(root: ParentNode) {
     return readablePostCards(root).length > 0;
   },
 
   // The unit that gets hidden. Unlike X, Bluesky keeps the separator and the
   // padding inside the card, so there is no outer cell to reach for.
-  findPostCell(postCard) {
+  findPostCell(postCard: Element) {
     return postCard;
   },
 
-  readReactionCount(postCard) {
+  readReactionCount(postCard: Element) {
     const button = postCard.querySelector(BLUESKY_SELECTORS.reactionButton);
     if (!button) {
       return 0;
@@ -121,7 +123,7 @@ export const blueskyAdapter = Object.freeze({
   // leads with its own permalink, but the post a detail screen is *about* has
   // no permalink at all — being where the link would point — and leads with the
   // links to its own sub-pages instead.
-  readCreatedAt(postCard) {
+  readCreatedAt(postCard: Element) {
     for (const link of postCard.querySelectorAll(BLUESKY_SELECTORS.postLink)) {
       const label = link.getAttribute("aria-label");
       const displayed = label ? Date.parse(label) : Number.NaN;
@@ -140,7 +142,7 @@ export const blueskyAdapter = Object.freeze({
 
   // Image and video are reported separately: which of them counts as media is
   // the reader's setting, not this service's structure.
-  readMedia(postCard) {
+  readMedia(postCard: Element) {
     return {
       hasImage: Boolean(postCard.querySelector(BLUESKY_SELECTORS.image)),
       hasVideo: Boolean(
@@ -154,7 +156,7 @@ export const blueskyAdapter = Object.freeze({
   // "◯◯がリポスト" in whatever language the reader has. What does hold across
   // languages is the shape — the repost header's profile link wraps an icon,
   // where an author's profile link wraps an avatar image.
-  readIsRepost(postCard) {
+  readIsRepost(postCard: Element) {
     const profileLink = postCard.querySelector(BLUESKY_SELECTORS.profileLink);
     if (!profileLink || profileLink.querySelector("img")) {
       return false;
@@ -163,4 +165,4 @@ export const blueskyAdapter = Object.freeze({
     const firstChild = profileLink.firstElementChild;
     return firstChild?.tagName?.toLowerCase() === "svg";
   }
-});
+}) satisfies ServiceAdapter;

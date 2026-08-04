@@ -1,7 +1,8 @@
 // X (x.com / twitter.com). Everything in this file is X's page structure —
 // which element is a post, and where each classification input is written. The
-// classification itself lives in filter-core.js and is shared by every service.
-import { parseMetric } from "../filter-core.js";
+// classification itself lives in filter-core.ts and is shared by every service.
+import { parseMetric } from "../filter-core.ts";
+import type { ServiceAdapter } from "./types.ts";
 
 // Named so a test can build a fake node keyed by the same selectors the adapter
 // asks for, without restating them.
@@ -16,39 +17,42 @@ export const X_SELECTORS = Object.freeze({
   socialContext: '[data-testid="socialContext"]'
 });
 
+// `satisfies` rather than a `:` annotation, so the literal types Object.freeze
+// preserves (`id`, each entry of `matches`) stay literal instead of being
+// widened to the interface's `string`/`readonly string[]`.
 export const xAdapter = Object.freeze({
   id: "x",
   matches: Object.freeze(["https://x.com/*", "https://twitter.com/*"]),
   // The word this service uses for the reaction the thresholds count.
   reactionLabel: "いいね",
 
-  getPostCards(root) {
+  getPostCards(root: ParentNode) {
     return Array.from(root.querySelectorAll(X_SELECTORS.postCard));
   },
 
-  hasPostCards(root) {
+  hasPostCards(root: ParentNode) {
     return Boolean(root.querySelector(X_SELECTORS.postCard));
   },
 
   // The unit that gets hidden. X wraps every post in a cell that also carries
   // the separator and the surrounding padding, so hiding the card alone would
   // leave a gap behind.
-  findPostCell(postCard) {
+  findPostCell(postCard: Element) {
     return postCard.closest(X_SELECTORS.postCell) || postCard;
   },
 
-  readReactionCount(postCard) {
+  readReactionCount(postCard: Element) {
     const button = postCard.querySelector(X_SELECTORS.reactionButton);
     if (!button) {
       return 0;
     }
 
     const accessibleText = button.getAttribute("aria-label") || "";
-    const visibleText = button.textContent.trim();
+    const visibleText = (button.textContent ?? "").trim();
     return parseMetric(accessibleText || visibleText);
   },
 
-  readCreatedAt(postCard) {
+  readCreatedAt(postCard: Element) {
     const dateTime = postCard
       .querySelector(X_SELECTORS.createdAt)
       ?.getAttribute("datetime");
@@ -58,19 +62,19 @@ export const xAdapter = Object.freeze({
 
   // Image and video are reported separately: which of them counts as media is
   // the reader's setting, not this service's structure.
-  readMedia(postCard) {
+  readMedia(postCard: Element) {
     return {
       hasImage: Boolean(postCard.querySelector(X_SELECTORS.image)),
       hasVideo: Boolean(postCard.querySelector(X_SELECTORS.video))
     };
   },
 
-  readIsRepost(postCard) {
+  readIsRepost(postCard: Element) {
     const socialContext = postCard.querySelector(X_SELECTORS.socialContext);
     if (!socialContext) {
       return false;
     }
 
-    return /repost|retweeted|リポスト/i.test(socialContext.textContent);
+    return /repost|retweeted|リポスト/i.test(socialContext.textContent ?? "");
   }
-});
+}) satisfies ServiceAdapter;

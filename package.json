@@ -4,16 +4,19 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "node scripts/dev.js",
-    "dev:browser": "node scripts/dev-browser.js",
+    "dev": "node scripts/dev.ts",
+    "dev:browser": "node scripts/dev-browser.ts",
     "build": "wxt build -b chrome && npm run verify:manifest",
-    "deploy": "node scripts/deploy-extension.js",
-    "test": "node --test test.js",
-    "verify:manifest": "node scripts/verify-manifest.js",
+    "deploy": "node scripts/deploy-extension.ts",
+    "test": "tsc --noEmit && node --test test.ts",
+    "verify:manifest": "node scripts/verify-manifest.ts",
     "postinstall": "wxt prepare",
-    "prepare": "node scripts/setup.js"
+    "prepare": "node scripts/setup.ts"
   },
   "devDependencies": {
+    "@types/chrome": "^0.2.5",
+    "@types/node": "^26.1.2",
+    "typescript": "^7.0.2",
     "vite": "8.2.0",
     "wxt": "0.21.3"
   }

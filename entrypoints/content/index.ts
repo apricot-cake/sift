@@ -1,18 +1,27 @@
-import { selectAdapter } from "../../utils/adapters/index.js";
-import { DEV_CONTENT_STARTED, DEV_FILTER_PASS } from "../../utils/dev-link.js";
-import { startUncaughtReporting } from "../../utils/error-log.js";
-import { classifyPost } from "../../utils/filter-core.js";
-import { CONTENT_RUNTIME_KEY } from "../../utils/runtime-key.js";
-import { defaults, normalizeSettings } from "../../utils/settings.js";
-import { SITE_MATCHES } from "../../utils/site-matches.js";
+import { selectAdapter } from "../../utils/adapters/index.ts";
+import type { ServiceAdapter } from "../../utils/adapters/types.ts";
+import { DEV_CONTENT_STARTED, DEV_FILTER_PASS } from "../../utils/dev-link.ts";
+import { startUncaughtReporting } from "../../utils/error-log.ts";
+import {
+  classifyPost,
+  type ClassifyReason,
+  type ClassifyState
+} from "../../utils/filter-core.ts";
+import { CONTENT_RUNTIME_KEY } from "../../utils/runtime-key.ts";
+import { defaults, normalizeSettings, type Settings } from "../../utils/settings.ts";
+import { SITE_MATCHES } from "../../utils/site-matches.ts";
 import "./style.css";
 
-export function startContentRuntime(adapter) {
+export function startContentRuntime(maybeAdapter: ServiceAdapter | null) {
     // Nothing to read here. The runtime still answers dispose() so the caller
     // does not have to know whether it started.
-    if (!adapter) {
+    if (!maybeAdapter) {
       return { dispose() {} };
     }
+    // Reassigned into a fresh, never-reassigned const so the functions declared
+    // below keep the non-null narrowing — TS does not carry a parameter's
+    // narrowing into hoisted function declarations on its own.
+    const adapter = maybeAdapter;
 
     const toolbarHostId = "xif-toolbar-host";
 
@@ -28,39 +37,51 @@ export function startContentRuntime(adapter) {
     });
 
     let settings = normalizeSettings(defaults);
-    let observer = null;
-    let routeTimer = null;
-    let filterFrame = null;
+    let observer: MutationObserver | null = null;
+    let routeTimer: number | null = null;
+    let filterFrame: number | null = null;
     let showAllTemporarily = false;
-    let shadowRoot = null;
+    let shadowRoot: ShadowRoot | null = null;
     let disposed = false;
     let reportedFilterPass = false;
 
     // Which of image and video counts as media is the reader's setting, so the
     // two arrive separately from the adapter and are folded together here.
-    function hasMedia(postCard) {
+    function hasMedia(postCard: Element): boolean {
       const { hasImage, hasVideo } = adapter.readMedia(postCard);
       return settings.mediaMode === "images" ? hasImage : hasImage || hasVideo;
     }
 
-    function setCellState(cell, state, reason) {
+    function setCellState(
+      cell: HTMLElement,
+      state: ClassifyState,
+      reason: ClassifyReason
+    ): void {
       cell.dataset.xifFilterState = state;
       cell.dataset.xifFilterReason = reason;
     }
 
-    function clearCellState(cell) {
+    function clearCellState(cell: HTMLElement): void {
       delete cell.dataset.xifFilterState;
       delete cell.dataset.xifFilterReason;
     }
 
-    function updateToolbarCounts(counts) {
+    function updateToolbarCounts(counts: {
+      hit: number;
+      rising: number;
+      hidden: number;
+    }): void {
       if (!shadowRoot) {
         return;
       }
 
-      const status = shadowRoot.querySelector('[data-role="status"]');
-      const toggle = shadowRoot.querySelector('[data-action="toggle-enabled"]');
-      const reveal = shadowRoot.querySelector('[data-action="toggle-show-all"]');
+      const status = shadowRoot.querySelector<HTMLElement>('[data-role="status"]');
+      const toggle = shadowRoot.querySelector<HTMLElement>(
+        '[data-action="toggle-enabled"]'
+      );
+      const reveal = shadowRoot.querySelector<HTMLElement>(
+        '[data-action="toggle-show-all"]'
+      );
 
       if (status) {
         status.textContent = settings.enabled
@@ -76,7 +97,7 @@ export function startContentRuntime(adapter) {
       }
     }
 
-    function filterVisiblePosts() {
+    function filterVisiblePosts(): void {
       filterFrame = null;
       if (disposed) {
         return;
@@ -94,7 +115,9 @@ export function startContentRuntime(adapter) {
       const counts = { hit: 0, rising: 0, hidden: 0 };
 
       for (const postCard of postCards) {
-        const cell = adapter.findPostCell(postCard);
+        // Posts on a live page are always HTMLElements; the adapter contract
+        // only promises Element, since that is all it reads.
+        const cell = adapter.findPostCell(postCard) as HTMLElement;
 
         if (!settings.enabled) {
           clearCellState(cell);
@@ -118,7 +141,7 @@ export function startContentRuntime(adapter) {
       updateToolbarCounts(counts);
 
       // Once per runtime, tell the development worker what the first pass did.
-      // See utils/dev-link.js — compiled out of a release with the guard.
+      // See utils/dev-link.ts — compiled out of a release with the guard.
       if (__SIFT_DEV__ && !reportedFilterPass) {
         reportedFilterPass = true;
         chrome.runtime
@@ -131,26 +154,28 @@ export function startContentRuntime(adapter) {
       }
     }
 
-    function scheduleFilter() {
+    function scheduleFilter(): void {
       if (disposed || filterFrame !== null) {
         return;
       }
       filterFrame = window.requestAnimationFrame(filterVisiblePosts);
     }
 
-    function clearAllFiltering() {
+    function clearAllFiltering(): void {
       document.body.classList.remove("xif-show-all");
-      for (const cell of document.querySelectorAll("[data-xif-filter-state]")) {
+      for (const cell of document.querySelectorAll<HTMLElement>(
+        "[data-xif-filter-state]"
+      )) {
         clearCellState(cell);
       }
     }
 
-    function saveSettings(partialSettings) {
+    function saveSettings(partialSettings: Partial<Settings>): void {
       const nextSettings = normalizeSettings({ ...settings, ...partialSettings });
       chrome.storage.sync.set(nextSettings);
     }
 
-    function toolbarMarkup() {
+    function toolbarMarkup(): string {
       return `
         <style>
           :host {
@@ -211,14 +236,16 @@ export function startContentRuntime(adapter) {
       `;
     }
 
-    function syncToolbarForm() {
+    function syncToolbarForm(): void {
       if (!shadowRoot) {
         return;
       }
 
-      for (const element of shadowRoot.querySelectorAll("[data-setting]")) {
-        const key = element.dataset.setting;
-        if (element.type === "checkbox") {
+      for (const element of shadowRoot.querySelectorAll<
+        HTMLInputElement | HTMLSelectElement
+      >("[data-setting]")) {
+        const key = element.dataset.setting as keyof Settings;
+        if (element instanceof HTMLInputElement && element.type === "checkbox") {
           element.checked = Boolean(settings[key]);
         } else {
           element.value = String(settings[key]);
@@ -226,7 +253,7 @@ export function startContentRuntime(adapter) {
       }
     }
 
-    function mountToolbar() {
+    function mountToolbar(): void {
       if (
         disposed ||
         !adapter.hasPostCards(document) ||
@@ -243,7 +270,8 @@ export function startContentRuntime(adapter) {
       syncToolbarForm();
 
       shadowRoot.addEventListener("click", (event) => {
-        const button = event.target.closest("button[data-action]");
+        const target = event.target as Element | null;
+        const button = target?.closest<HTMLElement>("button[data-action]");
         if (!button) {
           return;
         }
@@ -254,31 +282,42 @@ export function startContentRuntime(adapter) {
           showAllTemporarily = !showAllTemporarily;
           scheduleFilter();
         } else if (button.dataset.action === "toggle-panel") {
-          const panel = shadowRoot.querySelector('[data-role="panel"]');
+          const panel = shadowRoot?.querySelector<HTMLElement>('[data-role="panel"]');
+          if (!panel) {
+            return;
+          }
           panel.hidden = !panel.hidden;
           button.setAttribute("aria-expanded", String(!panel.hidden));
         }
       });
 
       shadowRoot.addEventListener("change", (event) => {
-        const element = event.target.closest("[data-setting]");
-        if (!element) {
+        const target = event.target as Element | null;
+        const element = target?.closest("[data-setting]");
+        if (
+          !element ||
+          !(element instanceof HTMLInputElement || element instanceof HTMLSelectElement)
+        ) {
           return;
         }
 
-        const value = element.type === "checkbox" ? element.checked : element.value;
-        saveSettings({ [element.dataset.setting]: value });
+        const value =
+          element instanceof HTMLInputElement && element.type === "checkbox"
+            ? element.checked
+            : element.value;
+        const key = element.dataset.setting as keyof Settings;
+        saveSettings({ [key]: value } as Partial<Settings>);
       });
     }
 
-    function unmountToolbar() {
+    function unmountToolbar(): void {
       document.getElementById(toolbarHostId)?.remove();
       shadowRoot = null;
       showAllTemporarily = false;
       clearAllFiltering();
     }
 
-    function handleRoute() {
+    function handleRoute(): void {
       if (adapter.hasPostCards(document)) {
         scheduleFilter();
       } else {
@@ -286,12 +325,15 @@ export function startContentRuntime(adapter) {
       }
     }
 
-    function handleStorageChange(changes, areaName) {
+    function handleStorageChange(
+      changes: { [key: string]: chrome.storage.StorageChange },
+      areaName: string
+    ): void {
       if (disposed || areaName !== "sync") {
         return;
       }
 
-      const changedValues = {};
+      const changedValues: Record<string, unknown> = {};
       for (const [key, change] of Object.entries(changes)) {
         changedValues[key] = change.newValue;
       }
@@ -300,7 +342,7 @@ export function startContentRuntime(adapter) {
       scheduleFilter();
     }
 
-    function dispose() {
+    function dispose(): void {
       if (disposed) {
         return;
       }
@@ -326,7 +368,7 @@ export function startContentRuntime(adapter) {
       unmountToolbar();
     }
 
-    function handlePageHide() {
+    function handlePageHide(): void {
       dispose();
     }
 
@@ -363,9 +405,16 @@ export default defineContentScript({
     // still carry the old listeners and DOM. The owner symbol is how the incoming
     // generation finds the outgoing one and takes it down first; without it the
     // two draw the same toolbar twice and both filter the same posts.
+    //
+    // globalThis has no index signature for an arbitrary symbol — cast once at
+    // this one access point rather than widening globalThis's type project-wide.
     const runtimeSymbol = Symbol.for(CONTENT_RUNTIME_KEY);
-    globalThis[runtimeSymbol]?.dispose();
-    globalThis[runtimeSymbol] = startContentRuntime(
+    const runtimeGlobal = globalThis as unknown as Record<
+      symbol,
+      ReturnType<typeof startContentRuntime> | undefined
+    >;
+    runtimeGlobal[runtimeSymbol]?.dispose();
+    runtimeGlobal[runtimeSymbol] = startContentRuntime(
       selectAdapter(location.hostname)
     );
 

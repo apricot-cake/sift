@@ -26,7 +26,7 @@ jobs:
 
       # Pulls in the two install hooks: postinstall (`wxt prepare`, which
       # generates the WXT config this build needs) and prepare
-      # (`scripts/setup.js`, which only points git at .githooks and is written
+      # (`scripts/setup.ts`, which only points git at .githooks and is written
       # to never fail an install).
       - run: npm ci
 

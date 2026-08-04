@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { drainErrorLog, ERROR_LOG_DRAINED_SEQ_KEY } from "./utils/error-drain.js";
+import { drainErrorLog, ERROR_LOG_DRAINED_SEQ_KEY } from "./utils/error-drain.ts";
 import {
   appendErrorEntry,
   collectUndrainedEntries,
@@ -7,19 +7,21 @@ import {
   ERROR_LOG_KEY,
   installUncaughtReporting,
   isOwnExtensionError,
-  recordErrorEntry
-} from "./utils/error-log.js";
-import { formatErrorLogLines } from "./scripts/dev-error-log.js";
-import { decideDevLinkAction } from "./utils/dev-link.js";
-import { ADAPTERS, hostMatchesPattern, selectAdapter } from "./utils/adapters/index.js";
+  recordErrorEntry,
+  type ErrorLogEntry,
+  type ErrorLogStorage
+} from "./utils/error-log.ts";
+import { formatErrorLogLines } from "./scripts/dev-error-log.ts";
+import { decideDevLinkAction } from "./utils/dev-link.ts";
+import { ADAPTERS, hostMatchesPattern, selectAdapter } from "./utils/adapters/index.ts";
 import {
   BLUESKY_SELECTORS,
   blueskyAdapter,
   timestampFromRecordKey
-} from "./utils/adapters/bluesky.js";
-import { X_SELECTORS, xAdapter } from "./utils/adapters/x.js";
-import { SITE_MATCHES } from "./utils/site-matches.js";
-import { classifyPost, parseMetric } from "./utils/filter-core.js";
+} from "./utils/adapters/bluesky.ts";
+import { X_SELECTORS, xAdapter } from "./utils/adapters/x.ts";
+import { SITE_MATCHES } from "./utils/site-matches.ts";
+import { classifyPost, parseMetric } from "./utils/filter-core.ts";
 import {
   addInstance,
   handlePermissionsAdded,
@@ -30,9 +32,12 @@ import {
   originForHost,
   reconcileInstances,
   registrationIdForHost,
-  removeInstance
-} from "./utils/instances.js";
-import { defaults, normalizeSettings } from "./utils/settings.js";
+  removeInstance,
+  type InstancePermissions,
+  type InstanceScripting,
+  type RegisteredContentScript
+} from "./utils/instances.ts";
+import { defaults, normalizeSettings } from "./utils/settings.ts";
 
 const settings = {
   minLikes: 500,
@@ -124,32 +129,40 @@ assert.deepEqual(
 // A node that answers only the selectors it was given, keyed by the adapter's
 // own selector table so the test never restates a selector. `extras` carries
 // the properties an adapter reads directly rather than through a selector.
-function createFakeNode(responses = {}, extras = {}) {
+// Cast to Element at the boundary: this fake only ever needs to satisfy the
+// three DOM methods an adapter actually calls, not the real interface.
+function createFakeNode(
+  responses: Record<string, unknown> = {},
+  extras: Record<string, unknown> = {}
+): Element {
   return {
-    querySelector(selector) {
+    querySelector(selector: string) {
       return responses[selector] ?? null;
     },
-    querySelectorAll(selector) {
+    querySelectorAll(selector: string) {
       const value = responses[selector];
       if (!value) {
         return [];
       }
       return Array.isArray(value) ? value : [value];
     },
-    closest(selector) {
+    closest(selector: string) {
       return responses[selector] ?? null;
     },
     ...extras
-  };
+  } as unknown as Element;
 }
 
-function createFakeAttributeNode(attributes = {}, textContent = "") {
+function createFakeAttributeNode(
+  attributes: Record<string, unknown> = {},
+  textContent = ""
+): Element {
   return {
-    getAttribute(name) {
+    getAttribute(name: string) {
       return attributes[name] ?? null;
     },
     textContent
-  };
+  } as unknown as Element;
 }
 
 // Every adapter answers for each of its own match patterns, and for no other
@@ -308,7 +321,7 @@ assert.equal(blueskyAdapter.readReactionCount(createFakeNode()), 0);
 const blueskyPostHref = "/profile/example.bsky.social/post/3mqcze2d6k23e";
 const recordKeyTime = Date.parse("2026-07-10T20:46:00.000Z");
 
-function createBlueskyPostWithLink(attributes) {
+function createBlueskyPostWithLink(attributes: Record<string, unknown>) {
   return createFakeNode({
     [BLUESKY_SELECTORS.postLink]: createFakeAttributeNode(attributes)
   });
@@ -448,13 +461,18 @@ assert.match(BLUESKY_SELECTORS.image, /^button /);
 // A repost is marked by a header whose profile link wraps an icon, where an
 // author's profile link wraps an avatar image. The displayed word is localized
 // and carries no testid, so the shape is what the reading can rely on.
-function createFakeProfileLink({ hasAvatar = false, firstChildTag = null } = {}) {
+function createFakeProfileLink({
+  hasAvatar = false,
+  firstChildTag = null
+}: { hasAvatar?: boolean; firstChildTag?: string | null } = {}) {
   return createFakeNode(hasAvatar ? { img: { id: "avatar" } } : {}, {
     firstElementChild: firstChildTag === null ? null : { tagName: firstChildTag }
   });
 }
 
-function createBlueskyPostWithProfileLink(options) {
+function createBlueskyPostWithProfileLink(
+  options?: { hasAvatar?: boolean; firstChildTag?: string | null }
+) {
   return createFakeNode({
     [BLUESKY_SELECTORS.profileLink]: createFakeProfileLink(options)
   });
@@ -560,7 +578,7 @@ assert.equal(
   "(unstringifiable value)"
 );
 assert.equal(
-  describeUncaughtEvent({ message: "x".repeat(600) }, "error").message.length,
+  describeUncaughtEvent({ message: "x".repeat(600) }, "error").message?.length,
   501
 );
 
@@ -575,15 +593,19 @@ assert.deepEqual(
   ]
 );
 
-let ringBuffer = [];
+let ringBuffer: ErrorLogEntry[] = [];
 for (let index = 0; index < 5; index += 1) {
-  ringBuffer = appendErrorEntry(ringBuffer, { message: `error ${index}` }, 3);
+  ringBuffer = appendErrorEntry(
+    ringBuffer,
+    { source: "test", message: `error ${index}` },
+    3
+  );
 }
 assert.deepEqual(
   ringBuffer.map((entry) => entry.seq),
   [3, 4, 5]
 );
-assert.equal(ringBuffer[0].message, "error 2");
+assert.equal(ringBuffer[0]?.message, "error 2");
 
 assert.deepEqual(
   collectUndrainedEntries([{ seq: 1 }, { seq: 2 }, { seq: 3 }], 2),
@@ -598,14 +620,14 @@ assert.deepEqual(collectUndrainedEntries([{ seq: 1 }, { seq: 2 }], undefined), [
 assert.deepEqual(collectUndrainedEntries([{ seq: 1 }], 9), [{ seq: 1 }]);
 assert.deepEqual(collectUndrainedEntries([], 9), []);
 
-function createFakeStorageArea(initial = {}) {
-  const state = { ...initial };
+function createFakeStorageArea(initial: Record<string, unknown> = {}) {
+  const state: Record<string, unknown> = { ...initial };
   return {
     state,
-    async get(key) {
+    async get(key: string) {
       return key in state ? { [key]: state[key] } : {};
     },
-    async set(values) {
+    async set(values: Record<string, unknown>) {
       Object.assign(state, values);
     }
   };
@@ -627,32 +649,32 @@ const brokenStorage = {
 };
 await recordErrorEntry(brokenStorage, { source: "content" });
 
-function createFakeTarget(href = null) {
-  const listeners = new Map();
+function createFakeTarget(href: string | null = null) {
+  const listeners = new Map<string, Array<(event: unknown) => void>>();
   return {
     location: href === null ? undefined : { href },
-    addEventListener(type, listener) {
+    addEventListener(type: string, listener: (event: unknown) => void) {
       listeners.set(type, [...(listeners.get(type) ?? []), listener]);
     },
-    removeEventListener(type, listener) {
+    removeEventListener(type: string, listener: (event: unknown) => void) {
       listeners.set(
         type,
         (listeners.get(type) ?? []).filter((entry) => entry !== listener)
       );
     },
-    emit(type, event) {
+    emit(type: string, event: unknown) {
       for (const listener of listeners.get(type) ?? []) {
         listener(event);
       }
     },
-    count(type) {
+    count(type: string) {
       return (listeners.get(type) ?? []).length;
     }
   };
 }
 
 const contentTarget = createFakeTarget("https://x.com/home");
-const recorded = [];
+const recorded: Omit<ErrorLogEntry, "seq">[] = [];
 const stopContentReporting = installUncaughtReporting({
   target: contentTarget,
   source: "content",
@@ -676,7 +698,11 @@ contentTarget.emit("error", {
 contentTarget.emit("unhandledrejection", { reason: uncaughtError });
 contentTarget.emit("unhandledrejection", { reason: "a bare page rejection" });
 
-assert.deepEqual(recorded, [
+// The explicit type argument keeps `assert.deepEqual` (aliased to
+// deepStrictEqual, whose type is `asserts actual is T`) from narrowing
+// `recorded`'s type to this literal for the rest of the file — `recorded` is
+// still being pushed to below.
+assert.deepEqual<Omit<ErrorLogEntry, "seq">[]>(recorded, [
   {
     at: "2026-08-02T00:00:00.000Z",
     source: "content",
@@ -708,11 +734,13 @@ const pageTarget = createFakeTarget("chrome-extension://abc/popup.html");
 installUncaughtReporting({
   target: pageTarget,
   source: "popup",
-  record: (entry) => recorded.push(entry)
+  record: (entry) => {
+    recorded.push(entry);
+  }
 });
 pageTarget.emit("error", { message: "anything on an extension page", error: null });
 assert.equal(recorded.length, 3);
-assert.equal(recorded[2].source, "popup");
+assert.equal(recorded[2]?.source, "popup");
 
 // A recorder that fails must not take the watched code down with it, and a
 // rejected write must not become the next unhandled rejection.
@@ -738,13 +766,13 @@ await new Promise((resolve) => setImmediate(resolve));
 const drainStorage = {
   local: createFakeStorageArea({
     [ERROR_LOG_KEY]: [
-      { seq: 1, message: "first" },
-      { seq: 2, message: "second" }
+      { source: "test", seq: 1, message: "first" },
+      { source: "test", seq: 2, message: "second" }
     ]
   }),
   session: createFakeStorageArea()
 };
-const posted = [];
+const posted: (ErrorLogEntry[] | "again")[] = [];
 
 assert.deepEqual(
   await drainErrorLog({
@@ -755,24 +783,30 @@ assert.deepEqual(
   }),
   { forwarded: 2 }
 );
-assert.deepEqual(posted, [
+assert.deepEqual<(ErrorLogEntry[] | "again")[]>(posted, [
   [
-    { seq: 1, message: "first" },
-    { seq: 2, message: "second" }
+    { source: "test", seq: 1, message: "first" },
+    { source: "test", seq: 2, message: "second" }
   ]
 ]);
 assert.equal(drainStorage.session.state[ERROR_LOG_DRAINED_SEQ_KEY], 2);
 
 assert.deepEqual(
-  await drainErrorLog({ storage: drainStorage, post: () => posted.push("again") }),
+  await drainErrorLog({
+    storage: drainStorage,
+    post: () => {
+      posted.push("again");
+    }
+  }),
   { forwarded: 0 }
 );
 assert.equal(posted.length, 1);
 
 // A post that fails leaves the mark alone so the entries go out next time.
+const previousLocalLog = drainStorage.local.state[ERROR_LOG_KEY];
 drainStorage.local.state[ERROR_LOG_KEY] = [
-  ...drainStorage.local.state[ERROR_LOG_KEY],
-  { seq: 3, message: "third" }
+  ...(Array.isArray(previousLocalLog) ? previousLocalLog : []),
+  { source: "test", seq: 3, message: "third" }
 ];
 await assert.rejects(
   drainErrorLog({
@@ -786,11 +820,15 @@ assert.equal(drainStorage.session.state[ERROR_LOG_DRAINED_SEQ_KEY], 2);
 assert.deepEqual(
   await drainErrorLog({
     storage: drainStorage,
-    post: (entries) => posted.push(entries)
+    post: (entries) => {
+      posted.push(entries);
+    }
   }),
   { forwarded: 1 }
 );
-assert.deepEqual(posted.at(-1), [{ seq: 3, message: "third" }]);
+assert.deepEqual<ErrorLogEntry[] | "again" | undefined>(posted.at(-1), [
+  { source: "test", seq: 3, message: "third" }
+]);
 
 assert.equal(
   formatErrorLogLines([{ seq: 1, message: "first" }, { seq: 2 }]),
@@ -898,40 +936,54 @@ assert.equal(normalizeInstanceHost("misskey.io:8080"), null);
 assert.equal(originForHost("misskey.io"), "https://misskey.io/*");
 assert.equal(registrationIdForHost("misskey.io"), "misskey-misskey.io");
 
-function createFakePermissions(grantedOrigins = []) {
+function createFakePermissions(grantedOrigins: string[] = []) {
   const origins = new Set(grantedOrigins);
   return {
     origins,
-    async request({ origins: requested }) {
+    async request({ origins: requested }: { origins: string[] }) {
       for (const origin of requested) {
         origins.add(origin);
       }
       return true;
     },
-    async remove({ origins: requested }) {
+    async remove({ origins: requested }: { origins: string[] }) {
       let removedAny = false;
       for (const origin of requested) {
         removedAny = origins.delete(origin) || removedAny;
       }
       return removedAny;
     },
-    async contains({ origins: requested }) {
+    async contains({ origins: requested }: { origins: string[] }) {
       return requested.every((origin) => origins.has(origin));
     }
   };
 }
 
-function createFakeScripting(initialScripts = []) {
-  const scripts = new Map(initialScripts.map((script) => [script.id, script]));
+// A registered script as this fake stores it. Looser than the real
+// RegisteredContentScript: seed data for getRegisteredContentScripts() in
+// tests below only ever supplies `id` and sometimes `matches`.
+interface FakeRegisteredScript {
+  id: string;
+  matches?: string[];
+  js?: string[];
+  css?: string[];
+  runAt?: string;
+  persistAcrossSessions?: boolean;
+}
+
+function createFakeScripting(initialScripts: FakeRegisteredScript[] = []) {
+  const scripts = new Map<string, FakeRegisteredScript>(
+    initialScripts.map((script) => [script.id, script])
+  );
   return {
     scripts,
-    async registerContentScripts(registered) {
+    async registerContentScripts(registered: RegisteredContentScript[]) {
       for (const script of registered) {
         assert.ok(!scripts.has(script.id), `duplicate script id ${script.id}`);
         scripts.set(script.id, script);
       }
     },
-    async unregisterContentScripts({ ids } = {}) {
+    async unregisterContentScripts({ ids }: { ids?: string[] } = {}) {
       const targets = ids ?? [...scripts.keys()];
       for (const id of targets) {
         if (!scripts.has(id)) {

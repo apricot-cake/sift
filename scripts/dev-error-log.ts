@@ -1,8 +1,10 @@
 import { randomUUID } from "node:crypto";
 import fs from "node:fs";
+import type { IncomingMessage, ServerResponse } from "node:http";
 import os from "node:os";
 import path from "node:path";
-import { DEV_PING_ENDPOINT, ERROR_LOG_ENDPOINT } from "../utils/dev-server.js";
+import type { Plugin, ViteDevServer } from "vite";
+import { DEV_PING_ENDPOINT, ERROR_LOG_ENDPOINT } from "../utils/dev-server.ts";
 
 export const DEFAULT_ERROR_LOG_PATH = path.join(
   os.homedir(),
@@ -12,18 +14,18 @@ export const DEFAULT_ERROR_LOG_PATH = path.join(
 
 const BODY_LIMIT_BYTES = 512 * 1024;
 
-export function formatErrorLogLines(entries) {
+export function formatErrorLogLines(entries: unknown): string {
   return (Array.isArray(entries) ? entries : [])
     .map((entry) => `${JSON.stringify(entry)}\n`)
     .join("");
 }
 
-function readBody(request) {
+function readBody(request: IncomingMessage): Promise<string> {
   return new Promise((resolve, reject) => {
-    const chunks = [];
+    const chunks: Buffer[] = [];
     let size = 0;
 
-    request.on("data", (chunk) => {
+    request.on("data", (chunk: Buffer) => {
       size += chunk.length;
       if (size > BODY_LIMIT_BYTES) {
         reject(new Error("The development error log payload is too large."));
@@ -40,12 +42,20 @@ function readBody(request) {
 // The extension's service worker fetches this from chrome-extension://<id>, so
 // the response has to carry the permission itself. Mirrors the origin policy of
 // the server's own CORS configuration.
-function allowExtensionOrigin(request, response) {
+function allowExtensionOrigin(
+  request: IncomingMessage,
+  response: ServerResponse
+): void {
   const origin = request.headers.origin;
   if (typeof origin === "string" && origin.startsWith("chrome-extension://")) {
     response.setHeader("access-control-allow-origin", origin);
     response.setHeader("vary", "origin");
   }
+}
+
+export interface DevErrorLogOptions {
+  logPath?: string;
+  isBuilt?: () => boolean;
 }
 
 // Receives the uncaught exceptions the extension collected and appends them to
@@ -60,7 +70,7 @@ function allowExtensionOrigin(request, response) {
 export function devErrorLog({
   logPath = DEFAULT_ERROR_LOG_PATH,
   isBuilt = () => true
-} = {}) {
+}: DevErrorLogOptions = {}): Plugin {
   // Identifies this server process to the extension. A worker that sees an id it
   // did not start with knows its HMR socket belongs to a server that is gone,
   // and that only restarting itself will attach it to the one that is up (#31).
@@ -69,7 +79,7 @@ export function devErrorLog({
   return {
     name: "sift:dev-error-log",
     apply: "serve",
-    configureServer(server) {
+    configureServer(server: ViteDevServer) {
       server.middlewares.use(DEV_PING_ENDPOINT, (request, response, next) => {
         if (request.method !== "GET") {
           next();
@@ -115,7 +125,7 @@ export function devErrorLog({
           response.end();
         } catch (error) {
           server.config.logger.warn(
-            `[sift] Could not write the extension error log: ${error.message}`
+            `[sift] Could not write the extension error log: ${error instanceof Error ? error.message : String(error)}`
           );
           response.statusCode = 400;
           response.end();

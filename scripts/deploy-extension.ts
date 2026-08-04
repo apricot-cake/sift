@@ -3,7 +3,7 @@
 //
 // This is the only writer of .output/chrome-mv3. The daily browser carries
 // release builds and nothing else: development happens in a separate Chrome
-// profile against a separate output (wxt.config.js), so the daily extension does
+// profile against a separate output (wxt.config.ts), so the daily extension does
 // not depend on a dev server being alive, and a build that fails verification
 // never reaches it.
 //
@@ -41,8 +41,8 @@ function isMainWorkingTree() {
   }
 }
 
-function listFiles(root, base = root) {
-  const files = [];
+function listFiles(root: string, base: string = root): string[] {
+  const files: string[] = [];
   for (const entry of fs.readdirSync(root, { withFileTypes: true })) {
     const absolute = path.join(root, entry.name);
     if (entry.isDirectory()) files.push(...listFiles(absolute, base));
@@ -62,7 +62,7 @@ function listFiles(root, base = root) {
 // to — and the browser is told to by being restarted or reloaded, after this has
 // finished. Files the previous build had and this one does not are removed, so a
 // renamed entrypoint cannot linger and be injected by name.
-function swapIn(source, destination) {
+function swapIn(source: string, destination: string): void {
   fs.mkdirSync(destination, { recursive: true });
   const wanted = new Set(listFiles(source));
   for (const stale of listFiles(destination)) {

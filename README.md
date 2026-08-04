@@ -125,11 +125,11 @@ npm run dev:browser
 
 **このビルドを日常のプロファイルへ読み込まないでください。** developmentとreleaseは同じ拡張IDを持つため、同じプロファイルには同居できません。
 
-パスの確認だけしたいときは `node scripts/dev-browser.js --print` を使います。ウィンドウを開かずに解決結果を表示します。
+パスの確認だけしたいときは `node scripts/dev-browser.ts --print` を使います。ウィンドウを開かずに解決結果を表示します。
 
 ### 日常Chromeへの反映
 
-mainへマージすると `post-merge` フックが `npm run deploy` を走らせ、検証済みのreleaseを `.output\chrome-mv3` へファイル単位で差し替えます。フックは `npm install` が設定します（`scripts/setup.js` が `core.hooksPath` を `.githooks` に向けます）。手で走らせることもできます。
+mainへマージすると `post-merge` フックが `npm run deploy` を走らせ、検証済みのreleaseを `.output\chrome-mv3` へファイル単位で差し替えます。フックは `npm install` が設定します（`scripts/setup.ts` が `core.hooksPath` を `.githooks` に向けます）。手で走らせることもできます。
 
 ```powershell
 npm run deploy

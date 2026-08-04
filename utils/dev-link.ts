@@ -21,7 +21,7 @@
 // states and reloads itself out of them. The server's boot id is what makes them
 // visible: "the id I saw when I started" versus "the id up now".
 //
-// Only the development build carries any of this — see entrypoints/background.js
+// Only the development build carries any of this — see entrypoints/background.ts
 // for how it is compiled out of a release.
 
 // Which server generation this worker has already reloaded for. In session
@@ -41,23 +41,47 @@ export const DEV_CONTENT_STARTED = "sift:dev-content-started";
 // that changes the timeline.
 export const DEV_FILTER_PASS = "sift:dev-filter-pass";
 
-/**
- * What to do about the link, given one probe of the development server.
- *
- * Split out from the worker because every interesting case is a combination of
- * "is the server up", "is it the same server" and "have I already tried" — which
- * is exactly the shape that is miserable to reproduce in a browser and trivial
- * to state in a test.
- *
- * @param {object} probe
- * @param {string|null} probe.boot        server generation, null when it is down
- * @param {boolean} probe.ready           has a build been written to disk
- * @param {boolean} probe.isFirstProbe    is this the worker's first probe
- * @param {string} [probe.bootAtStart]    generation adopted when the worker started
- * @param {number} probe.registeredCount  content scripts registered right now
- * @param {string} [probe.reloadedForBoot] generation already reloaded for
- * @returns {"server-down"|"building"|"adopt"|"linked"|"reload"|"waiting"}
- */
+// The two messages the content script sends the background worker over
+// chrome.runtime.sendMessage — the only traffic on that channel in a
+// development build.
+export interface DevContentStartedMessage {
+  type: typeof DEV_CONTENT_STARTED;
+  page: string;
+}
+export interface DevFilterPassMessage {
+  type: typeof DEV_FILTER_PASS;
+  counts: { hit: number; rising: number; hidden: number };
+  toolbar: boolean;
+}
+export type DevLinkMessage = DevContentStartedMessage | DevFilterPassMessage;
+
+export interface DevLinkProbe {
+  // server generation, null when it is down
+  boot: string | null;
+  // has a build been written to disk
+  ready: boolean;
+  // is this the worker's first probe
+  isFirstProbe: boolean;
+  // generation adopted when the worker started
+  bootAtStart?: string;
+  // content scripts registered right now
+  registeredCount: number;
+  // generation already reloaded for
+  reloadedForBoot?: string;
+}
+
+export type DevLinkAction =
+  | "server-down"
+  | "building"
+  | "adopt"
+  | "linked"
+  | "reload"
+  | "waiting";
+
+// Split out from the worker because every interesting case is a combination of
+// "is the server up", "is it the same server" and "have I already tried" — which
+// is exactly the shape that is miserable to reproduce in a browser and trivial
+// to state in a test.
 export function decideDevLinkAction({
   boot,
   ready,
@@ -65,7 +89,7 @@ export function decideDevLinkAction({
   bootAtStart,
   registeredCount,
   reloadedForBoot
-}) {
+}: DevLinkProbe): DevLinkAction {
   if (boot == null) {
     return "server-down";
   }
