@@ -1,5 +1,6 @@
 import { startUncaughtReporting } from "../../utils/error-log.js";
 import {
+  MISSKEY_INSTANCES_KEY,
   addInstance,
   normalizeInstanceHost,
   removeInstance
@@ -86,6 +87,21 @@ chrome.storage.sync.get(defaults, (storedSettings) => {
   syncForm();
   renderInstances();
   status.textContent = "";
+});
+
+// Storage, not the addInstance() call's own return value, is what drives the
+// list: the backstop in the background entrypoint (handlePermissionsAdded)
+// can finish writing the host after this popup's own addInstance() call was
+// torn down along with the popup that made it (Chrome does that the instant
+// the permission dialog appears). This listener is what shows the addition
+// once that happens, since nothing in this document survived to call
+// refreshInstances() itself.
+chrome.storage.onChanged.addListener((changes, areaName) => {
+  if (areaName !== "sync" || !(MISSKEY_INSTANCES_KEY in changes)) {
+    return;
+  }
+  settings = normalizeSettings({ ...settings, misskeyInstances: changes[MISSKEY_INSTANCES_KEY].newValue });
+  renderInstances();
 });
 
 instanceForm.addEventListener("submit", async (event) => {

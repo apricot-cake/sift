@@ -31,6 +31,16 @@ export function originForHost(host) {
   return `https://${host}/*`;
 }
 
+// The inverse of originForHost(), for permissions.onAdded — Chrome hands the
+// listener origin strings, not hosts. Re-validated through
+// normalizeInstanceHost() rather than trusted as-is, so an origin this module
+// did not mint (something a future feature grants, or Chrome re-adding a
+// static host_permissions entry) is ignored instead of registering garbage.
+function hostForOrigin(origin) {
+  const match = /^https:\/\/([^/]+)\/\*$/.exec(origin);
+  return match ? normalizeInstanceHost(match[1]) : null;
+}
+
 export function registrationIdForHost(host) {
   return `${REGISTRATION_ID_PREFIX}${host}`;
 }
@@ -121,10 +131,30 @@ export async function addInstance(host, { permissions, scripting, storage }) {
     return { added: false, reason: "permission-denied" };
   }
 
-  await scripting.registerContentScripts([contentScriptDefinition(normalizedHost)]);
-  await storage.sync.set({
-    [MISSKEY_INSTANCES_KEY]: [...instances, normalizedHost]
-  });
+  // Chrome tears the popup down the instant the permission dialog appears
+  // (measured 2026-08-04, sift #28) — the grant itself still goes through on
+  // Chrome's side, but everything queued after this `await` can simply never
+  // run, silently, with nothing left to catch or log the interruption.
+  // handlePermissionsAdded, wired to chrome.permissions.onAdded in the
+  // background entrypoint, is the backstop: it reacts to the grant Chrome
+  // actually made, independent of whether this popup survived to hear its
+  // own answer. That backstop can win the race and register this host before
+  // this line runs, so the check below is not an optimization — without it
+  // this call throws on the now-duplicate script id.
+  const registrationId = registrationIdForHost(normalizedHost);
+  const alreadyRegistered = (await scripting.getRegisteredContentScripts()).some(
+    (script) => script.id === registrationId
+  );
+  if (!alreadyRegistered) {
+    await scripting.registerContentScripts([contentScriptDefinition(normalizedHost)]);
+  }
+
+  const current = await readInstances(storage);
+  if (!current.includes(normalizedHost)) {
+    await storage.sync.set({
+      [MISSKEY_INSTANCES_KEY]: [...current, normalizedHost]
+    });
+  }
 
   return { added: true };
 }
@@ -144,6 +174,47 @@ export async function removeInstance(host, { permissions, scripting, storage }) 
   await storage.sync.set({
     [MISSKEY_INSTANCES_KEY]: instances.filter((existing) => existing !== host)
   });
+}
+
+// Wired to chrome.permissions.onAdded in the background entrypoint. This is
+// not the mirror of handlePermissionsRemoved below so much as the backstop
+// for addInstance() itself: Chrome fires this the moment a grant lands,
+// whether or not the popup that called permissions.request() is still alive
+// to act on its own answer (see the comment in addInstance()). Only fires
+// while the service worker is alive to hear it — a grant that lands while
+// Sift is not running is not a case that arises, since nothing but
+// addInstance() ever requests one of these origins, and that call cannot run
+// without the service worker already up to hold the popup's message port.
+export async function handlePermissionsAdded(
+  addedPermissions,
+  { scripting, storage }
+) {
+  const addedOrigins = addedPermissions?.origins ?? [];
+  if (addedOrigins.length === 0) {
+    return;
+  }
+
+  const instances = await readInstances(storage);
+  const registered = await scripting.getRegisteredContentScripts();
+  const registeredIds = new Set(registered.map((script) => script.id));
+
+  const next = [...instances];
+  for (const origin of addedOrigins) {
+    const host = hostForOrigin(origin);
+    if (host === null || next.includes(host)) {
+      continue;
+    }
+
+    const registrationId = registrationIdForHost(host);
+    if (!registeredIds.has(registrationId)) {
+      await scripting.registerContentScripts([contentScriptDefinition(host)]);
+    }
+    next.push(host);
+  }
+
+  if (next.length !== instances.length) {
+    await storage.sync.set({ [MISSKEY_INSTANCES_KEY]: next });
+  }
 }
 
 // Wired to chrome.permissions.onRemoved in the background entrypoint: a

@@ -22,6 +22,7 @@ import { SITE_MATCHES } from "./utils/site-matches.js";
 import { classifyPost, parseMetric } from "./utils/filter-core.js";
 import {
   addInstance,
+  handlePermissionsAdded,
   handlePermissionsRemoved,
   MISSKEY_CONTENT_SCRIPT_FILES,
   MISSKEY_INSTANCES_KEY,
@@ -1012,6 +1013,26 @@ function createFakeScripting(initialScripts = []) {
   assert.deepEqual(storage.sync.state[MISSKEY_INSTANCES_KEY], ["misskey.io"]);
 }
 
+// addInstance(): Chrome tears the popup down the instant its permission
+// dialog appears, so handlePermissionsAdded (wired to permissions.onAdded)
+// can win the race and register the host before this call resumes. Losing
+// that race must not throw on the now-duplicate script id, and must not
+// double the stored host.
+{
+  const permissions = createFakePermissions();
+  const scripting = createFakeScripting([
+    { id: "misskey-misskey.io", matches: ["https://misskey.io/*"] }
+  ]);
+  const storage = {
+    sync: createFakeStorageArea({ [MISSKEY_INSTANCES_KEY]: ["misskey.io"] })
+  };
+
+  const result = await addInstance("misskey.io", { permissions, scripting, storage });
+
+  assert.deepEqual(result, { added: true });
+  assert.deepEqual(storage.sync.state[MISSKEY_INSTANCES_KEY], ["misskey.io"]);
+}
+
 // removeInstance(): drops the registration, the permission, and the stored
 // host together.
 {
@@ -1084,6 +1105,95 @@ function createFakeScripting(initialScripts = []) {
 
   assert.ok(scripting.scripts.has("misskey-misskey.io"));
   assert.deepEqual(storage.sync.state[MISSKEY_INSTANCES_KEY], ["misskey.io"]);
+}
+
+// handlePermissionsAdded(): the backstop for addInstance() losing its popup
+// mid-flight — a grant with no matching registration or stored host gets
+// both.
+{
+  const scripting = createFakeScripting();
+  const storage = { sync: createFakeStorageArea() };
+
+  await handlePermissionsAdded(
+    { origins: ["https://misskey.io/*"] },
+    { scripting, storage }
+  );
+
+  assert.deepEqual(scripting.scripts.get("misskey-misskey.io"), {
+    id: "misskey-misskey.io",
+    matches: ["https://misskey.io/*"],
+    js: [...MISSKEY_CONTENT_SCRIPT_FILES.js],
+    css: [...MISSKEY_CONTENT_SCRIPT_FILES.css],
+    runAt: "document_idle",
+    persistAcrossSessions: true
+  });
+  assert.deepEqual(storage.sync.state[MISSKEY_INSTANCES_KEY], ["misskey.io"]);
+}
+
+// handlePermissionsAdded(): a host addInstance() already registered and
+// stored before this listener heard the same grant is left alone — no
+// duplicate script id, no duplicate storage entry.
+{
+  const scripting = createFakeScripting([
+    { id: "misskey-misskey.io", matches: ["https://misskey.io/*"] }
+  ]);
+  const storage = {
+    sync: createFakeStorageArea({ [MISSKEY_INSTANCES_KEY]: ["misskey.io"] })
+  };
+
+  await handlePermissionsAdded(
+    { origins: ["https://misskey.io/*"] },
+    { scripting, storage }
+  );
+
+  assert.deepEqual(storage.sync.state[MISSKEY_INSTANCES_KEY], ["misskey.io"]);
+}
+
+// handlePermissionsAdded(): a registration addInstance() already made, for a
+// host the storage write from that same call has not landed yet, is adopted
+// without re-registering.
+{
+  const scripting = createFakeScripting([
+    { id: "misskey-misskey.io", matches: ["https://misskey.io/*"] }
+  ]);
+  const storage = { sync: createFakeStorageArea() };
+
+  await handlePermissionsAdded(
+    { origins: ["https://misskey.io/*"] },
+    { scripting, storage }
+  );
+
+  assert.deepEqual(storage.sync.state[MISSKEY_INSTANCES_KEY], ["misskey.io"]);
+}
+
+// handlePermissionsAdded(): a grant that is not a well-formed single-host
+// https origin (a manifest permission string, or an origin with a path)
+// touches nothing rather than registering garbage.
+{
+  const scripting = createFakeScripting();
+  const storage = {
+    sync: createFakeStorageArea({ [MISSKEY_INSTANCES_KEY]: ["kept.example"] })
+  };
+
+  await handlePermissionsAdded(
+    { origins: ["<all_urls>", "https://example.com/path/*"] },
+    { scripting, storage }
+  );
+
+  assert.equal(scripting.scripts.size, 0);
+  assert.deepEqual(storage.sync.state[MISSKEY_INSTANCES_KEY], ["kept.example"]);
+}
+
+// handlePermissionsAdded(): no origins at all (an empty onAdded payload,
+// which should not occur but costs nothing to guard) is a no-op.
+{
+  const scripting = createFakeScripting();
+  const storage = { sync: createFakeStorageArea() };
+
+  await handlePermissionsAdded({ origins: [] }, { scripting, storage });
+
+  assert.equal(scripting.scripts.size, 0);
+  assert.equal(storage.sync.state[MISSKEY_INSTANCES_KEY], undefined);
 }
 
 // reconcileInstances(): a stored host whose permission is still granted but

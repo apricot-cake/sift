@@ -11,7 +11,11 @@ import {
 } from "../utils/dev-server.js";
 import { drainErrorLog } from "../utils/error-drain.js";
 import { ERROR_LOG_KEY, startUncaughtReporting } from "../utils/error-log.js";
-import { handlePermissionsRemoved, reconcileInstances } from "../utils/instances.js";
+import {
+  handlePermissionsAdded,
+  handlePermissionsRemoved,
+  reconcileInstances
+} from "../utils/instances.js";
 
 // Three jobs share this file. Keeping Misskey instance registrations correct
 // runs in every build; forwarding the development error log and tracking the
@@ -23,6 +27,9 @@ import { handlePermissionsRemoved, reconcileInstances } from "../utils/instances
 //     every build reconciles Misskey instance registrations against granted
 //     permissions at startup and keeps listening for permissions.onRemoved
 //     while running (see the code below, outside the __SIFT_DEV__ guard).
+//     It also listens for permissions.onAdded, which is not the mirror image
+//     it looks like: it is the backstop for addInstance() losing its own
+//     popup mid-flight (see utils/instances.js).
 //   - uncaught exceptions reach only the error box of chrome://extensions, which
 //     nothing outside Chrome can read. Every surface writes them to a ring
 //     buffer in chrome.storage.local (utils/error-log.js); this worker carries
@@ -68,6 +75,16 @@ export default defineBackground(() => {
   // the case where it was not running to hear it.
   chrome.permissions.onRemoved.addListener((removed) => {
     handlePermissionsRemoved(removed, instanceDeps).catch(() => {});
+  });
+
+  // The backstop for addInstance(): Chrome tears the popup down the instant
+  // its permission dialog appears, which can silently abort addInstance()
+  // before it registers the content script or saves the host (measured
+  // 2026-08-04, #28) even though the grant itself already went through. This
+  // listener reacts to the grant Chrome actually made, not to the popup
+  // call surviving long enough to hear its own answer.
+  chrome.permissions.onAdded.addListener((added) => {
+    handlePermissionsAdded(added, instanceDeps).catch(() => {});
   });
 
   if (!__SIFT_DEV__) {
