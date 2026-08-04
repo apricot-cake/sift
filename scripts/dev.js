@@ -23,13 +23,52 @@
 // fixed), so do not load both into the SAME profile — that is what the separate
 // profile is for.
 import { execFileSync, spawn } from "node:child_process";
+import net from "node:net";
 import { homedir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { DEV_SERVER_HOST, DEV_SERVER_PORT } from "../utils/dev-server.js";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const output =
   process.env.SIFT_DEV_OUTPUT || path.join(homedir(), ".sift-dev", "chrome-mv3-dev");
+
+// Is one already up? A TCP connect is enough — this only needs to know whether
+// something owns the port.
+//
+// The host comes from utils/dev-server.js rather than being spelled here, for the
+// reason that file gives: `localhost` resolves to ::1 on this machine, so a probe
+// that hardcodes 127.0.0.1 against a server bound the other way reports a running
+// server as down. The sibling project had exactly that, and its "the dev server is
+// not responding" warning was wrong every time it fired (2026-08-04).
+function devServerAlive() {
+  return new Promise((resolve) => {
+    const socket = net.createConnection({ port: DEV_SERVER_PORT, host: DEV_SERVER_HOST });
+    const finish = (alive) => {
+      socket.removeAllListeners();
+      socket.destroy();
+      resolve(alive);
+    };
+    socket.setTimeout(500);
+    socket.once("connect", () => finish(true));
+    socket.once("timeout", () => finish(false));
+    socket.once("error", () => finish(false));
+  });
+}
+
+// Already up? Then this call is done, whoever made it. One server serves every
+// worktree (the output folder and the port are both fixed), so a second start is
+// never what the caller wanted: it dies on the port, or opens a window that dies
+// while the caller believes it started something.
+//
+// In the command rather than in a procedure to remember: the taskbar answers "is
+// it running" for a person, but an agent cannot see the taskbar, and a step
+// written in a checklist only works while it is being read.
+if (await devServerAlive()) {
+  console.log(`[sift] the dev server is already up on ${DEV_SERVER_HOST}:${DEV_SERVER_PORT} — leaving it alone.`);
+  console.log("[sift] one server serves every worktree. To stop it, close its console window.");
+  process.exit(0);
+}
 
 console.log(`[sift] development build folder: ${output}`);
 console.log("[sift] load THAT folder as an unpacked extension in the development Chrome profile (once).");
