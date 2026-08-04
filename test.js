@@ -1261,8 +1261,4 @@ assert.deepEqual(normalizeSettings({}).misskeyInstances, []);
 assert.deepEqual(normalizeSettings({ misskeyInstances: "not-an-array" }).misskeyInstances, []);
 assert.deepEqual(defaults.misskeyInstances, []);
 
-// TEMPORARY — proves the ruleset refuses a red pull request. Reverted in the
-// next commit on this branch; never merged.
-assert.equal(1, 2, "intentional failure for the merge gate check");
-
 console.log("Sift tests passed");
