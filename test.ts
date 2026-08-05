@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { drainErrorLog, ERROR_LOG_DRAINED_SEQ_KEY } from "./utils/error-drain.ts";
 import {
   appendErrorEntry,
@@ -1312,5 +1313,36 @@ assert.deepEqual(
 assert.deepEqual(normalizeSettings({}).misskeyInstances, []);
 assert.deepEqual(normalizeSettings({ misskeyInstances: "not-an-array" }).misskeyInstances, []);
 assert.deepEqual(defaults.misskeyInstances, []);
+
+// The content stylesheet reacts to the state the content script writes, and
+// never to a service's page structure — otherwise the highlight would appear on
+// whichever service the CSS happened to name (it named X's post card, so the
+// line was drawn on X alone), and every new adapter would have to add a rule
+// here. Reading the file rather than the rules: the assertion is about what the
+// stylesheet is allowed to mention, which no DOM would show.
+{
+  const contentStyles = readFileSync(
+    new URL("./entrypoints/content/style.css", import.meta.url),
+    "utf8"
+  );
+
+  for (const serviceSpecific of ["data-testid", "tweet", "feedItem", "bsky", "article"]) {
+    assert.equal(
+      contentStyles.includes(serviceSpecific),
+      false,
+      `entrypoints/content/style.css names ${serviceSpecific}, which is one service's page structure`
+    );
+  }
+
+  // Both highlights are keyed off the state attribute alone, so they match the
+  // cell every adapter marks.
+  for (const state of ["hit", "rising"]) {
+    assert.match(
+      contentStyles,
+      new RegExp(`\\[data-xif-filter-state="${state}"\\]\\s*\\{`),
+      `entrypoints/content/style.css has no rule matching the ${state} cell itself`
+    );
+  }
+}
 
 console.log("Sift tests passed");
