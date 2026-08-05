@@ -5,11 +5,16 @@ body.xif-show-all [data-xif-filter-state="hidden"] {
   opacity: 0.35 !important;
 }
 
-[data-xif-filter-state="hit"] article[data-testid="tweet"] {
+/* The line is drawn on the element that carries the state — the cell the
+   adapter's findPostCell() returns — and not on a post card inside it. Naming a
+   service's post card here would draw the line on that service only, and would
+   put page structure back into the CSS that the adapters were split out to
+   hold. */
+[data-xif-filter-state="hit"] {
   box-shadow: inset 3px 0 0 rgb(37, 99, 235);
 }
 
-[data-xif-filter-state="rising"] article[data-testid="tweet"] {
+[data-xif-filter-state="rising"] {
   box-shadow: inset 3px 0 0 rgb(217, 119, 6);
 }
 
