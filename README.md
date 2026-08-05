@@ -55,4 +55,4 @@ There is no Misskey adapter yet, so filtering and the toolbar do not appear on a
 
 ## Development
 
-Dev environment, builds, and tests are documented in [docs/development.md](docs/development.md) (Japanese).
+Dev environment, builds, and tests are documented in [docs/development.md](docs/development.md).

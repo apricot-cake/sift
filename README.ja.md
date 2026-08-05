@@ -55,4 +55,4 @@ Misskeyは使うインスタンスが利用者ごとに違うため、追加し�
 
 ## 開発
 
-開発環境の作り方・ビルド・テストは [docs/development.md](docs/development.md) を見てください。
+開発環境の作り方・ビルド・テストは [docs/development.ja.md](docs/development.ja.md) を見てください。
