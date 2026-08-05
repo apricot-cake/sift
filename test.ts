@@ -20,6 +20,11 @@ import {
   blueskyAdapter,
   timestampFromRecordKey
 } from "./utils/adapters/bluesky.ts";
+import {
+  isMisskeyPage,
+  MISSKEY_SELECTORS,
+  misskeyAdapter
+} from "./utils/adapters/misskey.ts";
 import { X_SELECTORS, xAdapter } from "./utils/adapters/x.ts";
 import { SITE_MATCHES } from "./utils/site-matches.ts";
 import { classifyPost, parseMetric } from "./utils/filter-core.ts";
@@ -38,7 +43,13 @@ import {
   type InstanceScripting,
   type RegisteredContentScript
 } from "./utils/instances.ts";
-import { defaults, normalizeSettings } from "./utils/settings.ts";
+import {
+  defaults,
+  LIKE_THRESHOLDS,
+  MISSKEY_REACTION_THRESHOLDS,
+  normalizeSettings,
+  thresholdsFor
+} from "./utils/settings.ts";
 
 const settings = {
   minLikes: 500,
@@ -166,6 +177,12 @@ function createFakeAttributeNode(
   } as unknown as Element;
 }
 
+// A page that says it is a Misskey instance, and one that says nothing.
+const misskeyPage = createFakeNode({
+  [MISSKEY_SELECTORS.application]: { id: "application-name" }
+});
+const otherPage = createFakeNode();
+
 // Every adapter answers for each of its own match patterns, and for no other
 // adapter's: the host name has to pick one adapter, not a set.
 for (const adapter of ADAPTERS) {
@@ -174,16 +191,30 @@ for (const adapter of ADAPTERS) {
       .slice(pattern.indexOf("://") + 3)
       .replace(/\/.*$/, "")
       .replace(/^\*\./, "");
-    assert.equal(selectAdapter(host), adapter, `${pattern} selects ${adapter.id}`);
+    assert.equal(
+      selectAdapter(host, otherPage),
+      adapter,
+      `${pattern} selects ${adapter.id}`
+    );
   }
 }
 
-assert.equal(selectAdapter("x.com"), xAdapter);
-assert.equal(selectAdapter("twitter.com"), xAdapter);
-assert.equal(selectAdapter("bsky.app"), blueskyAdapter);
-assert.equal(selectAdapter("notx.com"), null);
+assert.equal(selectAdapter("x.com", otherPage), xAdapter);
+assert.equal(selectAdapter("twitter.com", otherPage), xAdapter);
+assert.equal(selectAdapter("bsky.app", otherPage), blueskyAdapter);
+assert.equal(selectAdapter("notx.com", otherPage), null);
 // A match pattern without the "*." prefix does not cover subdomains.
-assert.equal(selectAdapter("mobile.x.com"), null);
+assert.equal(selectAdapter("mobile.x.com", otherPage), null);
+
+// Misskey has no declared host: a page is read as Misskey when the page itself
+// says so, which is the only claim available for a host the reader added.
+assert.equal(selectAdapter("misskey.example", misskeyPage), misskeyAdapter);
+assert.equal(selectAdapter("misskey.example", otherPage), null);
+// A declared service is never re-read as Misskey, whatever the page claims.
+assert.equal(selectAdapter("x.com", misskeyPage), xAdapter);
+assert.equal(isMisskeyPage(misskeyPage), true);
+assert.equal(isMisskeyPage(otherPage), false);
+assert.deepEqual(misskeyAdapter.matches, []);
 
 assert.equal(hostMatchesPattern("https://*.example.com/*", "example.com"), true);
 assert.equal(hostMatchesPattern("https://*.example.com/*", "a.example.com"), true);
@@ -506,6 +537,217 @@ assert.equal(blueskyAdapter.readIsRepost(createFakeNode()), false);
 // Bluesky's like is X's like, so the threshold and the word are shared rather
 // than duplicated per service.
 assert.equal(blueskyAdapter.reactionLabel, xAdapter.reactionLabel);
+assert.equal(blueskyAdapter.thresholdKeys, xAdapter.thresholdKeys);
+assert.equal(xAdapter.thresholdKeys, LIKE_THRESHOLDS);
+
+// -- Misskey (utils/adapters/misskey.ts) --
+//
+// Nothing in a Misskey note is marked: the classes are per-build hashes, so
+// every reading below is a shape rather than a name. The fakes are built from
+// the adapter's own selector table for that reason.
+
+function createFakeMisskeyImage(
+  alt: string | null,
+  {
+    insideAvatar = false,
+    isVideoPoster = false
+  }: { insideAvatar?: boolean; isVideoPoster?: boolean } = {}
+): Element {
+  return createFakeNode(
+    insideAvatar ? { [MISSKEY_SELECTORS.avatar]: { id: "avatar" } } : {},
+    {
+      getAttribute: (name: string) => (name === "alt" ? alt : null),
+      parentElement: isVideoPoster
+        ? createFakeNode({ [MISSKEY_SELECTORS.video]: { id: "play" } })
+        : createFakeNode()
+    }
+  );
+}
+
+// A reaction chip carries its count as its only text; a footer button leads
+// with a `ti-*` icon, and both are `button._button`.
+function createFakeMisskeyButton(
+  text: string,
+  { hasIcon = false }: { hasIcon?: boolean } = {}
+): Element {
+  return createFakeNode(hasIcon ? { [MISSKEY_SELECTORS.icon]: { id: "icon" } } : {}, {
+    textContent: text
+  });
+}
+
+function createFakeMisskeyNote({
+  time = null,
+  buttons = [],
+  images = [],
+  video = false,
+  hiddenMedia = false
+}: {
+  time?: string | null;
+  buttons?: Element[];
+  images?: Element[];
+  video?: boolean;
+  hiddenMedia?: boolean;
+} = {}): Element {
+  return createFakeNode({
+    ...(time === null
+      ? {}
+      : { [MISSKEY_SELECTORS.createdAt]: createFakeAttributeNode({ title: time }) }),
+    [MISSKEY_SELECTORS.reactionButton]: buttons,
+    img: images,
+    ...(video ? { [MISSKEY_SELECTORS.video]: { id: "video" } } : {}),
+    ...(hiddenMedia ? { [MISSKEY_SELECTORS.hiddenMedia]: { id: "placeholder" } } : {})
+  });
+}
+
+// A note's root holds the renote header and the reply it answers, both drawn
+// outside the article, and it is the root that gets hidden.
+function createFakeMisskeyRoot(postCard: Element, before: Element[] = []): Element {
+  const root = createFakeNode({}, { children: [...before, postCard] });
+  Object.assign(postCard, { parentElement: root });
+  return root;
+}
+
+const misskeyNote = createFakeMisskeyNote({ time: "2026/8/5 17:44:21" });
+const misskeyNoteRoot = createFakeMisskeyRoot(misskeyNote);
+// An instance can put an <article> on the page that is not a note at all
+// (misskey.io draws its ads that way). A note always carries its own timestamp.
+const misskeyNonNote = createFakeNode();
+const misskeyRoot = createFakeNode({
+  [MISSKEY_SELECTORS.postCard]: [misskeyNote, misskeyNonNote]
+});
+
+assert.deepEqual(misskeyAdapter.getPostCards(misskeyRoot), [misskeyNote]);
+assert.deepEqual(misskeyAdapter.getPostCards(emptyRoot), []);
+assert.equal(misskeyAdapter.hasPostCards(misskeyRoot), true);
+assert.equal(
+  misskeyAdapter.hasPostCards(
+    createFakeNode({ [MISSKEY_SELECTORS.postCard]: [misskeyNonNote] })
+  ),
+  false
+);
+assert.equal(misskeyAdapter.findPostCell(misskeyNote), misskeyNoteRoot);
+// A card with no root of its own is still a unit that can be hidden.
+assert.equal(misskeyAdapter.findPostCell(misskeyNonNote), misskeyNonNote);
+
+// No reaction total exists in the page — the footer's is off by default — so
+// the per-emoji chips are added up. Everything else wearing `_button` has to
+// stay out: the footer's buttons (each led by an icon) and a long note's
+// "show more" (words rather than a number).
+assert.equal(
+  misskeyAdapter.readReactionCount(
+    createFakeMisskeyNote({
+      buttons: [
+        createFakeMisskeyButton("12"),
+        createFakeMisskeyButton("3"),
+        // A native emoji is text, and the count is what is left of it.
+        createFakeMisskeyButton("😀5"),
+        createFakeMisskeyButton("もっと見る"),
+        createFakeMisskeyButton("16", { hasIcon: true }),
+        createFakeMisskeyButton("2,397", { hasIcon: true })
+      ]
+    })
+  ),
+  20
+);
+assert.equal(misskeyAdapter.readReactionCount(createFakeMisskeyNote()), 0);
+
+// The timestamp is localized text in a title attribute, so it reads for some
+// readers and not others. When it does not, only "rising" drops.
+assert.equal(
+  misskeyAdapter.readCreatedAt(createFakeMisskeyNote({ time: "2026/8/5 17:44:21" })),
+  Date.parse("2026/8/5 17:44:21")
+);
+// A Korean reader's page, which Date.parse refuses outright.
+assert.equal(
+  Number.isNaN(
+    misskeyAdapter.readCreatedAt(
+      createFakeMisskeyNote({ time: "2026. 8. 5. 오후 5:44:21" })
+    )
+  ),
+  true
+);
+assert.equal(Number.isNaN(misskeyAdapter.readCreatedAt(createFakeMisskeyNote())), true);
+
+// Media is told from an avatar, a role badge and an emoji by what the image
+// leaves in `alt`: the file's name or comment, and nothing else readable.
+assert.deepEqual(
+  misskeyAdapter.readMedia(
+    createFakeMisskeyNote({ images: [createFakeMisskeyImage("IMG_8802.png")] })
+  ),
+  { hasImage: true, hasVideo: false }
+);
+assert.deepEqual(
+  misskeyAdapter.readMedia(
+    createFakeMisskeyNote({
+      images: [
+        createFakeMisskeyImage("", { insideAvatar: true }),
+        createFakeMisskeyImage(":party@example.com:"),
+        createFakeMisskeyImage("😀"),
+        createFakeMisskeyImage(null)
+      ]
+    })
+  ),
+  { hasImage: false, hasVideo: false }
+);
+// A video's poster frame is an <img> carrying the file's own comment, which
+// reads exactly like a picture's alt. The play control over it is the
+// difference, and without it a video would also count as an image — which the
+// "images only" setting would then let through.
+assert.deepEqual(
+  misskeyAdapter.readMedia(
+    createFakeMisskeyNote({
+      video: true,
+      images: [
+        createFakeMisskeyImage("道具箱を開けて中身を紹介する動画。", { isVideoPoster: true })
+      ]
+    })
+  ),
+  { hasImage: false, hasVideo: true }
+);
+
+// A file the client is holding back behind a click says a file is there but not
+// what it is; reading it as no media at all would hide the note outright.
+assert.deepEqual(misskeyAdapter.readMedia(createFakeMisskeyNote({ hiddenMedia: true })), {
+  hasImage: true,
+  hasVideo: false
+});
+assert.deepEqual(misskeyAdapter.readMedia(createFakeMisskeyNote({ video: true })), {
+  hasImage: false,
+  hasVideo: true
+});
+assert.deepEqual(misskeyAdapter.readMedia(createFakeMisskeyNote()), {
+  hasImage: false,
+  hasVideo: false
+});
+
+// The renote header sits above the article, inside the same root. The footer's
+// renote button wears the same icon, which is why only what precedes the
+// article counts — otherwise every note would read as a renote.
+const misskeyRenoteHeader = createFakeNode({
+  [MISSKEY_SELECTORS.repost]: { id: "repeat" }
+});
+const misskeyRenote = createFakeMisskeyNote({ time: "2026/8/5 17:44:21" });
+createFakeMisskeyRoot(misskeyRenote, [misskeyRenoteHeader]);
+assert.equal(misskeyAdapter.readIsRepost(misskeyRenote), true);
+
+const misskeyPlainNote = createFakeMisskeyNote({ time: "2026/8/5 17:44:21" });
+createFakeMisskeyRoot(misskeyPlainNote, [createFakeNode()]);
+assert.equal(misskeyAdapter.readIsRepost(misskeyPlainNote), false);
+// The icon inside the card itself is the footer's renote button.
+const misskeyNoteWithFooterIcon = createFakeMisskeyNote({ time: "2026/8/5 17:44:21" });
+Object.assign(misskeyNoteWithFooterIcon, {
+  querySelector: (selector: string) =>
+    selector === MISSKEY_SELECTORS.repost ? { id: "repeat" } : null
+});
+createFakeMisskeyRoot(misskeyNoteWithFooterIcon);
+assert.equal(misskeyAdapter.readIsRepost(misskeyNoteWithFooterIcon), false);
+assert.equal(misskeyAdapter.readIsRepost(createFakeNode()), false);
+
+// A reaction is one per reader like a like is, but instance sizes differ by
+// orders of magnitude, so it counts against its own pair of thresholds.
+assert.equal(misskeyAdapter.reactionLabel, "リアクション");
+assert.equal(misskeyAdapter.thresholdKeys, MISSKEY_REACTION_THRESHOLDS);
+assert.notEqual(misskeyAdapter.thresholdKeys, xAdapter.thresholdKeys);
 
 const extensionPrefix = "chrome-extension://abcdefghijklmnopabcdefghijklmnop/";
 
@@ -1313,6 +1555,46 @@ assert.deepEqual(
 assert.deepEqual(normalizeSettings({}).misskeyInstances, []);
 assert.deepEqual(normalizeSettings({ misskeyInstances: "not-an-array" }).misskeyInstances, []);
 assert.deepEqual(defaults.misskeyInstances, []);
+
+// Misskey's thresholds are stored beside X's and normalized the same way.
+assert.equal(normalizeSettings({ misskeyMinReactions: "35" }).misskeyMinReactions, 35);
+assert.equal(
+  normalizeSettings({ misskeyMinReactions: -4 }).misskeyMinReactions,
+  0
+);
+assert.equal(
+  normalizeSettings({ misskeyRisingMinReactions: "not a number" })
+    .misskeyRisingMinReactions,
+  defaults.misskeyRisingMinReactions
+);
+
+// The classification takes one pair of numbers, and which pair depends on the
+// service. Everything else it takes is shared by all of them.
+{
+  const stored = normalizeSettings({
+    minLikes: 500,
+    risingMinLikes: 100,
+    misskeyMinReactions: 20,
+    misskeyRisingMinReactions: 5,
+    risingMaxAgeHours: 6,
+    hideReposts: true
+  });
+
+  assert.deepEqual(thresholdsFor(stored, LIKE_THRESHOLDS), {
+    hideReposts: true,
+    minLikes: 500,
+    risingEnabled: true,
+    risingMinLikes: 100,
+    risingMaxAgeHours: 6
+  });
+  assert.deepEqual(thresholdsFor(stored, MISSKEY_REACTION_THRESHOLDS), {
+    hideReposts: true,
+    minLikes: 20,
+    risingEnabled: true,
+    risingMinLikes: 5,
+    risingMaxAgeHours: 6
+  });
+}
 
 // The content stylesheet reacts to the state the content script writes, and
 // never to a service's page structure — otherwise the highlight would appear on
