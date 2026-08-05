@@ -1,0 +1,30 @@
+# Dependency updates an Issue has taken over: add an `ignore` entry here with
+# a comment naming the Issue when the Issue is filed, remove the entry when
+# the Issue closes. `ignore` only stops version-update PRs — security-update
+# PRs still open regardless (GitHub Docs, "Dependabot options reference").
+version: 2
+updates:
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    groups:
+      minor-and-patch:
+        applies-to: version-updates
+        update-types:
+          - "minor"
+          - "patch"
+
+  # ワークフローの `uses:` は SHA で固定してある（タグは差し替え可能＝
+  # サプライチェーンの穴・GitHub Docs "Security hardening for GitHub Actions"）。
+  # 固定したまま更新を受け取る経路がこれ＝Dependabot が SHA と `# vX.Y.Z`
+  # コメントの両方を書き換える。
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    groups:
+      actions:
+        applies-to: version-updates
+        patterns:
+          - "*"
