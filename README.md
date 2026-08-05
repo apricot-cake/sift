@@ -1,181 +1,64 @@
+<p align="center"><strong>English</strong> · <a href="README.ja.md">日本語</a></p>
+
 # Sift
 
-X・Bluesky・Misskeyの投稿画面に読み込まれた投稿をブラウザ内で絞り込むChrome拡張です。
+A Chrome extension that filters the posts loaded into the X, Bluesky and Misskey timelines, right in the browser.
 
 > [!WARNING]
-> **まだリリース前です。**
->
-> - Chromeウェブストアでは配布していません。インストーラもありません。使うにはこのリポジトリを自分でビルドし、パッケージ化されていない拡張機能として読み込む必要があります。
-> - 予告なく壊れる変更が入ります。設定の形式が変わり、保存済みの設定値が初期値へ戻ることがあります。
-> - 対応サービスの画面構造が変わると、更新するまで判定が効かなくなります。
+> **Not released yet.** Sift is not on the Chrome Web Store — to use it, build this repository yourself and load it as an unpacked extension. Breaking changes land without notice, and saved settings can reset to their defaults. When a supported service changes its page structure, filtering stops working until Sift is updated.
 
-初期設定は次のとおりです。
+The defaults are below. Every value can be changed from the extension icon, or from the "Settings" button at the bottom right of the timeline — which shows only the thresholds the service on that screen uses.
 
-- 通常: 画像または動画があり、500いいね以上（Misskeyは20リアクション以上）
-- 上昇中: 画像または動画があり、投稿後6時間以内、100いいね以上（Misskeyは5リアクション以上）
-- リポストを除外
+- Normal: has an image or video, 500+ likes (Misskey: 20+ reactions)
+- Rising: has an image or video, posted within the last 6 hours, 100+ likes (Misskey: 5+ reactions)
+- Reposts excluded
 
-すべての値は拡張機能のアイコン、または投稿画面右下の「設定」から変更できます。投稿画面の「設定」には、その画面のサービスで使うしきい値だけが出ます。
-
-## インストール
+## Install
 
 ```powershell
 npm install
 npm run deploy
 ```
 
-1. Chromeで `chrome://extensions` を開きます。
-2. 右上の「デベロッパー モード」を有効にします。
-3. 「パッケージ化されていない拡張機能を読み込む」を押します。
-4. `.output\chrome-mv3` を選びます。
-5. XまたはBlueskyで、ホーム、プロフィール、リストなど、投稿が並ぶ画面を開きます。Misskeyは先に設定画面でインスタンスを追加します。
+Load `.output\chrome-mv3` as an unpacked extension from `chrome://extensions`, then open any screen on X or Bluesky where posts are listed. For Misskey, add your instance in the settings page first. The extraction status appears at the bottom right (blue line = normal, orange line = rising).
 
-右下に抽出状況が表示されます。青い線は通常条件、橙色の線は上昇中です。
+`.output\chrome-mv3` holds verified release builds only. Development builds never land there.
 
-`.output\chrome-mv3` は検証済みのrelease専用です。開発中のビルドはここへ出ません。
+## How it works, and limits
 
-## 仕組みと制約
+- Only the posts loaded into the screen you currently have open are evaluated. No auto-scrolling, no background collection, no unofficial API calls.
+- Post data is never stored or sent anywhere. Only your settings are saved, in Chrome sync storage.
+- Posts that never reach the open screen — private accounts, blocks, region locks — cannot be shown.
 
-- 現在開いている画面に読み込まれた投稿だけを判定します。
-- 自動スクロール、バックグラウンド収集、非公式API呼び出しは行いません。
-- 投稿データを保存・送信しません。設定値だけをChromeの同期ストレージへ保存します。
-- 画面構造が変わると、更新が必要になる場合があります。
-- 非公開投稿、ブロック、地域制限など、開いている画面自体に届かない投稿は表示できません。
+### Supported services
 
-### 対応サービス
-
-判定条件はサービス間で共有します。Blueskyのいいねは Xのいいねと同じ意味を持つため、しきい値も同じものを使います。**Misskeyのリアクションだけは別のしきい値**です。1人1回である点は同じですが、インスタンスの規模がXやBlueskyと桁で違うため、同じ数値を当てるとどちらかが常に全滅か素通りになります。
+Filter conditions are shared across services. Bluesky likes use the same thresholds as X likes. **Misskey reactions have thresholds of their own**: a reaction is one per reader just as a like is, but instance sizes differ from X's by orders of magnitude, and one shared number would leave either service permanently empty or permanently unfiltered.
 
 | | X | Bluesky | Misskey |
 | --- | --- | --- | --- |
-| 対象ホスト | `x.com` / `twitter.com` | `bsky.app` | 利用者が追加したインスタンス |
-| 反応の数 | いいね | いいね | リアクション（絵文字ごとの合計） |
-| しきい値 | いいね数 | いいね数（Xと共有） | リアクション数（独立） |
-| 共有の除外 | リポスト | リポスト | リノート |
+| Hosts | `x.com` / `twitter.com` | `bsky.app` | the instances you add |
+| Reaction count | Likes | Likes | Reactions (summed per emoji) |
+| Thresholds | Likes | Likes (shared with X) | Reactions (separate) |
+| Share exclusion | Reposts | Reposts | Renotes |
 
-Blueskyには次の制約があります。
+Bluesky limitations:
 
-- **対象はホーム、プロフィール、フィード、リスト、投稿詳細です。** 通知画面では、投稿の行だけを判定します（いいね通知・フォロー通知の行は対象外です）。
-- **検索結果は対象外です。** 検索結果の投稿だけは別の作りで描かれ、他の画面と同じ手がかりを持ちません。
-- **投稿時刻は投稿のURLから読み取ります。** Blueskyは投稿時刻を機械可読な形では書き出さず、画面に出るのは表示言語に合わせた文字列だけです。日本語表示ではブラウザがその文字列を解釈できないため、実際にはURLからの復元が常用されます。どちらも読めない場合は「上昇中」の判定だけを行わず、通常の判定は動かします。
-- **リポストかどうかは、画面上の文言ではなく作りで判定します。** 「◯◯がリポスト」という表示は言語ごとに変わるためです。Bluesky側でこの部分の作りが変わると、リポストの除外が効かなくなる可能性があります。
+- Covered: home, profiles, feeds, lists, and post detail pages. On the notifications screen only post rows are evaluated.
+- Search results are not covered — they alone are rendered differently from every other screen.
+- Post times are read from the post URL. When that fails, only the "rising" check is skipped; normal filtering still runs.
+- Reposts are detected by structure, not by the on-screen label. If Bluesky changes that structure, repost exclusion may stop working.
 
-### Misskeyインスタンスの追加
+### Adding Misskey instances
 
-Misskeyは分散型で使うインスタンスが利用者ごとに違うため、全サイトへ常時アクセスするのではなく、追加したインスタンスだけへアクセスします。
+Because every Misskey user is on a different instance, Sift only accesses the instances you add. In the settings page opened from the extension icon, enter a host name (e.g. `misskey.io`); Chrome shows a permission dialog for that host only, and the content script is loaded only if you grant it. Removing an instance drops both the content-script registration and the host permission. A host that turns out not to be Misskey is left alone — the page has to say it is Misskey before Sift reads it as one.
 
-拡張機能のアイコンから開く設定画面で、ホスト名（例: `misskey.io`）を入力して追加します。追加するとChromeの権限ダイアログが出て、**そのホストだけ**へのアクセス許可を確認します。許可した場合にだけ、そのホストへcontent scriptを読み込みます。
+Misskey limitations. **A Misskey page carries almost nothing to hold on to:** its class names are generated afresh in every build, so Sift reads notes by their shape. A fork or a version whose shape differs is a page Sift can misread.
 
-- 削除すると、content scriptの登録とホストへのアクセス許可の両方を外します。
-- `chrome://extensions`の権限画面から直接アクセスを外した場合も、登録は残りません。
-- 追加したホストがMisskeyでなかった場合、Siftは何もしません。判定に入る前に、そのページがMisskeyであることを確かめます。
+- **Reaction counts are the sum of the per-emoji chips**, because no total is drawn (the total is a Misskey setting, off by default). **The chips stop at 16 emoji**, so a note reacted to with more kinds than that reads lower than it is — 1-3% of media-bearing notes, measured.
+- **Post times are read from the localized text on screen**, since Misskey writes no machine-readable time. Japanese and English pages read; for a language that does not, only the "rising" check is skipped and normal filtering still runs.
+- **Renotes are excluded, quote renotes are not** — a quote carries its author's own text and counts as their post.
+- **Media means images and videos**, once avatars, custom emoji and role badges are excluded. An attachment held behind a click (sensitive media, the data saver) counts as media.
 
-Misskeyには次の制約があります。**Misskeyの画面は、判定に使える目印をほとんど持ちません。** クラス名はビルドごとに変わる自動生成の名前で、Sift側は要素の並びから読み取っています。インスタンスのフォークやバージョンによっては、この読み取りが合わなくなることがあります。
+## Development
 
-- **リアクション数は絵文字ごとのチップを合計します。** 画面に総数が出ないためです（総数表示はMisskey側の設定で、初期値は非表示）。**チップの表示は16種類で打ち切られる**ので、17種類以上のリアクションが付いたノートは実際より少なく見積もります。実測では、メディア付きノートの1〜3%がこれに当たります。
-- **投稿時刻は表示言語に合わせた文字列から読み取ります。** Misskeyは投稿時刻を機械可読な形では書き出しません。日本語や英語の表示では読めますが、読めない言語では「上昇中」の判定だけを行わず、通常の判定は動かします。
-- **リノートは除外し、引用リノートは除外しません。** 引用は本文を伴う別の投稿として扱います。
-- **メディアの有無は、アバター・カスタム絵文字・ロールバッジを除いた画像と動画で判定します。** 閲覧注意などで画面上に出ていない添付は、「メディアあり」として扱います。
-
-## 開発
-
-**開発は日常のChromeとは別のプロファイルで行います。** 日常のChromeには検証済みのreleaseだけを載せ、開発中のビルドは専用プロファイルの側だけで動かします。分けてあるので、保存のたびに日常のXタブが再読み込みされることはなく、開発サーバーが落ちていても日常の拡張は動き続けます。
-
-### 開発サーバー
-
-```powershell
-npm run dev
-```
-
-開発ビルドの出力先は `~\.sift-dev\chrome-mv3-dev` です。**ツリーの外に固定**してあるので、どのworktreeから起こしても同じ場所に出ます。開発プロファイルは一度読み込んだフォルダを覚えるため、作業する場所を変えても読み込み直す必要がありません。
-
-開発サーバーは `127.0.0.1:51732` だけで待ち受けます。ポートが使用中でも別のポートへは移らず失敗します。拡張がこのアドレス向けにビルドされている以上、参照先が動いてはいけないためです。同時に起こせる開発サーバーは1つだけです。
-
-保存した変更は、拡張の再読み込みと開いているタブの再読み込みを伴って反映されます。`chrome://extensions` を手で押す必要はありません。
-
-### 開発ビルドと開発サーバーのつながり
-
-**開発ビルドのcontent scriptは、manifestに載っていません。** WXTのdevモードはファイルだけを作り、service workerが開発サーバーへWebSocketで接続した後に `chrome.scripting.registerContentScripts()` で登録します。**つながっていないworkerは、content scriptが存在しないのと同じ**です。ページを開いても拡張は1行も動きません。
-
-WXTが張るソケットはworkerの起動時に1回だけで、張り直しません。そのため次の2つでつながりが切れたままになります。
-
-- 開発サーバーより先にブラウザが起きていた
-- 開発サーバーを起こし直した
-
-**開発ビルドはこの状態を自分で検出して抜けます。** workerが5秒ごとに開発サーバーへ問い合わせ、「起動時に見たサーバー」と違うもの（または登録が無い状態）を見つけたら `chrome.runtime.reload()` で自分を起動し直します。同じサーバー世代に対して試すのは1回だけです。
-
-**ビルドが書き終わるまでは起動し直しません。** 開発サーバーは起動時に出力フォルダを作り直すため、その間フォルダは空です。**空のフォルダへunpacked拡張をリロードすると、Chromeは待たずに失敗し、拡張を読み込み解除してダイアログを出します。** サーバーは問い合わせに「ビルドが置かれているか」を添えて答え、workerはそれまで待ちます。
-
-**Chromeの外から状態を読めます。** `~\.sift\extension-errors.log` に `"kind":"dev-link"` の行が出ます。
-
-- `development link: linked` — つながっていて登録もある
-- `development link: building` — サーバーは居るがビルドがまだ置かれていない
-- `development link: reload` — つながりを取り戻すために自分を起動し直した
-- `content script started on <URL>` — そのページにcontent scriptが実際に入った
-- `filter pass: <n> hit, <n> rising, <n> hidden, toolbar mounted` — 最初の判定が通り、ツールバーが出た
-
-**開発サーバーが落ちている間は何も出ません。** このログを書く先がその開発サーバーだからです。開発サーバーを起こし直したときの復帰は、次のように残ります。
-
-```
-development link: linked      … 正常
-development link: building    … サーバーは戻ったがビルドはまだ（ここで待つ）
-development link: reload      … ビルドが揃ったので自分を起動し直す
-development link: adopt       … 新しいサーバーにつながった
-development link: linked      … content scriptの登録も戻った
-```
-
-このログはdevelopmentビルドだけが書きます。ブラウザを見なくても「拡張がページに入ったか」を確かめられるのは、いまのところこの経路だけです。
-
-### 開発プロファイル
-
-```powershell
-npm run dev:browser
-```
-
-専用の `--user-data-dir` でChromeを開きます。日常のChromeとは別プロセスで、並べて使えます。
-
-初回だけ、開いたChromeで `chrome://extensions` → デベロッパー モード → 「パッケージ化されていない拡張機能を読み込む」→ `~\.sift-dev\chrome-mv3-dev` を選びます。以後はプロファイルが覚えます。Xへのログインも初回に行います。
-
-**手で操作するのはここだけです。** ただしservice workerの中身を差し替えたときは、いま動いているworkerが古いままなので、`chrome://extensions` のリロード（または開発プロファイルのウィンドウで `Alt+R`）を1回だけ押します。unpacked拡張のファイルをChromeが自分で読み直すことはありません。
-
-**このビルドを日常のプロファイルへ読み込まないでください。** developmentとreleaseは同じ拡張IDを持つため、同じプロファイルには同居できません。
-
-パスの確認だけしたいときは `node scripts/dev-browser.ts --print` を使います。ウィンドウを開かずに解決結果を表示します。
-
-### 日常Chromeへの反映
-
-mainへマージすると `post-merge` フックが `npm run deploy` を走らせ、検証済みのreleaseを `.output\chrome-mv3` へファイル単位で差し替えます。フックは `npm install` が設定します（`scripts/setup.ts` が `core.hooksPath` を `.githooks` に向けます）。手で走らせることもできます。
-
-```powershell
-npm run deploy
-```
-
-**Chromeはunpacked拡張のファイルが変わっても自分では読み直しません。** 差し替えた版が動き出すのは、次にChromeを起動したときか、`chrome://extensions` でリロードを押したときです。
-
-ビルドの検証を通らなかったときは差し替えを行いません。日常のChromeは前に配備した版のまま動き続けます。
-
-リンクされたworktreeでは差し替えを行いません。worktreeの `.output` はどのブラウザも読み込んでいないためです。
-
-### 未捕捉例外の記録
-
-拡張が投げた例外のうちコードが受け止めそこねたものは、Chromeの `chrome://extensions` のエラー欄にしか残らず、ブラウザの外からは読めません。そこで拡張自身が例外を捕まえ、`chrome.storage.local` の環状バッファ（新しい50件）へ書きます。
-
-**捕まえる側はreleaseにも入っています。** 日常のChromeで踏んだ例外もバッファには残ります。**開発サーバーへ送る側はdevelopmentビルドだけ**で、動いている間はservice workerがバッファをサーバーへ送り、`~\.sift\extension-errors.log` へ1行1件のJSONで追記します。落ちた原因を後から調べるときはこのファイルを読みます。
-
-日常側のバッファを読み出す口はまだありません。日常で踏んだ例外を機械的に集めたくなったら、そのときに作ります。
-
-content scriptはX自身の例外と同じwindowに載るため、発生元が拡張のものだと分かる例外だけを記録します。popupとservice workerは全件を記録します。
-
-### ビルドとテスト
-
-```powershell
-npm run build
-```
-
-`.output\chrome-mv3-release` に出力し、生成manifestと `manifest.legacy.json` の権限・対象ホスト・content script設定を比較します。日常の読み込み先（`.output\chrome-mv3`）はここでは書き換わりません。そこへ入るのは `npm run deploy` を通った版だけです。
-
-```powershell
-npm test
-```
-
-判定ロジックとエラーログの単体テストを実行します。
+Dev environment, builds, and tests are documented in [docs/development.md](docs/development.md).
