@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Sift",
   "version": "0.1.0",
-  "description": "XとBlueskyの投稿画面を、メディア・いいね数・投稿後の時間で絞り込みます。",
+  "description": "X・Bluesky・Misskeyの投稿画面を、メディア・反応の数・投稿後の時間で絞り込みます。",
   "permissions": ["storage", "scripting"],
   "optional_host_permissions": ["https://*/*"],
   "action": {

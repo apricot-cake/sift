@@ -93,7 +93,7 @@ export default defineConfig({
     key: "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA7HRMGxpsFxVmyHkVNzHAtaSVuu6vJVFCC0gSSYBT9t31XfT68U7NYyn15N3rLuvZRhRAXYBgZiouzH619jVc2lbHGRzRUPYjm8o0XW70TW6NB+g7P510902pHXw1TmcrN9wqFfFsFhV50DObPKfY+GYfgNzWo+A4raQ4+sCQaCv9TNR78CU2HAi81oGJthhxPYRfdZdqLiZ7FWSnz+Nv9Ie0Q0RAn6W21ekSRpN6wfJf4AjgBe5sj3zRRTGH6CcUSvfUehjKjSbsS5KX5OhL4KWsio4GYRmUZa3SJxWexZN3kLSo4ugA+0AaT0rFjLTZhxOl/ULBeMvBvnnZ+xEqyQIDAQAB",
     name: "Sift",
     description:
-      "XとBlueskyの投稿画面を、メディア・いいね数・投稿後の時間で絞り込みます。",
+      "X・Bluesky・Misskeyの投稿画面を、メディア・反応の数・投稿後の時間で絞り込みます。",
     // `scripting` is also what WXT's dev mode adds on its own to register
     // content scripts — declaring it here is no longer dev-only, since a
     // release build now registers Misskey instances the reader adds the same

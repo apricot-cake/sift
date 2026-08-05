@@ -8,7 +8,13 @@ import {
   type ClassifyState
 } from "../../utils/filter-core.ts";
 import { CONTENT_RUNTIME_KEY } from "../../utils/runtime-key.ts";
-import { defaults, normalizeSettings, type Settings } from "../../utils/settings.ts";
+import {
+  defaults,
+  normalizeSettings,
+  thresholdsFor,
+  type Settings,
+  type ThresholdKey
+} from "../../utils/settings.ts";
 import { SITE_MATCHES } from "../../utils/site-matches.ts";
 import "./style.css";
 
@@ -131,7 +137,9 @@ export function startContentRuntime(maybeAdapter: ServiceAdapter | null) {
             createdAtMs: adapter.readCreatedAt(postCard),
             isRepost: adapter.readIsRepost(postCard)
           },
-          settings
+          // Which numbers those counts are compared against is the service's,
+          // not this loop's: Misskey's reactions have their own pair.
+          thresholdsFor(settings, adapter.thresholdKeys)
         );
 
         setCellState(cell, result.state, result.reason);
@@ -175,7 +183,15 @@ export function startContentRuntime(maybeAdapter: ServiceAdapter | null) {
       chrome.storage.sync.set(nextSettings);
     }
 
+    // How far one press of a threshold input's arrow moves it. Derived from
+    // that threshold's own default so it stays proportional to the service's
+    // scale: X counts likes in the hundreds, Misskey reactions in the tens.
+    function thresholdStep(key: ThresholdKey): number {
+      return Math.max(1, Math.round(defaults[key] / 10));
+    }
+
     function toolbarMarkup(): string {
+      const { minReactions, risingMinReactions } = adapter.thresholdKeys;
       return `
         <style>
           :host {
@@ -222,9 +238,9 @@ export function startContentRuntime(maybeAdapter: ServiceAdapter | null) {
         </style>
         <div class="panel" data-role="panel" role="dialog" aria-label="Siftの設定" hidden>
           <div class="panel-header"><strong>フィルター設定</strong><span>自動保存</span></div>
-          <label>通常の最低${adapter.reactionLabel}数<input data-setting="minLikes" type="number" min="0" step="50"></label>
+          <label>通常の最低${adapter.reactionLabel}数<input data-setting="${minReactions}" type="number" min="0" step="${thresholdStep(minReactions)}"></label>
           <label>上昇中を表示<input data-setting="risingEnabled" type="checkbox"></label>
-          <label>上昇中の最低${adapter.reactionLabel}数<input data-setting="risingMinLikes" type="number" min="0" step="10"></label>
+          <label>上昇中の最低${adapter.reactionLabel}数<input data-setting="${risingMinReactions}" type="number" min="0" step="${thresholdStep(risingMinReactions)}"></label>
           <label>投稿後の時間<span class="input-with-unit"><input data-setting="risingMaxAgeHours" type="number" min="1" max="168">時間</span></label>
           <label>メディア<select data-setting="mediaMode"><option value="any">画像・動画</option><option value="images">画像のみ</option></select></label>
           <label>リポストを除外<input data-setting="hideReposts" type="checkbox"></label>
@@ -415,7 +431,10 @@ export default defineContentScript({
     >;
     runtimeGlobal[runtimeSymbol]?.dispose();
     runtimeGlobal[runtimeSymbol] = startContentRuntime(
-      selectAdapter(location.hostname)
+      // The page itself, not only its host: a host Sift was not built for is
+      // one the reader added as a Misskey instance, and the page is what
+      // confirms it (utils/adapters/index.ts).
+      selectAdapter(location.hostname, document)
     );
 
     // Tell the development worker this page got the script. It is the one piece

@@ -2,6 +2,7 @@
 // which element is a post, and where each classification input is written. The
 // classification itself lives in filter-core.ts and is shared by every service.
 import { parseMetric } from "../filter-core.ts";
+import { LIKE_THRESHOLDS } from "../settings.ts";
 import type { ServiceAdapter } from "./types.ts";
 
 // Named so a test can build a fake node keyed by the same selectors the adapter
@@ -89,6 +90,7 @@ export const blueskyAdapter = Object.freeze({
   // The word this service uses for the reaction the thresholds count. Same
   // reaction as X's, so the two share the thresholds as well.
   reactionLabel: "いいね",
+  thresholdKeys: LIKE_THRESHOLDS,
 
   getPostCards(root: ParentNode) {
     return readablePostCards(root);
