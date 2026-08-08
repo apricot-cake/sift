@@ -1,4 +1,5 @@
 import { browser } from "wxt/browser";
+import { storage } from "wxt/utils/storage";
 import {
   DEV_CONTENT_STARTED,
   DEV_FILTER_PASS,
@@ -14,7 +15,7 @@ import {
 } from "../utils/dev-server.ts";
 import { drainErrorLog } from "../utils/error-drain.ts";
 import {
-  ERROR_LOG_KEY,
+  errorLogItem,
   startUncaughtReporting,
   type ErrorLogEntry
 } from "../utils/error-log.ts";
@@ -65,6 +66,13 @@ import { instanceStorage } from "../utils/settings-storage.ts";
 // it is. Matches the interval WXT already uses to keep this worker alive, so it
 // adds no wake-ups of its own.
 const DEV_LINK_INTERVAL_MS = 5000;
+
+// Which server generation this worker already reloaded itself for. Session
+// storage, so it outlives the reload it records and is gone by the next browser
+// session — one reload per generation, and a clean slate after a restart.
+const devLinkReloadItem = storage.defineItem<string>(
+  `session:${DEV_LINK_RELOAD_KEY}`
+);
 
 export default defineBackground(() => {
   const instanceDeps: InstanceDeps = {
@@ -123,11 +131,9 @@ export default defineBackground(() => {
   };
 
   const requestErrorLogDrain = () => {
-    void drainErrorLog({ storage: browser.storage, post: postEntries }).catch(
-      () => {
-        // The development server may be down. The entries stay in the buffer.
-      }
-    );
+    void drainErrorLog({ post: postEntries }).catch(() => {
+      // The development server may be down. The entries stay in the buffer.
+    });
   };
 
   // Development notes go to the same file as the exceptions, so one `tail` shows
@@ -145,10 +151,9 @@ export default defineBackground(() => {
     ]).catch(() => {});
   };
 
-  browser.storage.onChanged.addListener((changes, areaName) => {
-    if (areaName === "local" && ERROR_LOG_KEY in changes) {
-      requestErrorLogDrain();
-    }
+  // Anything written to the buffer, from any surface, is a reason to forward it.
+  errorLogItem.watch(() => {
+    requestErrorLogDrain();
   });
   requestErrorLogDrain();
 
@@ -198,23 +203,21 @@ export default defineBackground(() => {
 
   const checkDevLink = async () => {
     const probe = await probeDevServer();
-    const [registered, stored] = await Promise.all([
+    const [registered, reloadedForBoot] = await Promise.all([
       probe == null
         ? Promise.resolve([])
         : browser.scripting.getRegisteredContentScripts(),
-      browser.storage.session.get(DEV_LINK_RELOAD_KEY)
+      devLinkReloadItem.getValue()
     ]);
 
     const boot = probe?.boot ?? null;
-    const reloadedForBootRaw = stored[DEV_LINK_RELOAD_KEY];
     const action = decideDevLinkAction({
       boot,
       ready: probe?.ready === true,
       isFirstProbe,
       bootAtStart,
       registeredCount: registered.length,
-      reloadedForBoot:
-        typeof reloadedForBootRaw === "string" ? reloadedForBootRaw : undefined
+      reloadedForBoot: reloadedForBoot ?? undefined
     });
     // A server that has not written its build yet tells us nothing about
     // whether this worker is attached, so the first probe stays unspent.
@@ -233,7 +236,12 @@ export default defineBackground(() => {
       note(`development link: ${action} (${registered.length} registered)`);
     }
     if (action === "reload") {
-      await browser.storage.session.set({ [DEV_LINK_RELOAD_KEY]: boot });
+      // decideDevLinkAction() answers "server-down" before it ever answers
+      // "reload" while boot is null, so this check satisfies the type rather
+      // than a case that arises.
+      if (boot !== null) {
+        await devLinkReloadItem.setValue(boot);
+      }
       browser.runtime.reload();
     }
   };

@@ -1,10 +1,10 @@
-import { describe, expect, it } from "vitest";
-import { createFakeStorageArea } from "../test/storage.ts";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { fakeBrowser } from "wxt/testing/fake-browser";
 import {
   appendErrorEntry,
   collectUndrainedEntries,
   describeUncaughtEvent,
-  ERROR_LOG_KEY,
+  errorLogItem,
   installUncaughtReporting,
   isOwnExtensionError,
   recordErrorEntry,
@@ -204,13 +204,16 @@ describe("collectUndrainedEntries", () => {
 });
 
 describe("recordErrorEntry", () => {
+  beforeEach(() => {
+    fakeBrowser.reset();
+    vi.restoreAllMocks();
+  });
+
   it("appends to the buffer in storage", async () => {
-    const storage = createFakeStorageArea();
+    await recordErrorEntry({ source: "content", message: "first" });
+    await recordErrorEntry({ source: "popup", message: "second" });
 
-    await recordErrorEntry(storage, { source: "content", message: "first" });
-    await recordErrorEntry(storage, { source: "popup", message: "second" });
-
-    expect(storage.state[ERROR_LOG_KEY]).toEqual([
+    expect(await errorLogItem.getValue()).toEqual([
       { source: "content", message: "first", seq: 1 },
       { source: "popup", message: "second", seq: 2 }
     ]);
@@ -220,14 +223,11 @@ describe("recordErrorEntry", () => {
   // context, and every storage call from then on throws. Recording an error
   // must not become an error.
   it("swallows a storage that is gone", async () => {
-    const brokenStorage = {
-      async get() {
-        throw new Error("Extension context invalidated.");
-      },
-      async set() {}
-    };
+    vi.spyOn(errorLogItem, "getValue").mockRejectedValue(
+      new Error("Extension context invalidated.")
+    );
 
-    await expect(recordErrorEntry(brokenStorage, { source: "content" })).resolves.not.toThrow();
+    await expect(recordErrorEntry({ source: "content" })).resolves.toBeUndefined();
   });
 });
 
