@@ -1621,8 +1621,24 @@ assert.equal(
   for (const state of ["hit", "rising"]) {
     assert.match(
       contentStyles,
-      new RegExp(`\\[data-xif-filter-state="${state}"\\]\\s*\\{`),
+      new RegExp(`\\[data-sift-filter-state="${state}"\\]\\s*\\{`),
       `entrypoints/content/style.css has no rule matching the ${state} cell itself`
+    );
+  }
+
+  // The extension was renamed to Sift long before this file existed, and the
+  // attributes and class names the content script writes onto the page were the
+  // last place the old prefix survived. They are a public surface — a reader's
+  // own CSS, and any other extension on the same page, can see them — so the
+  // old name must not come back through a copied line.
+  for (const source of [
+    "./entrypoints/content/style.css",
+    "./entrypoints/content/index.ts"
+  ]) {
+    assert.equal(
+      readFileSync(new URL(source, import.meta.url), "utf8").includes("xif"),
+      false,
+      `${source} still writes the extension's old name onto the page`
     );
   }
 }

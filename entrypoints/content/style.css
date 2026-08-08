@@ -1,6 +1,6 @@
-[data-xif-filter-state="hidden"] { display: none !important; }
+[data-sift-filter-state="hidden"] { display: none !important; }
 
-body.xif-show-all [data-xif-filter-state="hidden"] {
+body.sift-show-all [data-sift-filter-state="hidden"] {
   display: block !important;
   opacity: 0.35 !important;
 }
@@ -10,15 +10,15 @@ body.xif-show-all [data-xif-filter-state="hidden"] {
    service's post card here would draw the line on that service only, and would
    put page structure back into the CSS that the adapters were split out to
    hold. */
-[data-xif-filter-state="hit"] {
+[data-sift-filter-state="hit"] {
   box-shadow: inset 3px 0 0 rgb(37, 99, 235);
 }
 
-[data-xif-filter-state="rising"] {
+[data-sift-filter-state="rising"] {
   box-shadow: inset 3px 0 0 rgb(217, 119, 6);
 }
 
-#xif-toolbar-host {
+#sift-toolbar-host {
   bottom: 18px;
   position: fixed;
   right: 18px;
