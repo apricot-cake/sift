@@ -18,7 +18,10 @@ body.sift-show-all [data-sift-filter-state="hidden"] {
   box-shadow: inset 3px 0 0 rgb(217, 119, 6);
 }
 
-#sift-toolbar-host {
+/* The element WXT hosts the toolbar's shadow root on. Where it sits has to be
+   said out here: everything inside that shadow root is isolated from the page,
+   which is the point of it, and cannot place its own host. */
+sift-toolbar {
   bottom: 18px;
   position: fixed;
   right: 18px;

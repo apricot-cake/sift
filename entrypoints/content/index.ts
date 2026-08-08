@@ -1,4 +1,9 @@
 import { browser } from "wxt/browser";
+import type { ContentScriptContext } from "wxt/utils/content-script-context";
+import {
+  createShadowRootUi,
+  type ShadowRootContentScriptUi
+} from "wxt/utils/content-script-ui/shadow-root";
 import { selectAdapter } from "../../utils/adapters/index.ts";
 import type { ServiceAdapter } from "../../utils/adapters/types.ts";
 import { DEV_CONTENT_STARTED, DEV_FILTER_PASS } from "../../utils/dev-link.ts";
@@ -20,7 +25,63 @@ import {
 import { SITE_MATCHES } from "../../utils/site-matches.ts";
 import "./style.css";
 
-export function startContentRuntime(maybeAdapter: ServiceAdapter | null) {
+// The custom element WXT hosts the shadow root on. Kebab-case is required, and
+// entrypoints/content/style.css is what places it on the page — everything
+// below this line is inside the shadow root and cannot reach out.
+const TOOLBAR_TAG = "sift-toolbar";
+
+// The toolbar's own styles, isolated by the shadow root. Passed to WXT rather
+// than written into the markup so the two stay separable, and kept out of
+// entrypoints/content/style.css because that stylesheet is injected into the
+// page itself, where none of this should reach.
+const TOOLBAR_CSS = `
+  :host {
+    color-scheme: light dark;
+    font-family: "Segoe UI Variable", "Segoe UI", system-ui, sans-serif;
+    --accent: #0f6cbd;
+    --background: #ffffff;
+    --border: #d1d5db;
+    --control-background: #ffffff;
+    --foreground: #1f2328;
+    --muted: #656d76;
+    --subtle-background: #f6f8fa;
+  }
+  @media (prefers-color-scheme: dark) {
+    :host {
+      --accent: #4c9ee8;
+      --background: #202020;
+      --border: #484848;
+      --control-background: #292929;
+      --foreground: #f3f3f3;
+      --muted: #b7b7b7;
+      --subtle-background: #2b2b2b;
+    }
+  }
+  * { box-sizing: border-box; }
+  .toolbar { align-items: center; background: var(--background); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 4px 14px rgb(0 0 0 / 18%); color: var(--foreground); display: flex; gap: 6px; padding: 7px; }
+  button { background: var(--control-background); border: 1px solid var(--border); border-radius: 6px; color: inherit; cursor: pointer; font: inherit; font-size: 12px; font-weight: 600; min-height: 30px; padding: 5px 9px; white-space: nowrap; }
+  button:hover { background: var(--subtle-background); }
+  button:focus-visible, input:focus-visible, select:focus-visible { border-color: var(--accent); outline: 2px solid color-mix(in srgb, var(--accent) 40%, transparent); outline-offset: 1px; }
+  button[data-active="true"] { background: var(--accent); border-color: var(--accent); color: #ffffff; }
+  .status { font-size: 12px; font-variant-numeric: tabular-nums; padding: 0 4px; white-space: nowrap; }
+  .panel { background: var(--background); border: 1px solid var(--border); border-radius: 8px; bottom: 48px; box-shadow: 0 8px 24px rgb(0 0 0 / 22%); color: var(--foreground); min-width: 292px; padding: 14px; position: absolute; right: 0; }
+  .panel[hidden] { display: none; }
+  .panel-header { align-items: baseline; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; margin-bottom: 7px; padding-bottom: 10px; }
+  .panel-header strong { font-size: 14px; font-weight: 600; }
+  .panel-header span { color: var(--muted); font-size: 11px; }
+  label { align-items: center; display: flex; font-size: 13px; gap: 12px; justify-content: space-between; min-height: 36px; }
+  input, select { font: inherit; }
+  input[type="checkbox"] { accent-color: var(--accent); height: 17px; width: 17px; }
+  input[type="number"], select { background: var(--control-background); border: 1px solid var(--border); border-radius: 6px; color: var(--foreground); height: 30px; padding: 4px 7px; width: 96px; }
+  .input-with-unit { align-items: center; color: var(--muted); display: flex; font-size: 11px; gap: 5px; }
+  .input-with-unit input { width: 66px; }
+  .hint { border-top: 1px solid var(--border); color: var(--muted); font-size: 11px; line-height: 1.45; margin: 8px 0 0; padding-top: 10px; }
+`;
+
+export function startContentRuntime(
+  ctx: ContentScriptContext,
+  maybeAdapter: ServiceAdapter | null
+) {
     // Nothing to read here. The runtime still answers dispose() so the caller
     // does not have to know whether it started.
     if (!maybeAdapter) {
@@ -30,8 +91,6 @@ export function startContentRuntime(maybeAdapter: ServiceAdapter | null) {
     // below keep the non-null narrowing — TS does not carry a parameter's
     // narrowing into hoisted function declarations on its own.
     const adapter = maybeAdapter;
-
-    const toolbarHostId = "sift-toolbar-host";
 
     // Tied to the runtime's life rather than the world's: the injection that
     // replaces this script disposes the previous runtime first, so there is no
@@ -49,9 +108,21 @@ export function startContentRuntime(maybeAdapter: ServiceAdapter | null) {
     let routeTimer: number | null = null;
     let filterFrame: number | null = null;
     let showAllTemporarily = false;
-    let shadowRoot: ShadowRoot | null = null;
+    // WXT builds the host element, the shadow root and the container inside it.
+    // `toolbar` is that UI once it exists — it is built asynchronously, so the
+    // first filter passes can run before there is anything to mount.
+    let toolbar: ShadowRootContentScriptUi<void> | null = null;
+    let toolbarMounted = false;
     let disposed = false;
     let reportedFilterPass = false;
+
+    // Where the toolbar's own elements are, while it is on screen. Everything
+    // that reads or writes them goes through here rather than holding on to a
+    // container across a mount: WXT empties it on remove and fills a fresh one
+    // on the next mount.
+    function toolbarRoot(): ParentNode | null {
+      return toolbarMounted && toolbar ? toolbar.uiContainer : null;
+    }
 
     // Which of image and video counts as media is the reader's setting, so the
     // two arrive separately from the adapter and are folded together here.
@@ -79,17 +150,14 @@ export function startContentRuntime(maybeAdapter: ServiceAdapter | null) {
       rising: number;
       hidden: number;
     }): void {
-      if (!shadowRoot) {
+      const root = toolbarRoot();
+      if (!root) {
         return;
       }
 
-      const status = shadowRoot.querySelector<HTMLElement>('[data-role="status"]');
-      const toggle = shadowRoot.querySelector<HTMLElement>(
-        '[data-action="toggle-enabled"]'
-      );
-      const reveal = shadowRoot.querySelector<HTMLElement>(
-        '[data-action="toggle-show-all"]'
-      );
+      const status = root.querySelector<HTMLElement>('[data-role="status"]');
+      const toggle = root.querySelector<HTMLElement>('[data-action="toggle-enabled"]');
+      const reveal = root.querySelector<HTMLElement>('[data-action="toggle-show-all"]');
 
       if (status) {
         status.textContent = settings.enabled
@@ -158,7 +226,7 @@ export function startContentRuntime(maybeAdapter: ServiceAdapter | null) {
           .sendMessage({
             type: DEV_FILTER_PASS,
             counts,
-            toolbar: shadowRoot !== null
+            toolbar: toolbarMounted
           })
           .catch(() => {});
       }
@@ -199,49 +267,6 @@ export function startContentRuntime(maybeAdapter: ServiceAdapter | null) {
     function toolbarMarkup(): string {
       const { minReactions, risingMinReactions } = adapter.thresholdKeys;
       return `
-        <style>
-          :host {
-            color-scheme: light dark;
-            font-family: "Segoe UI Variable", "Segoe UI", system-ui, sans-serif;
-            --accent: #0f6cbd;
-            --background: #ffffff;
-            --border: #d1d5db;
-            --control-background: #ffffff;
-            --foreground: #1f2328;
-            --muted: #656d76;
-            --subtle-background: #f6f8fa;
-          }
-          @media (prefers-color-scheme: dark) {
-            :host {
-              --accent: #4c9ee8;
-              --background: #202020;
-              --border: #484848;
-              --control-background: #292929;
-              --foreground: #f3f3f3;
-              --muted: #b7b7b7;
-              --subtle-background: #2b2b2b;
-            }
-          }
-          * { box-sizing: border-box; }
-          .toolbar { align-items: center; background: var(--background); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 4px 14px rgb(0 0 0 / 18%); color: var(--foreground); display: flex; gap: 6px; padding: 7px; }
-          button { background: var(--control-background); border: 1px solid var(--border); border-radius: 6px; color: inherit; cursor: pointer; font: inherit; font-size: 12px; font-weight: 600; min-height: 30px; padding: 5px 9px; white-space: nowrap; }
-          button:hover { background: var(--subtle-background); }
-          button:focus-visible, input:focus-visible, select:focus-visible { border-color: var(--accent); outline: 2px solid color-mix(in srgb, var(--accent) 40%, transparent); outline-offset: 1px; }
-          button[data-active="true"] { background: var(--accent); border-color: var(--accent); color: #ffffff; }
-          .status { font-size: 12px; font-variant-numeric: tabular-nums; padding: 0 4px; white-space: nowrap; }
-          .panel { background: var(--background); border: 1px solid var(--border); border-radius: 8px; bottom: 48px; box-shadow: 0 8px 24px rgb(0 0 0 / 22%); color: var(--foreground); min-width: 292px; padding: 14px; position: absolute; right: 0; }
-          .panel[hidden] { display: none; }
-          .panel-header { align-items: baseline; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; margin-bottom: 7px; padding-bottom: 10px; }
-          .panel-header strong { font-size: 14px; font-weight: 600; }
-          .panel-header span { color: var(--muted); font-size: 11px; }
-          label { align-items: center; display: flex; font-size: 13px; gap: 12px; justify-content: space-between; min-height: 36px; }
-          input, select { font: inherit; }
-          input[type="checkbox"] { accent-color: var(--accent); height: 17px; width: 17px; }
-          input[type="number"], select { background: var(--control-background); border: 1px solid var(--border); border-radius: 6px; color: var(--foreground); height: 30px; padding: 4px 7px; width: 96px; }
-          .input-with-unit { align-items: center; color: var(--muted); display: flex; font-size: 11px; gap: 5px; }
-          .input-with-unit input { width: 66px; }
-          .hint { border-top: 1px solid var(--border); color: var(--muted); font-size: 11px; line-height: 1.45; margin: 8px 0 0; padding-top: 10px; }
-        </style>
         <div class="panel" data-role="panel" role="dialog" aria-label="Siftの設定" hidden>
           <div class="panel-header"><strong>フィルター設定</strong><span>自動保存</span></div>
           <label>通常の最低${adapter.reactionLabel}数<input data-setting="${minReactions}" type="number" min="0" step="${thresholdStep(minReactions)}"></label>
@@ -258,12 +283,12 @@ export function startContentRuntime(maybeAdapter: ServiceAdapter | null) {
       `;
     }
 
-    function syncToolbarForm(): void {
-      if (!shadowRoot) {
+    function syncToolbarForm(root: ParentNode | null = toolbarRoot()): void {
+      if (!root) {
         return;
       }
 
-      for (const element of shadowRoot.querySelectorAll<
+      for (const element of root.querySelectorAll<
         HTMLInputElement | HTMLSelectElement
       >("[data-setting]")) {
         const key = element.dataset.setting as keyof Settings;
@@ -275,66 +300,60 @@ export function startContentRuntime(maybeAdapter: ServiceAdapter | null) {
       }
     }
 
-    function mountToolbar(): void {
+    function handleToolbarClick(event: Event): void {
+      const target = event.target as Element | null;
+      const button = target?.closest<HTMLElement>("button[data-action]");
+      if (!button) {
+        return;
+      }
+
+      if (button.dataset.action === "toggle-enabled") {
+        saveSettings({ enabled: !settings.enabled });
+      } else if (button.dataset.action === "toggle-show-all") {
+        showAllTemporarily = !showAllTemporarily;
+        scheduleFilter();
+      } else if (button.dataset.action === "toggle-panel") {
+        const panel = toolbarRoot()?.querySelector<HTMLElement>('[data-role="panel"]');
+        if (!panel) {
+          return;
+        }
+        panel.hidden = !panel.hidden;
+        button.setAttribute("aria-expanded", String(!panel.hidden));
+      }
+    }
+
+    function handleToolbarChange(event: Event): void {
+      const target = event.target as Element | null;
+      const element = target?.closest("[data-setting]");
       if (
-        disposed ||
-        !adapter.hasPostCards(document) ||
-        document.getElementById(toolbarHostId)
+        !element ||
+        !(element instanceof HTMLInputElement || element instanceof HTMLSelectElement)
       ) {
         return;
       }
 
-      const host = document.createElement("div");
-      host.id = toolbarHostId;
-      shadowRoot = host.attachShadow({ mode: "open" });
-      shadowRoot.innerHTML = toolbarMarkup();
-      document.body.append(host);
-      syncToolbarForm();
+      const value =
+        element instanceof HTMLInputElement && element.type === "checkbox"
+          ? element.checked
+          : element.value;
+      const key = element.dataset.setting as keyof Settings;
+      saveSettings({ [key]: value } as Partial<Settings>);
+    }
 
-      shadowRoot.addEventListener("click", (event) => {
-        const target = event.target as Element | null;
-        const button = target?.closest<HTMLElement>("button[data-action]");
-        if (!button) {
-          return;
-        }
+    function mountToolbar(): void {
+      if (disposed || toolbar === null || toolbarMounted || !adapter.hasPostCards(document)) {
+        return;
+      }
 
-        if (button.dataset.action === "toggle-enabled") {
-          saveSettings({ enabled: !settings.enabled });
-        } else if (button.dataset.action === "toggle-show-all") {
-          showAllTemporarily = !showAllTemporarily;
-          scheduleFilter();
-        } else if (button.dataset.action === "toggle-panel") {
-          const panel = shadowRoot?.querySelector<HTMLElement>('[data-role="panel"]');
-          if (!panel) {
-            return;
-          }
-          panel.hidden = !panel.hidden;
-          button.setAttribute("aria-expanded", String(!panel.hidden));
-        }
-      });
-
-      shadowRoot.addEventListener("change", (event) => {
-        const target = event.target as Element | null;
-        const element = target?.closest("[data-setting]");
-        if (
-          !element ||
-          !(element instanceof HTMLInputElement || element instanceof HTMLSelectElement)
-        ) {
-          return;
-        }
-
-        const value =
-          element instanceof HTMLInputElement && element.type === "checkbox"
-            ? element.checked
-            : element.value;
-        const key = element.dataset.setting as keyof Settings;
-        saveSettings({ [key]: value } as Partial<Settings>);
-      });
+      toolbar.mount();
+      toolbarMounted = true;
     }
 
     function unmountToolbar(): void {
-      document.getElementById(toolbarHostId)?.remove();
-      shadowRoot = null;
+      if (toolbarMounted) {
+        toolbar?.remove();
+        toolbarMounted = false;
+      }
       showAllTemporarily = false;
       clearAllFiltering();
     }
@@ -414,6 +433,36 @@ export function startContentRuntime(maybeAdapter: ServiceAdapter | null) {
         // defaults it started with stay in place and nothing else runs.
       });
 
+    // Built once, mounted and removed as the page gains and loses posts. The
+    // API is async — WXT fetches the stylesheet over the network when a content
+    // script hands its CSS over that way, which this one does not — so the first
+    // filter passes can run before there is a toolbar to show, and ask again
+    // here once there is.
+    void createShadowRootUi<void>(ctx, {
+      name: TOOLBAR_TAG,
+      position: "inline",
+      anchor: "body",
+      css: TOOLBAR_CSS,
+      onMount(container) {
+        container.innerHTML = toolbarMarkup();
+        syncToolbarForm(container);
+        container.addEventListener("click", handleToolbarClick);
+        container.addEventListener("change", handleToolbarChange);
+      }
+    })
+      .then((ui) => {
+        if (disposed) {
+          ui.remove();
+          return;
+        }
+        toolbar = ui;
+        scheduleFilter();
+      })
+      .catch(() => {
+        // Filtering runs without it; what is lost is the way to change the
+        // settings from the page itself.
+      });
+
     const unwatchSettings = settingsItem.watch(handleSettingsChange);
     window.addEventListener("pagehide", handlePageHide);
 
@@ -423,7 +472,7 @@ export function startContentRuntime(maybeAdapter: ServiceAdapter | null) {
 export default defineContentScript({
   matches: SITE_MATCHES,
   runAt: "document_idle",
-  main() {
+  main(ctx) {
     // A re-injection — WXT's dev mode injecting a fresh copy into a tab the
     // previous generation still holds — runs this file again in a realm that may
     // still carry the old listeners and DOM. The owner symbol is how the incoming
@@ -439,6 +488,9 @@ export default defineContentScript({
     >;
     runtimeGlobal[runtimeSymbol]?.dispose();
     runtimeGlobal[runtimeSymbol] = startContentRuntime(
+      // Everything WXT hangs off this injection: the toolbar's shadow root is
+      // built against it, so it comes down with the script that made it.
+      ctx,
       // The page itself, not only its host: a host Sift was not built for is
       // one the reader added as a Misskey instance, and the page is what
       // confirms it (utils/adapters/index.ts).
