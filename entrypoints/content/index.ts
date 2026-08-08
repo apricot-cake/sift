@@ -26,19 +26,33 @@ import { settingsItem } from "../../utils/settings-storage.ts";
 import { SITE_MATCHES } from "../../utils/site-matches.ts";
 import "./style.css";
 
-// The custom element WXT hosts the shadow root on. Kebab-case is required, and
-// entrypoints/content/style.css is what places it on the page — everything
-// below this line is inside the shadow root and cannot reach out.
+// The custom element WXT hosts the shadow root on. Kebab-case is required.
+// Everything below this line is inside that shadow root, TOOLBAR_CSS included —
+// which is where the host's own placement is written, since a rule out in
+// entrypoints/content/style.css loses to what WXT puts in here.
 const TOOLBAR_TAG = "sift-toolbar";
 
 // The toolbar's own styles, isolated by the shadow root. Passed to WXT rather
 // than written into the markup so the two stay separable, and kept out of
 // entrypoints/content/style.css because that stylesheet is injected into the
 // page itself, where none of this should reach.
+//
+// WHERE THE TOOLBAR SITS IS IN HERE, not in that stylesheet, and `all: initial`
+// is written out by hand rather than left to WXT. Left to itself WXT prepends
+// `:host{all:initial !important}` to this — and !important beats every
+// declaration below it, so the host lands back at `position: static` in the
+// page's flow, halfway down the timeline (measured 2026-08-08 on x.com/home).
+// `inheritStyles: true` is what turns that off. The reset is still wanted, and
+// still first: what it must not be is unbeatable by the rules right after it.
 const TOOLBAR_CSS = `
   :host {
+    all: initial;
+    bottom: 18px;
     color-scheme: light dark;
     font-family: "Segoe UI Variable", "Segoe UI", system-ui, sans-serif;
+    position: fixed;
+    right: 18px;
+    z-index: 2147483647;
     --accent: #0f6cbd;
     --background: #ffffff;
     --border: #d1d5db;
@@ -465,9 +479,17 @@ export function startContentRuntime(
   // here once there is.
   void createShadowRootUi<void>(ctx, {
     name: TOOLBAR_TAG,
+    // "inline" leaves WXT out of where this sits; TOOLBAR_CSS places it. The
+    // other two positions ("overlay", "modal") write inline styles onto the
+    // host and stretch a container across the viewport, which is a different
+    // thing from a box in one corner.
     position: "inline",
     anchor: "body",
     css: TOOLBAR_CSS,
+    // Stops WXT prepending `:host{all:initial !important}` — see TOOLBAR_CSS,
+    // which does the reset itself, without the !important that made every rule
+    // after it unreachable.
+    inheritStyles: true,
     onMount(container) {
       container.innerHTML = toolbarMarkup();
       syncToolbarForm(container);
