@@ -24,6 +24,7 @@ import {
   reconcileInstances,
   type InstanceDeps
 } from "../utils/instances.ts";
+import { instanceStorage } from "../utils/settings-storage.ts";
 
 // Three jobs share this file. Keeping Misskey instance registrations correct
 // runs in every build; forwarding the development error log and tracking the
@@ -69,7 +70,7 @@ export default defineBackground(() => {
   const instanceDeps: InstanceDeps = {
     permissions: browser.permissions,
     scripting: browser.scripting,
-    storage: browser.storage
+    storage: instanceStorage
   };
 
   // Repairs drift between settings and what Chrome actually still grants —

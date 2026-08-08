@@ -1,4 +1,4 @@
-import { browser, type Browser } from "wxt/browser";
+import { browser } from "wxt/browser";
 import { selectAdapter } from "../../utils/adapters/index.ts";
 import type { ServiceAdapter } from "../../utils/adapters/types.ts";
 import { DEV_CONTENT_STARTED, DEV_FILTER_PASS } from "../../utils/dev-link.ts";
@@ -9,6 +9,7 @@ import {
   type ClassifyState
 } from "../../utils/filter-core.ts";
 import { CONTENT_RUNTIME_KEY } from "../../utils/runtime-key.ts";
+import { settingsItem } from "../../utils/settings-storage.ts";
 import {
   defaults,
   normalizeSettings,
@@ -181,7 +182,11 @@ export function startContentRuntime(maybeAdapter: ServiceAdapter | null) {
 
     function saveSettings(partialSettings: Partial<Settings>): void {
       const nextSettings = normalizeSettings({ ...settings, ...partialSettings });
-      browser.storage.sync.set(nextSettings);
+      void settingsItem.setValue(nextSettings).catch(() => {
+        // Nowhere to report it from a content script, and the toolbar already
+        // shows the value the reader chose. The watch below re-reads whatever
+        // storage actually holds if the write did land after all.
+      });
     }
 
     // How far one press of a threshold input's arrow moves it. Derived from
@@ -342,19 +347,14 @@ export function startContentRuntime(maybeAdapter: ServiceAdapter | null) {
       }
     }
 
-    function handleStorageChange(
-      changes: { [key: string]: Browser.storage.StorageChange },
-      areaName: string
-    ): void {
-      if (disposed || areaName !== "sync") {
+    // The whole settings value, since it is stored as one — nothing to merge
+    // back into what this runtime already had.
+    function handleSettingsChange(storedSettings: Settings | null): void {
+      if (disposed) {
         return;
       }
 
-      const changedValues: Record<string, unknown> = {};
-      for (const [key, change] of Object.entries(changes)) {
-        changedValues[key] = change.newValue;
-      }
-      settings = normalizeSettings({ ...settings, ...changedValues });
+      settings = normalizeSettings(storedSettings);
       syncToolbarForm();
       scheduleFilter();
     }
@@ -378,7 +378,7 @@ export function startContentRuntime(maybeAdapter: ServiceAdapter | null) {
       window.removeEventListener("pagehide", handlePageHide);
       stopUncaughtReporting();
       try {
-        browser.storage.onChanged.removeListener(handleStorageChange);
+        unwatchSettings();
       } catch {
         // The extension context may already be invalidated.
       }
@@ -389,11 +389,8 @@ export function startContentRuntime(maybeAdapter: ServiceAdapter | null) {
       dispose();
     }
 
-    // The promise form rather than the callback one Chrome also accepts: the
-    // callback is Chrome's alone, and `browser` is the same promise API on every
-    // browser.
-    void browser.storage.sync
-      .get(defaults)
+    void settingsItem
+      .getValue()
       .then((storedSettings) => {
         if (disposed) {
           return;
@@ -417,7 +414,7 @@ export function startContentRuntime(maybeAdapter: ServiceAdapter | null) {
         // defaults it started with stay in place and nothing else runs.
       });
 
-    browser.storage.onChanged.addListener(handleStorageChange);
+    const unwatchSettings = settingsItem.watch(handleSettingsChange);
     window.addEventListener("pagehide", handlePageHide);
 
     return { dispose };

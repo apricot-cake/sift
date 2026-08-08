@@ -14,13 +14,9 @@
 // exist for it to select.
 //
 // Every function here takes the permissions/scripting/storage surfaces as
-// parameters, so tests can supply fakes instead of a real browser — the same
-// shape utils/error-drain.ts uses for storage.
+// parameters, so tests can supply fakes instead of a real browser.
 
 import type { Browser } from "wxt/browser";
-import type { ErrorLogStorage } from "./error-log.ts";
-
-export const MISSKEY_INSTANCES_KEY = "misskeyInstances";
 
 export const MISSKEY_CONTENT_SCRIPT_FILES = Object.freeze({
   js: Object.freeze(["content-scripts/content.js"]),
@@ -57,10 +53,19 @@ export interface InstanceScripting {
   getRegisteredContentScripts(): Promise<RegisteredContentScriptRef[]>;
 }
 
+// The host list, as the two operations this module performs on it. Narrower
+// than a storage area on purpose: where the list is actually kept is
+// utils/settings.ts's business (it is one field of the stored settings), and
+// nothing here needs to know.
+export interface InstanceStorage {
+  getInstances(): Promise<string[]>;
+  setInstances(hosts: string[]): Promise<void>;
+}
+
 export interface InstanceDeps {
   permissions: InstancePermissions;
   scripting: InstanceScripting;
-  storage: { sync: ErrorLogStorage };
+  storage: InstanceStorage;
 }
 
 export type AddInstanceResult =
@@ -139,15 +144,6 @@ function contentScriptDefinition(host: string): RegisteredContentScript {
   };
 }
 
-async function readInstances(storage: InstanceDeps["storage"]): Promise<string[]> {
-  const stored = await storage.sync.get(MISSKEY_INSTANCES_KEY);
-  const value = stored?.[MISSKEY_INSTANCES_KEY];
-  // Only this module ever writes this key, always as a list of hosts already
-  // validated by normalizeInstanceHost() — trusted rather than re-checked
-  // element by element on every read.
-  return Array.isArray(value) ? (value as string[]) : [];
-}
-
 // Requests the one origin the host needs and, only if the user grants it,
 // registers the content script and adds the host to storage. Must be called
 // from within a user gesture (a click handler) — browser.permissions.request()
@@ -162,7 +158,7 @@ export async function addInstance(
     return { added: false, reason: "invalid-host" };
   }
 
-  const instances = await readInstances(storage);
+  const instances = await storage.getInstances();
   if (instances.includes(normalizedHost)) {
     // Already added. Re-requesting would silently re-grant (Chrome does not
     // re-prompt for an origin already held) and re-registering would throw on
@@ -195,11 +191,9 @@ export async function addInstance(
     await scripting.registerContentScripts([contentScriptDefinition(normalizedHost)]);
   }
 
-  const current = await readInstances(storage);
+  const current = await storage.getInstances();
   if (!current.includes(normalizedHost)) {
-    await storage.sync.set({
-      [MISSKEY_INSTANCES_KEY]: [...current, normalizedHost]
-    });
+    await storage.setInstances([...current, normalizedHost]);
   }
 
   return { added: true };
@@ -219,10 +213,8 @@ export async function removeInstance(
     });
   await permissions.remove({ origins: [originForHost(host)] });
 
-  const instances = await readInstances(storage);
-  await storage.sync.set({
-    [MISSKEY_INSTANCES_KEY]: instances.filter((existing) => existing !== host)
-  });
+  const instances = await storage.getInstances();
+  await storage.setInstances(instances.filter((existing) => existing !== host));
 }
 
 // Wired to browser.permissions.onAdded in the background entrypoint. This is
@@ -243,7 +235,7 @@ export async function handlePermissionsAdded(
     return;
   }
 
-  const instances = await readInstances(storage);
+  const instances = await storage.getInstances();
   const registered = await scripting.getRegisteredContentScripts();
   const registeredIds = new Set(registered.map((script) => script.id));
 
@@ -262,7 +254,7 @@ export async function handlePermissionsAdded(
   }
 
   if (next.length !== instances.length) {
-    await storage.sync.set({ [MISSKEY_INSTANCES_KEY]: next });
+    await storage.setInstances(next);
   }
 }
 
@@ -280,7 +272,7 @@ export async function handlePermissionsRemoved(
     return;
   }
 
-  const instances = await readInstances(storage);
+  const instances = await storage.getInstances();
   const removedHosts = instances.filter((host) =>
     removedOrigins.has(originForHost(host))
   );
@@ -294,11 +286,9 @@ export async function handlePermissionsRemoved(
       // Already unregistered.
     });
 
-  await storage.sync.set({
-    [MISSKEY_INSTANCES_KEY]: instances.filter(
-      (host) => !removedHosts.includes(host)
-    )
-  });
+  await storage.setInstances(
+    instances.filter((host) => !removedHosts.includes(host))
+  );
 }
 
 // Brings the registration set back in line with both storage and the
@@ -312,7 +302,7 @@ export async function reconcileInstances({
   scripting,
   storage
 }: InstanceDeps): Promise<void> {
-  const instances = await readInstances(storage);
+  const instances = await storage.getInstances();
   const registered = await scripting.getRegisteredContentScripts();
   const registeredIds = new Set(registered.map((script) => script.id));
 
@@ -355,6 +345,6 @@ export async function reconcileInstances({
     await scripting.unregisterContentScripts({ ids: idsToUnregister });
   }
   if (kept.length !== instances.length) {
-    await storage.sync.set({ [MISSKEY_INSTANCES_KEY]: kept });
+    await storage.setInstances(kept);
   }
 }

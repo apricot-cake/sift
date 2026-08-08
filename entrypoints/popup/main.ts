@@ -1,13 +1,13 @@
-import { browser, type Browser } from "wxt/browser";
+import { browser } from "wxt/browser";
 import { startUncaughtReporting } from "../../utils/error-log.ts";
 import {
-  MISSKEY_INSTANCES_KEY,
   addInstance,
   normalizeInstanceHost,
   removeInstance,
   type InstanceDeps
 } from "../../utils/instances.ts";
-import { defaults, normalizeSettings, type Settings } from "../../utils/settings.ts";
+import { instanceStorage, settingsItem } from "../../utils/settings-storage.ts";
+import { normalizeSettings, type Settings } from "../../utils/settings.ts";
 
 // Everything running on this page is the extension's own, so nothing is
 // filtered out. The subscription lives as long as the popup does.
@@ -57,7 +57,7 @@ function main(): void {
   const instanceDeps: InstanceDeps = {
     permissions: browser.permissions,
     scripting: browser.scripting,
-    storage: browser.storage
+    storage: instanceStorage
   };
   let settings = normalizeSettings(defaults);
   let statusTimer: number | null = null;
@@ -114,15 +114,12 @@ function main(): void {
   // got registered, and this popup is not the only surface that can change it
   // (chrome://extensions can revoke a permission out from under it).
   async function refreshInstances(): Promise<void> {
-    settings = normalizeSettings(await browser.storage.sync.get(defaults));
+    settings = normalizeSettings(await settingsItem.getValue());
     renderInstances();
   }
 
-  // The promise form rather than the callback one Chrome also accepts: the
-  // callback is Chrome's alone, and `browser` is the same promise API on every
-  // browser.
-  void browser.storage.sync
-    .get(defaults)
+  void settingsItem
+    .getValue()
     .then((storedSettings) => {
       settings = normalizeSettings(storedSettings);
       syncForm();
@@ -140,18 +137,10 @@ function main(): void {
   // the permission dialog appears). This listener is what shows the addition
   // once that happens, since nothing in this document survived to call
   // refreshInstances() itself.
-  browser.storage.onChanged.addListener(
-    (changes: { [key: string]: Browser.storage.StorageChange }, areaName: string) => {
-      if (areaName !== "sync" || !(MISSKEY_INSTANCES_KEY in changes)) {
-        return;
-      }
-      settings = normalizeSettings({
-        ...settings,
-        misskeyInstances: changes[MISSKEY_INSTANCES_KEY]?.newValue
-      });
-      renderInstances();
-    }
-  );
+  settingsItem.watch((storedSettings) => {
+    settings = normalizeSettings(storedSettings);
+    renderInstances();
+  });
 
   instanceForm.addEventListener("submit", async (event) => {
     event.preventDefault();
@@ -204,8 +193,8 @@ function main(): void {
       [key]: rawValue
     });
 
-    void browser.storage.sync
-      .set(settings)
+    void settingsItem
+      .setValue(settings)
       .then(showSavedStatus)
       .catch(() => {
         status.textContent = "設定を保存できませんでした。";
