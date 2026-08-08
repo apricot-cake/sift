@@ -19,12 +19,19 @@ function readFromRoot(path: string): string {
 // server no test is running — and reports the failure asynchronously, after the
 // test that caused it has already passed. Dropping the two tags leaves
 // everything this reads untouched.
-function parsePopup(): Document {
-  const html = readFromRoot("entrypoints/popup/index.html")
+function parseEntrypoint(path: string): Document {
+  const html = readFromRoot(path)
     .replace(/<link\b[^>]*>/g, "")
     .replace(/<script\b[^>]*>[\s\S]*?<\/script>/g, "");
   return new DOMParser().parseFromString(html, "text/html");
 }
+
+// Both surfaces with static markup. The toolbar's is built in code, where the
+// compiler already checks the names.
+const STATIC_PAGES = [
+  "entrypoints/options/index.html",
+  "entrypoints/popup/index.html",
+];
 
 // A locale file that is missing a name falls back to English silently, which
 // reads as a page half in the wrong language rather than as a failure.
@@ -63,11 +70,11 @@ describe("the locale files", () => {
 // runs and for anything that reads the markup without running it at all; holding
 // the two to each other is what keeps that copy from drifting into a second,
 // older set of words.
-describe("the popup's markup", () => {
-  const popup = parsePopup();
+describe.each(STATIC_PAGES)("%s", (path) => {
+  const page = parseEntrypoint(path);
 
   it("names only messages that exist, and writes what they say", () => {
-    const elements = popup.querySelectorAll("[data-i18n]");
+    const elements = page.querySelectorAll("[data-i18n]");
     expect(elements.length).toBeGreaterThan(0);
 
     for (const element of elements) {
@@ -79,12 +86,9 @@ describe("the popup's markup", () => {
     }
   });
 
-  it("does the same for the attributes", () => {
+  it("does the same for the attributes it uses", () => {
     for (const [attribute, target] of Object.entries(I18N_ATTRIBUTES)) {
-      const elements = popup.querySelectorAll(`[${attribute}]`);
-      expect(elements.length).toBeGreaterThan(0);
-
-      for (const element of elements) {
+      for (const element of page.querySelectorAll(`[${attribute}]`)) {
         const name = element.getAttribute(attribute);
         expect({ name, value: element.getAttribute(target) }).toEqual({
           name,
@@ -95,9 +99,21 @@ describe("the popup's markup", () => {
   });
 });
 
+// Between them the two pages have to exercise every attribute form, or a broken
+// one could sit unnoticed in whichever page stopped using it.
+it("every localized attribute appears in one of the pages", () => {
+  const pages = STATIC_PAGES.map(parseEntrypoint);
+  for (const attribute of Object.keys(I18N_ATTRIBUTES)) {
+    const found = pages.some(
+      (page) => page.querySelectorAll(`[${attribute}]`).length > 0,
+    );
+    expect({ attribute, found }).toEqual({ attribute, found: true });
+  }
+});
+
 describe("t()", () => {
   it("answers with the message", () => {
-    expect(t("popupInstanceAdd")).toBe(english.popupInstanceAdd?.message);
+    expect(t("optionsInstanceAdd")).toBe(english.optionsInstanceAdd?.message);
   });
 
   it("puts the substitutions in, in the order the message names them", () => {
@@ -110,10 +126,10 @@ describe("t()", () => {
 describe("localizeDocument()", () => {
   it("fills in text, placeholders and aria-labels", () => {
     const root = render(`
-      <p data-i18n="popupTagline"></p>
+      <p data-i18n="optionsTagline"></p>
       <input
-        data-i18n-placeholder="popupInstancePlaceholder"
-        data-i18n-aria-label="popupInstanceInputLabel"
+        data-i18n-placeholder="optionsInstancePlaceholder"
+        data-i18n-aria-label="optionsInstanceInputLabel"
       >
     `);
 
@@ -121,12 +137,12 @@ describe("localizeDocument()", () => {
 
     const paragraph = root.querySelector("p");
     const input = root.querySelector("input");
-    expect(paragraph?.textContent).toBe(english.popupTagline?.message);
+    expect(paragraph?.textContent).toBe(english.optionsTagline?.message);
     expect(input?.getAttribute("placeholder")).toBe(
-      english.popupInstancePlaceholder?.message,
+      english.optionsInstancePlaceholder?.message,
     );
     expect(input?.getAttribute("aria-label")).toBe(
-      english.popupInstanceInputLabel?.message,
+      english.optionsInstanceInputLabel?.message,
     );
   });
 
@@ -134,7 +150,7 @@ describe("localizeDocument()", () => {
   // text of its own, and a button that took both would lose its label.
   it("leaves the text alone where only an attribute was asked for", () => {
     const root = render(
-      '<input data-i18n-placeholder="popupInstancePlaceholder" value="kept">',
+      '<input data-i18n-placeholder="optionsInstancePlaceholder" value="kept">',
     );
 
     localizeDocument(root);

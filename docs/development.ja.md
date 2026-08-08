@@ -63,7 +63,7 @@ npm run deploy
 
 コードが受け止めそこねた例外は拡張自身が捕まえ、`browser.storage.local` の環状バッファ（新しい50件）へ書きます。捕まえる側はreleaseにも入っています。developmentビルドでは、service workerがバッファを開発サーバーへ送り、`~\.sift\extension-errors.log` へ1行1件のJSONで追記します。
 
-日常側のバッファを読み出す口はまだありません。content scriptは発生元が拡張と分かる例外だけを、popupとservice workerは全件を記録します。
+日常側のバッファを読み出す口はまだありません。content scriptは発生元が拡張と分かる例外だけを、popupと設定画面とservice workerは全件を記録します。
 
 ## 文言
 
@@ -72,10 +72,10 @@ npm run deploy
 文言への経路は3つ：
 
 - コード中の `t("name")`。メッセージ名は英語ファイルから型付けしてあります（`i18n.d.ts` がWXT自身の `browser.i18n` の型にマージするので、打ち間違いはコンパイルを通りません）
-- `entrypoints\popup\index.html` の `data-i18n` / `data-i18n-placeholder` / `data-i18n-aria-label`。`localizeDocument()` が埋めます＝静的HTMLはmanifestのように `__MSG_name__` を持てません
+- 静的な2ページ（`entrypoints\options\index.html` と `entrypoints\popup\index.html`）の `data-i18n` / `data-i18n-placeholder` / `data-i18n-aria-label`。`localizeDocument()` が埋めます＝静的HTMLはmanifestのように `__MSG_name__` を持てません
 - `wxt.config.ts` の `__MSG_name__`。これを解釈するのはmanifestの該当フィールドだけです
 
-popupのマークアップには英語の文言そのものも書いてあります（`main.ts` が走る前の一瞬のため）。`utils\i18n.test.ts` がそれをmessagesファイルと同じ言葉に固定し、2つのロケールが同じ名前を持つことと、どちらにも無い名前を使っていないことを確認します。manifestのdescriptionについては `verify-manifest.ts` が同じことをします。
+どちらのマークアップにも英語の文言そのものが書いてあります（`main.ts` が走る前の一瞬のため）。`utils\i18n.test.ts` がそれをmessagesファイルと同じ言葉に固定し、2つのロケールが同じ名前を持つことと、どちらにも無い名前を使っていないことを確認します。manifestのdescriptionについては `verify-manifest.ts` が同じことをします。
 
 テストは `test\i18n.ts` 経由で `public\_locales\en` を読みます＝これが `browser.i18n.getMessage` の代わりです（WXTのfake browserは未実装のまま）。
 

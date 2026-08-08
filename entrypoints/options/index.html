@@ -1,0 +1,105 @@
+<!doctype html>
+<!-- `en` is the default locale, and this document is written in it. main.ts
+     replaces both the text and this attribute once it has read the messages for
+     the browser's own language. -->
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <!-- A tab of its own rather than the pane embedded in chrome://extensions.
+         Adding a Misskey instance asks Chrome for a host permission, and the
+         dialog that appears tears down whatever opened it if that was a popup
+         (#28); a tab stays put. WXT reads this into options_ui.open_in_tab. -->
+    <meta name="manifest.open_in_tab" content="true">
+    <title>Sift</title>
+    <link rel="stylesheet" href="./style.css">
+  </head>
+  <!-- Every reader-visible string carries the message name that replaces it:
+       `data-i18n` for the element's text, the two suffixed forms for an
+       attribute. localizeDocument() in main.ts is what fills them in.
+
+       The English text is written out rather than left empty, and
+       utils/i18n.test.ts holds it to the same words as public/_locales/en. An
+       empty element would read as empty to everything that looks at the markup
+       without running it — a screen reader in the moment before main.ts runs, a
+       linter, a person. -->
+  <body>
+    <main class="settings">
+      <header class="app-header">
+        <h1>Sift</h1>
+        <p data-i18n="optionsTagline">Filters the posts on screen by one shared set of rules</p>
+      </header>
+      <section aria-labelledby="filter-heading">
+        <h2 id="filter-heading" data-i18n="optionsSectionFilter">Filter</h2>
+        <label class="setting-row">
+          <span class="setting-label" data-i18n="optionsEnabled">Turn filtering on</span>
+          <input data-setting="enabled" type="checkbox">
+        </label>
+      </section>
+      <section aria-labelledby="standard-heading">
+        <h2 id="standard-heading" data-i18n="optionsSectionStandard">Standard</h2>
+        <label class="setting-row">
+          <span class="setting-label" data-i18n="optionsMinLikes">Minimum likes</span>
+          <input data-setting="minLikes" type="number" min="0" step="50">
+        </label>
+        <label class="setting-row">
+          <span class="setting-label" data-i18n="optionsMinReactions">Minimum reactions (Misskey)</span>
+          <input data-setting="misskeyMinReactions" type="number" min="0" step="2">
+        </label>
+      </section>
+      <section aria-labelledby="rising-heading">
+        <h2 id="rising-heading" data-i18n="optionsSectionRising">Rising</h2>
+        <label class="setting-row">
+          <span class="setting-label" data-i18n="optionsRisingEnabled">Show rising posts</span>
+          <input data-setting="risingEnabled" type="checkbox">
+        </label>
+        <label class="setting-row">
+          <span class="setting-label" data-i18n="optionsMinLikes">Minimum likes</span>
+          <input data-setting="risingMinLikes" type="number" min="0" step="10">
+        </label>
+        <label class="setting-row">
+          <span class="setting-label" data-i18n="optionsMinReactions">Minimum reactions (Misskey)</span>
+          <input data-setting="misskeyRisingMinReactions" type="number" min="0" step="1">
+        </label>
+        <label class="setting-row">
+          <span class="setting-label" data-i18n="optionsMaxAge">Time since posting</span>
+          <span class="input-with-unit"><input data-setting="risingMaxAgeHours" type="number" min="1" max="168"><span data-i18n="optionsUnitHours">hours</span></span>
+        </label>
+        <p class="note" data-i18n="optionsThresholdNote">Likes are read on X and Bluesky, reactions on Misskey. Instances differ in size by orders of magnitude, so the two carry separate thresholds.</p>
+      </section>
+      <section aria-labelledby="post-heading">
+        <h2 id="post-heading" data-i18n="optionsSectionPost">Post</h2>
+        <label class="setting-row">
+          <span class="setting-label" data-i18n="optionsMedia">Media</span>
+          <select data-setting="mediaMode"><option value="any" data-i18n="optionsMediaAny">Images and video</option><option value="images" data-i18n="optionsMediaImages">Images only</option></select>
+        </label>
+        <label class="setting-row">
+          <span class="setting-label" data-i18n="optionsHideReposts">Leave out reposts</span>
+          <input data-setting="hideReposts" type="checkbox">
+        </label>
+      </section>
+      <section aria-labelledby="misskey-heading">
+        <h2 id="misskey-heading" data-i18n="optionsSectionInstances">Misskey instances</h2>
+        <ul class="instance-list" data-role="instance-list"></ul>
+        <form class="instance-form" data-role="instance-form">
+          <input
+            data-role="instance-input"
+            type="text"
+            placeholder="e.g. misskey.io"
+            data-i18n-placeholder="optionsInstancePlaceholder"
+            aria-label="Hostname of the Misskey instance to add"
+            data-i18n-aria-label="optionsInstanceInputLabel"
+          >
+          <button type="submit" data-i18n="optionsInstanceAdd">Add</button>
+        </form>
+        <p class="instance-error" data-role="instance-error" role="alert"></p>
+        <p class="note" data-i18n="optionsInstanceNote">Adding one has Chrome ask you to allow access to that host and no other.</p>
+      </section>
+      <footer>
+        <p class="status" data-role="status" role="status" aria-live="polite" data-i18n="optionsStatusLoading">Loading…</p>
+        <p class="note" data-i18n="optionsAutosaveNote">Settings save themselves and reach every supported timeline.</p>
+      </footer>
+    </main>
+    <script type="module" src="./main.js"></script>
+  </body>
+</html>

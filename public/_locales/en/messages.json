@@ -2,81 +2,177 @@
   "extensionDescription": {
     "message": "Filters the post timelines on X, Bluesky and Misskey by media, reaction count and time since posting."
   },
-
-  "popupTagline": {
+  "popupEnabled": {
+    "message": "Turn filtering on"
+  },
+  "popupOpenOptions": {
+    "message": "Open settings"
+  },
+  "optionsTagline": {
     "message": "Filters the posts on screen by one shared set of rules"
   },
-  "popupSectionFilter": { "message": "Filter" },
-  "popupEnabled": { "message": "Turn filtering on" },
-  "popupSectionStandard": { "message": "Standard" },
-  "popupMinLikes": { "message": "Minimum likes" },
-  "popupMinReactions": { "message": "Minimum reactions (Misskey)" },
-  "popupSectionRising": { "message": "Rising" },
-  "popupRisingEnabled": { "message": "Show rising posts" },
-  "popupMaxAge": { "message": "Time since posting" },
-  "popupUnitHours": { "message": "hours" },
-  "popupThresholdNote": {
+  "optionsSectionFilter": {
+    "message": "Filter"
+  },
+  "optionsEnabled": {
+    "message": "Turn filtering on"
+  },
+  "optionsSectionStandard": {
+    "message": "Standard"
+  },
+  "optionsMinLikes": {
+    "message": "Minimum likes"
+  },
+  "optionsMinReactions": {
+    "message": "Minimum reactions (Misskey)"
+  },
+  "optionsSectionRising": {
+    "message": "Rising"
+  },
+  "optionsRisingEnabled": {
+    "message": "Show rising posts"
+  },
+  "optionsMaxAge": {
+    "message": "Time since posting"
+  },
+  "optionsUnitHours": {
+    "message": "hours"
+  },
+  "optionsThresholdNote": {
     "message": "Likes are read on X and Bluesky, reactions on Misskey. Instances differ in size by orders of magnitude, so the two carry separate thresholds."
   },
-  "popupSectionPost": { "message": "Post" },
-  "popupMedia": { "message": "Media" },
-  "popupMediaAny": { "message": "Images and video" },
-  "popupMediaImages": { "message": "Images only" },
-  "popupHideReposts": { "message": "Leave out reposts" },
-  "popupSectionInstances": { "message": "Misskey instances" },
-  "popupInstancePlaceholder": { "message": "e.g. misskey.io" },
-  "popupInstanceInputLabel": {
+  "optionsSectionPost": {
+    "message": "Post"
+  },
+  "optionsMedia": {
+    "message": "Media"
+  },
+  "optionsMediaAny": {
+    "message": "Images and video"
+  },
+  "optionsMediaImages": {
+    "message": "Images only"
+  },
+  "optionsHideReposts": {
+    "message": "Leave out reposts"
+  },
+  "optionsSectionInstances": {
+    "message": "Misskey instances"
+  },
+  "optionsInstancePlaceholder": {
+    "message": "e.g. misskey.io"
+  },
+  "optionsInstanceInputLabel": {
     "message": "Hostname of the Misskey instance to add"
   },
-  "popupInstanceAdd": { "message": "Add" },
-  "popupInstanceRemove": { "message": "Remove" },
-  "popupInstanceNote": {
+  "optionsInstanceAdd": {
+    "message": "Add"
+  },
+  "optionsInstanceRemove": {
+    "message": "Remove"
+  },
+  "optionsInstanceNote": {
     "message": "Adding one has Chrome ask you to allow access to that host and no other."
   },
-  "popupStatusLoading": { "message": "Loading…" },
-  "popupStatusSaved": { "message": "Saved" },
-  "popupAutosaveNote": {
+  "optionsStatusLoading": {
+    "message": "Loading…"
+  },
+  "optionsStatusSaved": {
+    "message": "Saved"
+  },
+  "optionsAutosaveNote": {
     "message": "Settings save themselves and reach every supported timeline."
   },
-  "popupErrorLoadFailed": { "message": "The settings could not be read." },
-  "popupErrorSaveFailed": { "message": "The settings could not be saved." },
-  "popupErrorBadHost": {
+  "optionsErrorLoadFailed": {
+    "message": "The settings could not be read."
+  },
+  "optionsErrorSaveFailed": {
+    "message": "The settings could not be saved."
+  },
+  "optionsErrorBadHost": {
     "message": "Check the hostname (misskey.io, for instance — no path, no query, no http)."
   },
-  "popupErrorPermissionDenied": {
+  "optionsErrorPermissionDenied": {
     "message": "Nothing was added: the permission was not granted."
   },
-
-  "toolbarPanelLabel": { "message": "Sift settings" },
-  "toolbarPanelTitle": { "message": "Filter settings" },
-  "toolbarAutosave": { "message": "saved as you go" },
-  "toolbarMinLikes": { "message": "Standard: minimum likes" },
-  "toolbarMinReactions": { "message": "Standard: minimum reactions" },
-  "toolbarRisingEnabled": { "message": "Show rising" },
-  "toolbarRisingMinLikes": { "message": "Rising: minimum likes" },
-  "toolbarRisingMinReactions": { "message": "Rising: minimum reactions" },
-  "toolbarMaxAge": { "message": "Time since posting" },
-  "toolbarUnitHours": { "message": "hours" },
-  "toolbarMedia": { "message": "Media" },
-  "toolbarMediaAny": { "message": "Images and video" },
-  "toolbarMediaImages": { "message": "Images only" },
-  "toolbarHideReposts": { "message": "Leave out reposts" },
+  "toolbarPanelLabel": {
+    "message": "Sift settings"
+  },
+  "toolbarPanelTitle": {
+    "message": "Filter settings"
+  },
+  "toolbarAutosave": {
+    "message": "saved as you go"
+  },
+  "toolbarMinLikes": {
+    "message": "Standard: minimum likes"
+  },
+  "toolbarMinReactions": {
+    "message": "Standard: minimum reactions"
+  },
+  "toolbarRisingEnabled": {
+    "message": "Show rising"
+  },
+  "toolbarRisingMinLikes": {
+    "message": "Rising: minimum likes"
+  },
+  "toolbarRisingMinReactions": {
+    "message": "Rising: minimum reactions"
+  },
+  "toolbarMaxAge": {
+    "message": "Time since posting"
+  },
+  "toolbarUnitHours": {
+    "message": "hours"
+  },
+  "toolbarMedia": {
+    "message": "Media"
+  },
+  "toolbarMediaAny": {
+    "message": "Images and video"
+  },
+  "toolbarMediaImages": {
+    "message": "Images only"
+  },
+  "toolbarHideReposts": {
+    "message": "Leave out reposts"
+  },
   "toolbarHint": {
     "message": "A blue line marks a standard hit, an orange one a rising post."
   },
-  "toolbarStatusChecking": { "message": "Checking…" },
+  "toolbarStatusChecking": {
+    "message": "Checking…"
+  },
   "toolbarStatusCounts": {
     "message": "$HIT$ hits · $RISING$ rising · $HIDDEN$ hidden",
     "placeholders": {
-      "hit": { "content": "$1" },
-      "rising": { "content": "$2" },
-      "hidden": { "content": "$3" }
+      "hit": {
+        "content": "$1"
+      },
+      "rising": {
+        "content": "$2"
+      },
+      "hidden": {
+        "content": "$3"
+      }
     }
   },
-  "toolbarStatusStopped": { "message": "Filtering off" },
-  "toolbarFilterOn": { "message": "Filter ON" },
-  "toolbarFilterOff": { "message": "Filter OFF" },
-  "toolbarShowAll": { "message": "Show everything" },
-  "toolbarShowFiltered": { "message": "Back to filtered" },
-  "toolbarSettings": { "message": "Settings" }
+  "toolbarStatusStopped": {
+    "message": "Filtering off"
+  },
+  "toolbarFilterOn": {
+    "message": "Filter ON"
+  },
+  "toolbarFilterOff": {
+    "message": "Filter OFF"
+  },
+  "toolbarShowAll": {
+    "message": "Show everything"
+  },
+  "toolbarShowFiltered": {
+    "message": "Back to filtered"
+  },
+  "toolbarSettings": {
+    "message": "Settings"
+  }
 }
