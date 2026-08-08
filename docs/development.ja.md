@@ -8,6 +8,10 @@
 
 Node 24.12以降。`.node-version` と `package.json` の `engines` の両方に書いてあり、CIは `.node-version` が指すものを入れます。`scripts\` 配下はビルドを挟まずnodeが直接動かすので、node自身の型剥ぎに乗っています——それがexperimentalでなくなったのが24.12です。
 
+## 依存
+
+`package.json` のバージョンはすべて完全固定で、次の `npm install` が範囲指定を書き戻さないように `.npmrc` で `save-exact=true` にしてあります。更新はDependabotのPRで届きます（週次、minorとpatchはまとめて）＝ワークフローの `uses:` をSHAで固定してDependabotに動かさせているのと同じ仕組みです。範囲指定だと、それを言うコミットが無いまま依存が動きます。
+
 ## 開発サーバー
 
 ```powershell
