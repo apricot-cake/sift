@@ -14,9 +14,9 @@ The output directory is fixed at `~\.sift-dev\chrome-mv3-dev`, so it lands in th
 
 ## How the dev build and the dev server connect
 
-The content script of a dev build is not in the manifest. The service worker registers it with `chrome.scripting.registerContentScripts()` after it connects to the dev server, so a worker that is not connected runs no content script.
+The content script of a dev build is not in the manifest. The service worker registers it with `browser.scripting.registerContentScripts()` after it connects to the dev server, so a worker that is not connected runs no content script.
 
-WXT opens its socket once, when the worker starts. If the browser was already up before the dev server, or if the server was restarted, the connection stays broken — but the dev build detects that itself. The worker polls the server every 5 seconds, and when it finds a different server than the one it started against (or no registration at all), it recovers with `chrome.runtime.reload()`. It waits until the build has finished writing to the output folder, because reloading against an empty folder unloads the extension.
+WXT opens its socket once, when the worker starts. If the browser was already up before the dev server, or if the server was restarted, the connection stays broken — but the dev build detects that itself. The worker polls the server every 5 seconds, and when it finds a different server than the one it started against (or no registration at all), it recovers with `browser.runtime.reload()`. It waits until the build has finished writing to the output folder, because reloading against an empty folder unloads the extension.
 
 The state is readable from the `"kind":"dev-link"` lines in `~\.sift\extension-errors.log`. The dev server is what writes them, so nothing appears while the server is down. Only development builds write them.
 
@@ -53,7 +53,7 @@ If verification does not pass, nothing is replaced and your everyday Chrome keep
 
 ## Recording uncaught exceptions
 
-Exceptions the code fails to catch are caught by the extension itself and written to a ring buffer (the newest 50) in `chrome.storage.local`. That part ships in release builds too. In development builds, the service worker sends the buffer to the dev server, which appends it to `~\.sift\extension-errors.log` as one JSON object per line.
+Exceptions the code fails to catch are caught by the extension itself and written to a ring buffer (the newest 50) in `browser.storage.local`. That part ships in release builds too. In development builds, the service worker sends the buffer to the dev server, which appends it to `~\.sift\extension-errors.log` as one JSON object per line.
 
 There is no way to read the everyday profile's buffer yet. Content scripts record only the exceptions they can attribute to the extension; the popup and the service worker record everything.
 

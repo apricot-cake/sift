@@ -14,9 +14,9 @@ npm run dev
 
 ## 開発ビルドと開発サーバーのつながり
 
-開発ビルドのcontent scriptはmanifestに載っていません。service workerが開発サーバーへ接続した後に `chrome.scripting.registerContentScripts()` で登録するため、つながっていないworkerではcontent scriptが動きません。
+開発ビルドのcontent scriptはmanifestに載っていません。service workerが開発サーバーへ接続した後に `browser.scripting.registerContentScripts()` で登録するため、つながっていないworkerではcontent scriptが動きません。
 
-WXTがソケットを張るのはworkerの起動時に1回だけです。開発サーバーより先にブラウザが起きていた場合や、サーバーを起こし直した場合は切れたままになりますが、開発ビルドはこれを自分で検出します。workerが5秒ごとにサーバーへ問い合わせ、起動時と違うサーバー（または未登録の状態）を見つけると `chrome.runtime.reload()` で復帰します。出力フォルダへビルドが書き終わるまでは待ちます（空のフォルダをリロードすると拡張が読み込み解除されるため）。
+WXTがソケットを張るのはworkerの起動時に1回だけです。開発サーバーより先にブラウザが起きていた場合や、サーバーを起こし直した場合は切れたままになりますが、開発ビルドはこれを自分で検出します。workerが5秒ごとにサーバーへ問い合わせ、起動時と違うサーバー（または未登録の状態）を見つけると `browser.runtime.reload()` で復帰します。出力フォルダへビルドが書き終わるまでは待ちます（空のフォルダをリロードすると拡張が読み込み解除されるため）。
 
 状態は `~\.sift\extension-errors.log` の `"kind":"dev-link"` 行で読めます。書く先が開発サーバーなので、サーバーが落ちている間は何も出ません。developmentビルドだけが書きます。
 
@@ -53,7 +53,7 @@ npm run deploy
 
 ## 未捕捉例外の記録
 
-コードが受け止めそこねた例外は拡張自身が捕まえ、`chrome.storage.local` の環状バッファ（新しい50件）へ書きます。捕まえる側はreleaseにも入っています。developmentビルドでは、service workerがバッファを開発サーバーへ送り、`~\.sift\extension-errors.log` へ1行1件のJSONで追記します。
+コードが受け止めそこねた例外は拡張自身が捕まえ、`browser.storage.local` の環状バッファ（新しい50件）へ書きます。捕まえる側はreleaseにも入っています。developmentビルドでは、service workerがバッファを開発サーバーへ送り、`~\.sift\extension-errors.log` へ1行1件のJSONで追記します。
 
 日常側のバッファを読み出す口はまだありません。content scriptは発生元が拡張と分かる例外だけを、popupとservice workerは全件を記録します。
 

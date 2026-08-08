@@ -1,3 +1,4 @@
+import { browser } from "wxt/browser";
 import {
   DEV_CONTENT_STARTED,
   DEV_FILTER_PASS,
@@ -29,7 +30,7 @@ import {
 // dev-link both run only in development builds, because Chrome shows that
 // information to a person looking at a screen and to nobody else:
 //
-//   - chrome.permissions can be revoked outside the extension (a reader
+//   - browser.permissions can be revoked outside the extension (a reader
 //     clearing it from chrome://extensions, or Chrome revoking it itself), so
 //     every build reconciles Misskey instance registrations against granted
 //     permissions at startup and keeps listening for permissions.onRemoved
@@ -39,7 +40,7 @@ import {
 //     popup mid-flight (see utils/instances.ts).
 //   - uncaught exceptions reach only the error box of chrome://extensions, which
 //     nothing outside Chrome can read. Every surface writes them to a ring
-//     buffer in chrome.storage.local (utils/error-log.ts); this worker carries
+//     buffer in browser.storage.local (utils/error-log.ts); this worker carries
 //     that buffer out to ~/.sift/extension-errors.log through the development
 //     server's endpoint.
 //   - in dev mode the content script only exists while this worker is attached
@@ -66,9 +67,9 @@ const DEV_LINK_INTERVAL_MS = 5000;
 
 export default defineBackground(() => {
   const instanceDeps: InstanceDeps = {
-    permissions: chrome.permissions,
-    scripting: chrome.scripting,
-    storage: chrome.storage
+    permissions: browser.permissions,
+    scripting: browser.scripting,
+    storage: browser.storage
   };
 
   // Repairs drift between settings and what Chrome actually still grants —
@@ -80,7 +81,7 @@ export default defineBackground(() => {
   // bypassing removeInstance() entirely. This is the one build-independent
   // way Sift hears about it while running; reconcileInstances() above covers
   // the case where it was not running to hear it.
-  chrome.permissions.onRemoved.addListener((removed) => {
+  browser.permissions.onRemoved.addListener((removed) => {
     handlePermissionsRemoved(removed, instanceDeps).catch(() => {});
   });
 
@@ -90,7 +91,7 @@ export default defineBackground(() => {
   // 2026-08-04, #28) even though the grant itself already went through. This
   // listener reacts to the grant Chrome actually made, not to the popup
   // call surviving long enough to hear its own answer.
-  chrome.permissions.onAdded.addListener((added) => {
+  browser.permissions.onAdded.addListener((added) => {
     handlePermissionsAdded(added, instanceDeps).catch(() => {});
   });
 
@@ -121,7 +122,7 @@ export default defineBackground(() => {
   };
 
   const requestErrorLogDrain = () => {
-    void drainErrorLog({ storage: chrome.storage, post: postEntries }).catch(
+    void drainErrorLog({ storage: browser.storage, post: postEntries }).catch(
       () => {
         // The development server may be down. The entries stay in the buffer.
       }
@@ -143,7 +144,7 @@ export default defineBackground(() => {
     ]).catch(() => {});
   };
 
-  chrome.storage.onChanged.addListener((changes, areaName) => {
+  browser.storage.onChanged.addListener((changes, areaName) => {
     if (areaName === "local" && ERROR_LOG_KEY in changes) {
       requestErrorLogDrain();
     }
@@ -154,7 +155,7 @@ export default defineBackground(() => {
   // evidence from outside the browser that the runtime registration took effect
   // — and worth a listener: Chrome starts a sleeping worker to deliver this, so
   // opening a matching page is one of the things that can bring the link back.
-  chrome.runtime.onMessage.addListener((message: DevLinkMessage | undefined) => {
+  browser.runtime.onMessage.addListener((message: DevLinkMessage | undefined) => {
     if (message?.type === DEV_CONTENT_STARTED) {
       note(`content script started on ${message.page}`);
     }
@@ -172,7 +173,7 @@ export default defineBackground(() => {
   // this one, a development build has nothing to wake it at browser start, and a
   // worker that never runs never attaches — which is how a whole profile ends up
   // with no content script on any page (#31).
-  chrome.runtime.onStartup.addListener(() => {});
+  browser.runtime.onStartup.addListener(() => {});
 
   let bootAtStart: string | undefined;
   let isFirstProbe = true;
@@ -199,8 +200,8 @@ export default defineBackground(() => {
     const [registered, stored] = await Promise.all([
       probe == null
         ? Promise.resolve([])
-        : chrome.scripting.getRegisteredContentScripts(),
-      chrome.storage.session.get(DEV_LINK_RELOAD_KEY)
+        : browser.scripting.getRegisteredContentScripts(),
+      browser.storage.session.get(DEV_LINK_RELOAD_KEY)
     ]);
 
     const boot = probe?.boot ?? null;
@@ -231,8 +232,8 @@ export default defineBackground(() => {
       note(`development link: ${action} (${registered.length} registered)`);
     }
     if (action === "reload") {
-      await chrome.storage.session.set({ [DEV_LINK_RELOAD_KEY]: boot });
-      chrome.runtime.reload();
+      await browser.storage.session.set({ [DEV_LINK_RELOAD_KEY]: boot });
+      browser.runtime.reload();
     }
   };
 

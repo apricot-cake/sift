@@ -17,7 +17,7 @@
 //     reconnects it
 //
 // The one thing that reliably re-establishes it is starting the worker over,
-// which `chrome.runtime.reload()` does. So the worker watches for those two
+// which `browser.runtime.reload()` does. So the worker watches for those two
 // states and reloads itself out of them. The server's boot id is what makes them
 // visible: "the id I saw when I started" versus "the id up now".
 //
@@ -42,7 +42,7 @@ export const DEV_CONTENT_STARTED = "sift:dev-content-started";
 export const DEV_FILTER_PASS = "sift:dev-filter-pass";
 
 // The two messages the content script sends the background worker over
-// chrome.runtime.sendMessage — the only traffic on that channel in a
+// browser.runtime.sendMessage — the only traffic on that channel in a
 // development build.
 export interface DevContentStartedMessage {
   type: typeof DEV_CONTENT_STARTED;

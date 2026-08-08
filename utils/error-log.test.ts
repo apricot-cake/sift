@@ -147,7 +147,7 @@ describe("describeUncaughtEvent", () => {
     ).toBe("(unstringifiable value)");
   });
 
-  // The buffer lives in chrome.storage, so one enormous message must not be
+  // The buffer lives in browser.storage, so one enormous message must not be
   // able to fill it.
   it("cuts an overlong message down", () => {
     expect(describeUncaughtEvent({ message: "x".repeat(600) }, "error").message).toHaveLength(

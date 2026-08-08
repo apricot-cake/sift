@@ -1,3 +1,4 @@
+import { browser, type Browser } from "wxt/browser";
 import { selectAdapter } from "../../utils/adapters/index.ts";
 import type { ServiceAdapter } from "../../utils/adapters/types.ts";
 import { DEV_CONTENT_STARTED, DEV_FILTER_PASS } from "../../utils/dev-link.ts";
@@ -152,7 +153,7 @@ export function startContentRuntime(maybeAdapter: ServiceAdapter | null) {
       // See utils/dev-link.ts — compiled out of a release with the guard.
       if (__SIFT_DEV__ && !reportedFilterPass) {
         reportedFilterPass = true;
-        chrome.runtime
+        browser.runtime
           .sendMessage({
             type: DEV_FILTER_PASS,
             counts,
@@ -180,7 +181,7 @@ export function startContentRuntime(maybeAdapter: ServiceAdapter | null) {
 
     function saveSettings(partialSettings: Partial<Settings>): void {
       const nextSettings = normalizeSettings({ ...settings, ...partialSettings });
-      chrome.storage.sync.set(nextSettings);
+      browser.storage.sync.set(nextSettings);
     }
 
     // How far one press of a threshold input's arrow moves it. Derived from
@@ -342,7 +343,7 @@ export function startContentRuntime(maybeAdapter: ServiceAdapter | null) {
     }
 
     function handleStorageChange(
-      changes: { [key: string]: chrome.storage.StorageChange },
+      changes: { [key: string]: Browser.storage.StorageChange },
       areaName: string
     ): void {
       if (disposed || areaName !== "sync") {
@@ -377,7 +378,7 @@ export function startContentRuntime(maybeAdapter: ServiceAdapter | null) {
       window.removeEventListener("pagehide", handlePageHide);
       stopUncaughtReporting();
       try {
-        chrome.storage.onChanged.removeListener(handleStorageChange);
+        browser.storage.onChanged.removeListener(handleStorageChange);
       } catch {
         // The extension context may already be invalidated.
       }
@@ -388,25 +389,35 @@ export function startContentRuntime(maybeAdapter: ServiceAdapter | null) {
       dispose();
     }
 
-    chrome.storage.sync.get(defaults, (storedSettings) => {
-      if (disposed) {
-        return;
-      }
+    // The promise form rather than the callback one Chrome also accepts: the
+    // callback is Chrome's alone, and `browser` is the same promise API on every
+    // browser.
+    void browser.storage.sync
+      .get(defaults)
+      .then((storedSettings) => {
+        if (disposed) {
+          return;
+        }
 
-      settings = normalizeSettings(storedSettings);
-      scheduleFilter();
+        settings = normalizeSettings(storedSettings);
+        scheduleFilter();
 
-      observer = new MutationObserver(scheduleFilter);
-      observer.observe(document.body, {
-        childList: true,
-        characterData: true,
-        subtree: true
+        observer = new MutationObserver(scheduleFilter);
+        observer.observe(document.body, {
+          childList: true,
+          characterData: true,
+          subtree: true
+        });
+
+        routeTimer = window.setInterval(handleRoute, 750);
+      })
+      .catch(() => {
+        // The extension context may already be invalidated — this runtime is
+        // being replaced, or the extension was reloaded under the page. The
+        // defaults it started with stay in place and nothing else runs.
       });
 
-      routeTimer = window.setInterval(handleRoute, 750);
-    });
-
-    chrome.storage.onChanged.addListener(handleStorageChange);
+    browser.storage.onChanged.addListener(handleStorageChange);
     window.addEventListener("pagehide", handlePageHide);
 
     return { dispose };
@@ -443,7 +454,7 @@ export default defineContentScript({
     // a real answer either way (#31). Compiled out of a release with the guard.
     // The path only — a log file has no business holding query strings.
     if (__SIFT_DEV__) {
-      chrome.runtime
+      browser.runtime
         .sendMessage({
           type: DEV_CONTENT_STARTED,
           page: `${location.origin}${location.pathname}`

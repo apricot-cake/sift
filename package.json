@@ -14,7 +14,6 @@
     "prepare": "node scripts/setup.ts"
   },
   "devDependencies": {
-    "@types/chrome": "^0.2.5",
     "@types/node": "^26.1.2",
     "happy-dom": "^20.11.2",
     "typescript": "^7.0.2",

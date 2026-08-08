@@ -87,7 +87,7 @@ export default defineConfig({
     // The fixed signing key, and therefore the fixed extension id
     // (bohbpocokkfioejlabmeaimpkpmablkm). Without it the id is derived from the
     // folder path, so moving the daily build to another folder would silently
-    // mint a new extension — and a new chrome.storage.sync with it. Identical in
+    // mint a new extension — and a new browser.storage.sync with it. Identical in
     // development and release: the two live in separate Chrome profiles, so the
     // same id cannot collide with itself.
     key: "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA7HRMGxpsFxVmyHkVNzHAtaSVuu6vJVFCC0gSSYBT9t31XfT68U7NYyn15N3rLuvZRhRAXYBgZiouzH619jVc2lbHGRzRUPYjm8o0XW70TW6NB+g7P510902pHXw1TmcrN9wqFfFsFhV50DObPKfY+GYfgNzWo+A4raQ4+sCQaCv9TNR78CU2HAi81oGJthhxPYRfdZdqLiZ7FWSnz+Nv9Ie0Q0RAn6W21ekSRpN6wfJf4AjgBe5sj3zRRTGH6CcUSvfUehjKjSbsS5KX5OhL4KWsio4GYRmUZa3SJxWexZN3kLSo4ugA+0AaT0rFjLTZhxOl/ULBeMvBvnnZ+xEqyQIDAQAB",
@@ -100,7 +100,7 @@ export default defineConfig({
     // way (utils/instances.ts).
     permissions: ["storage", "scripting"],
     // The origin a reader can grant is never wider than the single host they
-    // add: chrome.permissions.request() only ever asks for one origin at a
+    // add: browser.permissions.request() only ever asks for one origin at a
     // time (utils/instances.ts), and Chrome's runtime dialog is scoped to
     // that origin regardless of how wide this wildcard is. Declaring the
     // wildcard here is what makes ANY host requestable at all — the

@@ -1,3 +1,4 @@
+import { browser, type Browser } from "wxt/browser";
 import { startUncaughtReporting } from "../../utils/error-log.ts";
 import {
   MISSKEY_INSTANCES_KEY,
@@ -54,9 +55,9 @@ function main(): void {
   const instanceError = maybeInstanceError;
 
   const instanceDeps: InstanceDeps = {
-    permissions: chrome.permissions,
-    scripting: chrome.scripting,
-    storage: chrome.storage
+    permissions: browser.permissions,
+    scripting: browser.scripting,
+    storage: browser.storage
   };
   let settings = normalizeSettings(defaults);
   let statusTimer: number | null = null;
@@ -113,16 +114,24 @@ function main(): void {
   // got registered, and this popup is not the only surface that can change it
   // (chrome://extensions can revoke a permission out from under it).
   async function refreshInstances(): Promise<void> {
-    settings = normalizeSettings(await chrome.storage.sync.get(defaults));
+    settings = normalizeSettings(await browser.storage.sync.get(defaults));
     renderInstances();
   }
 
-  chrome.storage.sync.get(defaults, (storedSettings) => {
-    settings = normalizeSettings(storedSettings);
-    syncForm();
-    renderInstances();
-    status.textContent = "";
-  });
+  // The promise form rather than the callback one Chrome also accepts: the
+  // callback is Chrome's alone, and `browser` is the same promise API on every
+  // browser.
+  void browser.storage.sync
+    .get(defaults)
+    .then((storedSettings) => {
+      settings = normalizeSettings(storedSettings);
+      syncForm();
+      renderInstances();
+      status.textContent = "";
+    })
+    .catch(() => {
+      status.textContent = "設定を読み込めませんでした。";
+    });
 
   // Storage, not the addInstance() call's own return value, is what drives the
   // list: the backstop in the background entrypoint (handlePermissionsAdded)
@@ -131,8 +140,8 @@ function main(): void {
   // the permission dialog appears). This listener is what shows the addition
   // once that happens, since nothing in this document survived to call
   // refreshInstances() itself.
-  chrome.storage.onChanged.addListener(
-    (changes: { [key: string]: chrome.storage.StorageChange }, areaName: string) => {
+  browser.storage.onChanged.addListener(
+    (changes: { [key: string]: Browser.storage.StorageChange }, areaName: string) => {
       if (areaName !== "sync" || !(MISSKEY_INSTANCES_KEY in changes)) {
         return;
       }
@@ -195,7 +204,12 @@ function main(): void {
       [key]: rawValue
     });
 
-    chrome.storage.sync.set(settings, showSavedStatus);
+    void browser.storage.sync
+      .set(settings)
+      .then(showSavedStatus)
+      .catch(() => {
+        status.textContent = "設定を保存できませんでした。";
+      });
     syncForm();
   });
 }

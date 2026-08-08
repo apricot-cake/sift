@@ -7,7 +7,7 @@
 // What follows is the capture half of ordinary error telemetry — the same two
 // global event subscriptions a Sentry-style SDK installs inside an extension —
 // with a local destination instead of a server. Every surface writes to a ring
-// buffer in chrome.storage.local, in every build. In development the service
+// buffer in browser.storage.local, in every build. In development the service
 // worker forwards that buffer to the development server, which appends it to
 // ~/.sift/extension-errors.log (scripts/dev-error-log.ts). A release build keeps
 // filling the buffer and has nobody to forward it to.
@@ -15,6 +15,7 @@
 // Best-effort by construction: nothing here throws, and nothing here is awaited
 // by the code it watches. A lost diagnostic line is always better than a
 // diagnostic that breaks filtering.
+import { browser } from "wxt/browser";
 
 export const ERROR_LOG_KEY = "siftErrorLog";
 export const ERROR_LOG_LIMIT = 50;
@@ -50,10 +51,10 @@ export interface ErrorLogEntry {
   seq: number;
 }
 
-// Read-only surface `chrome.storage.local`/`.session` and the test's fake
+// Read-only surface `browser.storage.local`/`.session` and the test's fake
 // storage areas both satisfy, without pulling in the rest of
-// chrome.storage.StorageArea (clear, remove, getBytesInUse, onChanged...)
-// that nothing here uses.
+// StorageArea (clear, remove, getBytesInUse, onChanged...) that nothing here
+// uses.
 export interface ErrorLogStorage {
   get(key: string): Promise<Record<string, unknown>>;
   set(values: Record<string, unknown>): Promise<void>;
@@ -102,7 +103,7 @@ function readStack(value: unknown): unknown {
 }
 
 // Whether an error raised on a shared window came from Sift rather than from the
-// page hosting it. `chrome.runtime.getURL("")` is the right prefix in both
+// page hosting it. `browser.runtime.getURL("")` is the right prefix in both
 // builds: WXT bundles the content script into the extension in development too,
 // so Sift's own frames always carry chrome-extension://<id>/ and only the dev
 // server's own socket ever names localhost.
@@ -297,7 +298,7 @@ export function startUncaughtReporting({
   return installUncaughtReporting({
     target,
     source,
-    extensionUrlPrefix: filterToOwnCode ? chrome.runtime.getURL("") : null,
-    record: (entry) => recordErrorEntry(chrome.storage.local, entry)
+    extensionUrlPrefix: filterToOwnCode ? browser.runtime.getURL("") : null,
+    record: (entry) => recordErrorEntry(browser.storage.local, entry)
   });
 }

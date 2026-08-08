@@ -15,7 +15,7 @@ export interface DrainErrorLogDeps {
   post: (entries: ErrorLogEntry[]) => void | Promise<void>;
 }
 
-// Carries the error ring buffer out of chrome.storage.local and into a file the
+// Carries the error ring buffer out of browser.storage.local and into a file the
 // development server owns, which is the only form of it a diagnosis running
 // outside Chrome can read. The mark of what has already been forwarded lives in
 // session storage: it survives the worker being torn down and restarted, and is

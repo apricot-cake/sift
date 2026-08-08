@@ -8,11 +8,13 @@
     // moment a script is run, keeps every .ts file in this repo directly
     // runnable by node.
     "erasableSyntaxOnly": true,
-    // Ambient globals the extension code and the Node scripts each need —
-    // `chrome.*` (used directly rather than through WXT's polyfilled `browser`)
-    // and Node's own globals (`process`, `Buffer`, `node:*` built-ins). Named
-    // explicitly because this project has no other @types package whose
-    // presence would pull them in automatically.
-    "types": ["chrome", "node"]
+    // Node's own globals (`process`, `Buffer`, `node:*` built-ins), which the
+    // scripts and the build config need. Named explicitly because this project
+    // has no other @types package whose presence would pull them in.
+    //
+    // "chrome" is deliberately absent. The extension APIs are reached through
+    // `browser` (wxt/browser), whose types WXT ships, and leaving the chrome
+    // globals undeclared is what stops a `chrome.*` call from compiling at all.
+    "types": ["node"]
   }
 }
