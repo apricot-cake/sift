@@ -8,6 +8,10 @@ Development runs in a Chrome profile separate from your everyday one. Your every
 
 Node 24.12 or newer. `.node-version` and `engines` in `package.json` both say so, and CI installs whatever `.node-version` names. The scripts under `scripts\` are run by node directly, with no build step of their own, so they depend on node's own type stripping — 24.12 is the release where that stopped being experimental.
 
+## Dependencies
+
+Every version in `package.json` is exact, and `.npmrc` sets `save-exact=true` so the next `npm install` does not quietly reintroduce a range. Updates arrive as Dependabot pull requests — weekly, minor and patch grouped — which is the same arrangement the workflow's `uses:` entries have, pinned to commit SHAs and moved by Dependabot. A range would move a dependency with no commit saying so.
+
 ## Dev server
 
 ```powershell
