@@ -69,4 +69,4 @@ Outputs to `.output\chrome-mv3-release` and compares the generated manifest agai
 npm test
 ```
 
-Runs the unit tests for the filtering logic and the error log.
+Typechecks the whole tree (`tsc --noEmit`), then runs the unit tests for the filtering logic and the error log. There is no separate typecheck command — this is it, and CI runs the same one.

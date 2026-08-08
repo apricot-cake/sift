@@ -1157,7 +1157,7 @@ assert.equal(
   "reload"
 );
 
-// -- Misskey instance permission and registration (utils/instances.js) --
+// -- Misskey instance permission and registration (utils/instances.ts) --
 
 assert.equal(normalizeInstanceHost("misskey.io"), "misskey.io");
 assert.equal(normalizeInstanceHost("https://misskey.io"), "misskey.io");
@@ -1544,7 +1544,7 @@ function createFakeScripting(initialScripts: FakeRegisteredScript[] = []) {
   assert.deepEqual(storage.sync.state[MISSKEY_INSTANCES_KEY], ["kept.example"]);
 }
 
-// utils/settings.js normalizes the stored instance list the same way: invalid
+// utils/settings.ts normalizes the stored instance list the same way: invalid
 // and duplicate entries are dropped, and a missing/non-array value becomes
 // an empty list rather than throwing.
 assert.deepEqual(
