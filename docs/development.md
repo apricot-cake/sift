@@ -69,4 +69,4 @@ Outputs to `.output\chrome-mv3-release`, then checks that the generated manifest
 npm test
 ```
 
-Typechecks the whole tree (`tsc --noEmit`), then runs the unit tests for the filtering logic and the error log. There is no separate typecheck command — this is it, and CI runs the same one.
+Typechecks the whole tree (`tsc --noEmit`), then runs the unit tests with Vitest. Each test file sits next to the code it covers (`utils/filter-core.test.ts` and so on), and the adapters are tested by running their selectors against a real DOM — happy-dom parses the markup a test writes, so what passes is a selector that would find the element on the page. There is no separate typecheck command — this is it, and CI runs the same one.

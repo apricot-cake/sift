@@ -5,9 +5,10 @@ import { parseMetric } from "../filter-core.ts";
 import { LIKE_THRESHOLDS } from "../settings.ts";
 import type { ServiceAdapter } from "./types.ts";
 
-// Named so a test can build a fake node keyed by the same selectors the adapter
-// asks for, without restating them.
-export const BLUESKY_SELECTORS = Object.freeze({
+// Bluesky's page structure in one place, so a redraw on Bluesky's side is one
+// edit here. Not exported: what a test supplies is markup, and what it reads is
+// the answer this file gives for it (utils/adapters/bluesky.test.ts).
+const BLUESKY_SELECTORS = Object.freeze({
   // The testid carries the author's handle ("feedItem-by-bsky.app"), so these
   // are prefix matches. Feeds, profiles and notifications use the first form;
   // the post detail screen uses the second.

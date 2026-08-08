@@ -17,9 +17,10 @@ import { parseMetric } from "../filter-core.ts";
 import { MISSKEY_REACTION_THRESHOLDS } from "../settings.ts";
 import type { ServiceAdapter } from "./types.ts";
 
-// Named so a test can build a fake node keyed by the same selectors the adapter
-// asks for, without restating them.
-export const MISSKEY_SELECTORS = Object.freeze({
+// Misskey's page structure in one place, so a change on an instance's side is
+// one edit here. Not exported: what a test supplies is markup, and what it reads
+// is the answer this file gives for it (utils/adapters/misskey.test.ts).
+const MISSKEY_SELECTORS = Object.freeze({
   // A note renders as <div>(root) > <article>. Nothing else in the client uses
   // <article>, but an instance's own additions might, so a card also has to
   // carry a note's timestamp to count as one.
