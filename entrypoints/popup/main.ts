@@ -1,5 +1,6 @@
 import { browser } from "wxt/browser";
 import { startUncaughtReporting } from "../../utils/error-log.ts";
+import { localizeDocument, t } from "../../utils/i18n.ts";
 import {
   addInstance,
   type InstanceDeps,
@@ -23,6 +24,12 @@ startUncaughtReporting({
 // always present at runtime (popup.html declares every one of them), so the
 // early return never actually fires.
 function main(): void {
+  // Before anything is read off the page or shown on it: index.html ships with
+  // message names where its text goes, and the empty document is what a reader
+  // would see for the moment in between.
+  localizeDocument(document);
+  document.documentElement.lang = browser.i18n.getUILanguage();
+
   const maybeStatus = document.querySelector<HTMLElement>(
     '[data-role="status"]',
   );
@@ -78,7 +85,7 @@ function main(): void {
   }
 
   function showSavedStatus(): void {
-    status.textContent = "保存しました";
+    status.textContent = t("popupStatusSaved");
     if (statusTimer !== null) {
       window.clearTimeout(statusTimer);
     }
@@ -99,7 +106,7 @@ function main(): void {
 
       const removeButton = document.createElement("button");
       removeButton.type = "button";
-      removeButton.textContent = "削除";
+      removeButton.textContent = t("popupInstanceRemove");
       removeButton.addEventListener("click", async () => {
         removeButton.disabled = true;
         await removeInstance(host, instanceDeps);
@@ -129,7 +136,7 @@ function main(): void {
       status.textContent = "";
     })
     .catch(() => {
-      status.textContent = "設定を読み込めませんでした。";
+      status.textContent = t("popupErrorLoadFailed");
     });
 
   // Storage, not the addInstance() call's own return value, is what drives the
@@ -150,8 +157,7 @@ function main(): void {
 
     const host = normalizeInstanceHost(instanceInput.value);
     if (host === null) {
-      instanceError.textContent =
-        "ホスト名を確認してください（例: misskey.io。パスやクエリ、httpは指定できません）。";
+      instanceError.textContent = t("popupErrorBadHost");
       return;
     }
 
@@ -165,8 +171,7 @@ function main(): void {
     try {
       const result = await addInstance(host, instanceDeps);
       if (!result.added) {
-        instanceError.textContent =
-          "権限が許可されなかったため、追加していません。";
+        instanceError.textContent = t("popupErrorPermissionDenied");
         return;
       }
       instanceInput.value = "";
@@ -203,7 +208,7 @@ function main(): void {
       .setValue(settings)
       .then(showSavedStatus)
       .catch(() => {
-        status.textContent = "設定を保存できませんでした。";
+        status.textContent = t("popupErrorSaveFailed");
       });
     syncForm();
   });

@@ -29,6 +29,7 @@ Load `.output\chrome-mv3` as an unpacked extension from `chrome://extensions`, t
 - Only the posts loaded into the screen you currently have open are evaluated. No auto-scrolling, no background collection, no unofficial API calls.
 - Post data is never stored or sent anywhere. Only your settings are saved, in Chrome sync storage.
 - Posts that never reach the open screen — private accounts, blocks, region locks — cannot be shown.
+- The interface is in English and Japanese, picked from the browser's own language setting. There is no language switch inside the extension; a browser set to anything else gets English.
 
 ### Supported services
 

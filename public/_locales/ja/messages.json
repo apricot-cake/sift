@@ -1,0 +1,78 @@
+{
+  "extensionDescription": {
+    "message": "X・Bluesky・Misskeyの投稿画面を、メディア・反応の数・投稿後の時間で絞り込みます。"
+  },
+
+  "popupTagline": { "message": "表示中の投稿を共通の条件で絞り込みます" },
+  "popupSectionFilter": { "message": "フィルター" },
+  "popupEnabled": { "message": "フィルターを有効にする" },
+  "popupSectionStandard": { "message": "通常" },
+  "popupMinLikes": { "message": "最低いいね数" },
+  "popupMinReactions": { "message": "最低リアクション数（Misskey）" },
+  "popupSectionRising": { "message": "上昇中" },
+  "popupRisingEnabled": { "message": "上昇中の投稿を表示する" },
+  "popupMaxAge": { "message": "投稿後の時間" },
+  "popupUnitHours": { "message": "時間" },
+  "popupThresholdNote": {
+    "message": "いいね数はXとBluesky、リアクション数はMisskeyに使います。インスタンスの規模が違うため、しきい値は別々に持ちます。"
+  },
+  "popupSectionPost": { "message": "投稿" },
+  "popupMedia": { "message": "メディア" },
+  "popupMediaAny": { "message": "画像・動画" },
+  "popupMediaImages": { "message": "画像のみ" },
+  "popupHideReposts": { "message": "リポストを除外する" },
+  "popupSectionInstances": { "message": "Misskeyインスタンス" },
+  "popupInstancePlaceholder": { "message": "例: misskey.io" },
+  "popupInstanceInputLabel": {
+    "message": "追加するMisskeyインスタンスのホスト名"
+  },
+  "popupInstanceAdd": { "message": "追加" },
+  "popupInstanceRemove": { "message": "削除" },
+  "popupInstanceNote": {
+    "message": "追加すると、そのホストだけへのアクセス許可をChromeが確認します。"
+  },
+  "popupStatusLoading": { "message": "読み込み中…" },
+  "popupStatusSaved": { "message": "保存しました" },
+  "popupAutosaveNote": {
+    "message": "設定は自動保存され、対応している投稿一覧に反映されます。"
+  },
+  "popupErrorLoadFailed": { "message": "設定を読み込めませんでした。" },
+  "popupErrorSaveFailed": { "message": "設定を保存できませんでした。" },
+  "popupErrorBadHost": {
+    "message": "ホスト名を確認してください（例: misskey.io。パスやクエリ、httpは指定できません）。"
+  },
+  "popupErrorPermissionDenied": {
+    "message": "権限が許可されなかったため、追加していません。"
+  },
+
+  "toolbarPanelLabel": { "message": "Siftの設定" },
+  "toolbarPanelTitle": { "message": "フィルター設定" },
+  "toolbarAutosave": { "message": "自動保存" },
+  "toolbarMinLikes": { "message": "通常の最低いいね数" },
+  "toolbarMinReactions": { "message": "通常の最低リアクション数" },
+  "toolbarRisingEnabled": { "message": "上昇中を表示" },
+  "toolbarRisingMinLikes": { "message": "上昇中の最低いいね数" },
+  "toolbarRisingMinReactions": { "message": "上昇中の最低リアクション数" },
+  "toolbarMaxAge": { "message": "投稿後の時間" },
+  "toolbarUnitHours": { "message": "時間" },
+  "toolbarMedia": { "message": "メディア" },
+  "toolbarMediaAny": { "message": "画像・動画" },
+  "toolbarMediaImages": { "message": "画像のみ" },
+  "toolbarHideReposts": { "message": "リポストを除外" },
+  "toolbarHint": { "message": "青線は通常、橙線は上昇中の投稿です。" },
+  "toolbarStatusChecking": { "message": "判定中…" },
+  "toolbarStatusCounts": {
+    "message": "注目 $HIT$・上昇中 $RISING$・非表示 $HIDDEN$",
+    "placeholders": {
+      "hit": { "content": "$1" },
+      "rising": { "content": "$2" },
+      "hidden": { "content": "$3" }
+    }
+  },
+  "toolbarStatusStopped": { "message": "フィルター停止中" },
+  "toolbarFilterOn": { "message": "抽出 ON" },
+  "toolbarFilterOff": { "message": "抽出 OFF" },
+  "toolbarShowAll": { "message": "全件を一時表示" },
+  "toolbarShowFiltered": { "message": "抽出表示に戻す" },
+  "toolbarSettings": { "message": "設定" }
+}

@@ -65,6 +65,20 @@ Exceptions the code fails to catch are caught by the extension itself and writte
 
 There is no way to read the everyday profile's buffer yet. Content scripts record only the exceptions they can attribute to the extension; the popup and the service worker record everything.
 
+## Strings
+
+Every string a reader sees lives in `public\_locales\<language>\messages.json` and is reached through `utils\i18n.ts`. `en` is the default locale, so a browser set to anything Sift has no messages for reads English. There is no language switch in the extension — `browser.i18n` has no way to offer one, and WXT's own i18n guide recommends the bare API over a bundled library anyway.
+
+Three shapes reach a message:
+
+- `t("name")` in code, with the message names typed from the English file (`i18n.d.ts` merges them into WXT's own `browser.i18n` types, so a typo does not compile)
+- `data-i18n`, `data-i18n-placeholder` and `data-i18n-aria-label` in `entrypoints\popup\index.html`, filled in by `localizeDocument()` — static HTML cannot carry `__MSG_name__` the way the manifest can
+- `__MSG_name__` in `wxt.config.ts`, which only the manifest's own fields take
+
+The popup's markup also carries the English text itself, for the moment before `main.ts` runs. `utils\i18n.test.ts` holds it to the same words as the messages file, checks the two locales name the same messages, and fails on a name that exists in neither. `verify-manifest.ts` does the same for the manifest's description.
+
+Tests read `public\_locales\en` through `test\i18n.ts`, which is what stands in for `browser.i18n.getMessage` — WXT's fake browser leaves it unimplemented.
+
 ## Lint
 
 ```powershell

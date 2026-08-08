@@ -13,6 +13,7 @@ import {
   type ClassifyState,
   classifyPost,
 } from "../../utils/filter-core.ts";
+import { t } from "../../utils/i18n.ts";
 import { CONTENT_RUNTIME_KEY } from "../../utils/runtime-key.ts";
 import {
   defaults,
@@ -165,17 +166,24 @@ export function startContentRuntime(
 
     if (status) {
       status.textContent = settings.enabled
-        ? `注目 ${counts.hit}・上昇中 ${counts.rising}・非表示 ${counts.hidden}`
-        : "フィルター停止中";
+        ? t(
+            "toolbarStatusCounts",
+            String(counts.hit),
+            String(counts.rising),
+            String(counts.hidden),
+          )
+        : t("toolbarStatusStopped");
     }
     if (toggle) {
-      toggle.textContent = settings.enabled ? "抽出 ON" : "抽出 OFF";
+      toggle.textContent = settings.enabled
+        ? t("toolbarFilterOn")
+        : t("toolbarFilterOff");
       toggle.dataset.active = String(settings.enabled);
     }
     if (reveal) {
       reveal.textContent = showAllTemporarily
-        ? "抽出表示に戻す"
-        : "全件を一時表示";
+        ? t("toolbarShowFiltered")
+        : t("toolbarShowAll");
     }
   }
 
@@ -272,19 +280,20 @@ export function startContentRuntime(
 
   function toolbarMarkup(): string {
     const { minReactions, risingMinReactions } = adapter.thresholdKeys;
+    const { minCount, risingMinCount } = adapter.reactionLabels;
     return `
-        <div class="panel" data-role="panel" role="dialog" aria-label="Siftの設定" hidden>
-          <div class="panel-header"><strong>フィルター設定</strong><span>自動保存</span></div>
-          <label>通常の最低${adapter.reactionLabel}数<input data-setting="${minReactions}" type="number" min="0" step="${thresholdStep(minReactions)}"></label>
-          <label>上昇中を表示<input data-setting="risingEnabled" type="checkbox"></label>
-          <label>上昇中の最低${adapter.reactionLabel}数<input data-setting="${risingMinReactions}" type="number" min="0" step="${thresholdStep(risingMinReactions)}"></label>
-          <label>投稿後の時間<span class="input-with-unit"><input data-setting="risingMaxAgeHours" type="number" min="1" max="168">時間</span></label>
-          <label>メディア<select data-setting="mediaMode"><option value="any">画像・動画</option><option value="images">画像のみ</option></select></label>
-          <label>リポストを除外<input data-setting="hideReposts" type="checkbox"></label>
-          <p class="hint">青線は通常、橙線は上昇中の投稿です。</p>
+        <div class="panel" data-role="panel" role="dialog" aria-label="${t("toolbarPanelLabel")}" hidden>
+          <div class="panel-header"><strong>${t("toolbarPanelTitle")}</strong><span>${t("toolbarAutosave")}</span></div>
+          <label>${t(minCount)}<input data-setting="${minReactions}" type="number" min="0" step="${thresholdStep(minReactions)}"></label>
+          <label>${t("toolbarRisingEnabled")}<input data-setting="risingEnabled" type="checkbox"></label>
+          <label>${t(risingMinCount)}<input data-setting="${risingMinReactions}" type="number" min="0" step="${thresholdStep(risingMinReactions)}"></label>
+          <label>${t("toolbarMaxAge")}<span class="input-with-unit"><input data-setting="risingMaxAgeHours" type="number" min="1" max="168">${t("toolbarUnitHours")}</span></label>
+          <label>${t("toolbarMedia")}<select data-setting="mediaMode"><option value="any">${t("toolbarMediaAny")}</option><option value="images">${t("toolbarMediaImages")}</option></select></label>
+          <label>${t("toolbarHideReposts")}<input data-setting="hideReposts" type="checkbox"></label>
+          <p class="hint">${t("toolbarHint")}</p>
         </div>
         <div class="toolbar">
-          <button data-action="toggle-enabled"></button><span class="status" data-role="status" role="status" aria-live="polite">判定中…</span><button data-action="toggle-show-all">全件を一時表示</button><button data-action="toggle-panel" aria-expanded="false">設定</button>
+          <button data-action="toggle-enabled"></button><span class="status" data-role="status" role="status" aria-live="polite">${t("toolbarStatusChecking")}</span><button data-action="toggle-show-all">${t("toolbarShowAll")}</button><button data-action="toggle-panel" aria-expanded="false">${t("toolbarSettings")}</button>
         </div>
       `;
   }

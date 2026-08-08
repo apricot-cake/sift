@@ -293,11 +293,11 @@ describe("reading a repost", () => {
   });
 });
 
-// Bluesky's like is X's like, so the threshold and the word are shared rather
-// than duplicated per service.
+// Bluesky's like is X's like, so the thresholds and the messages that name it
+// are shared rather than duplicated per service.
 describe("what the thresholds count", () => {
   it("is the same like X counts, against the same pair of numbers", () => {
-    expect(blueskyAdapter.reactionLabel).toBe(xAdapter.reactionLabel);
+    expect(blueskyAdapter.reactionLabels).toBe(xAdapter.reactionLabels);
     expect(blueskyAdapter.thresholdKeys).toBe(LIKE_THRESHOLDS);
   });
 });

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { render } from "../../test/dom.ts";
 import { LIKE_THRESHOLDS } from "../settings.ts";
+import { LIKE_LABELS } from "./types.ts";
 import { xAdapter } from "./x.ts";
 
 // X wraps every post in a cell that also carries the separator and the padding
@@ -191,11 +192,11 @@ describe("reading a repost", () => {
   });
 });
 
-// The toolbar and its settings panel take this word from the adapter rather
-// than spelling out X's.
+// The toolbar and its settings panel take these from the adapter rather than
+// naming X's reaction themselves.
 describe("what the thresholds count", () => {
-  it("is the like, under X's own word for it", () => {
-    expect(xAdapter.reactionLabel).toBe("いいね");
+  it("is the like, under the messages that name a like", () => {
+    expect(xAdapter.reactionLabels).toBe(LIKE_LABELS);
     expect(xAdapter.thresholdKeys).toBe(LIKE_THRESHOLDS);
   });
 });

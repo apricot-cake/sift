@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { render } from "../../test/dom.ts";
 import { MISSKEY_REACTION_THRESHOLDS } from "../settings.ts";
 import { misskeyAdapter } from "./misskey.ts";
+import { REACTION_LABELS } from "./types.ts";
 import { xAdapter } from "./x.ts";
 
 // Nothing in a Misskey note is marked: the class names are per-build hashes and
@@ -261,7 +262,8 @@ describe("reading a renote", () => {
 // X's by orders of magnitude, so it counts against its own pair of thresholds.
 describe("what the thresholds count", () => {
   it("is the reaction, against Misskey's own pair of numbers", () => {
-    expect(misskeyAdapter.reactionLabel).toBe("リアクション");
+    expect(misskeyAdapter.reactionLabels).toBe(REACTION_LABELS);
+    expect(misskeyAdapter.reactionLabels).not.toBe(xAdapter.reactionLabels);
     expect(misskeyAdapter.thresholdKeys).toBe(MISSKEY_REACTION_THRESHOLDS);
     expect(misskeyAdapter.thresholdKeys).not.toBe(xAdapter.thresholdKeys);
   });

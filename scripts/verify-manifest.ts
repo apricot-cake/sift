@@ -66,6 +66,32 @@ assert.deepEqual(
 // The version lives in package.json alone; WXT copies it here.
 assert.equal(generatedManifest.version, packageJson.version);
 
+// The description is a message name rather than a sentence, and the browser's
+// manifest parser is what resolves it — silently, leaving the extension with no
+// description at all if the name is wrong or the file never made it into the
+// build. Nothing else would say so: `wxt build` neither reads the name nor
+// checks that public/_locales was copied.
+assert.equal(generatedManifest.default_locale, declaredManifest.default_locale);
+const defaultMessages = JSON.parse(
+  await readFile(
+    `.output/${target}-mv3-release/_locales/${generatedManifest.default_locale}/messages.json`,
+    "utf8",
+  ),
+);
+const descriptionKey = generatedManifest.description.replace(
+  /^__MSG_(.+)__$/,
+  "$1",
+);
+assert.notEqual(
+  descriptionKey,
+  generatedManifest.description,
+  "the manifest's description is a literal — it should name a message",
+);
+assert.ok(
+  descriptionKey in defaultMessages,
+  `the manifest's description names ${descriptionKey}, which the ${generatedManifest.default_locale} messages file does not have`,
+);
+
 // `action` is the one entry both sides write to: the title comes from
 // wxt.config.ts, the popup from the entrypoint existing at all.
 assert.equal(

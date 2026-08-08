@@ -15,7 +15,7 @@
 // the same notes.
 import { parseMetric } from "../filter-core.ts";
 import { MISSKEY_REACTION_THRESHOLDS } from "../settings.ts";
-import type { ServiceAdapter } from "./types.ts";
+import { REACTION_LABELS, type ServiceAdapter } from "./types.ts";
 
 // Misskey's page structure in one place, so a change on an instance's side is
 // one edit here. Not exported: what a test supplies is markup, and what it reads
@@ -114,7 +114,7 @@ export const misskeyAdapter = Object.freeze({
   // Misskey's reaction is one per reader like a like is, but instance sizes
   // differ from X's by orders of magnitude, so it counts against its own
   // thresholds (see #2's issue comment, section 4).
-  reactionLabel: "リアクション",
+  reactionLabels: REACTION_LABELS,
   thresholdKeys: MISSKEY_REACTION_THRESHOLDS,
 
   getPostCards(root: ParentNode) {
