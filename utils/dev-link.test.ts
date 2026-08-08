@@ -10,7 +10,7 @@ const linked = {
   isFirstProbe: false,
   bootAtStart: "server-1",
   registeredCount: 1,
-  reloadedForBoot: undefined
+  reloadedForBoot: undefined,
 };
 
 describe("decideDevLinkAction", () => {
@@ -30,12 +30,12 @@ describe("decideDevLinkAction", () => {
         ...linked,
         ready: false,
         bootAtStart: undefined,
-        registeredCount: 0
-      })
+        registeredCount: 0,
+      }),
     ).toBe("building");
-    expect(decideDevLinkAction({ ...linked, ready: false, boot: "server-2" })).toBe(
-      "building"
-    );
+    expect(
+      decideDevLinkAction({ ...linked, ready: false, boot: "server-2" }),
+    ).toBe("building");
   });
 
   // The worker just started and the server answered, so its socket went to this
@@ -46,8 +46,8 @@ describe("decideDevLinkAction", () => {
         ...linked,
         isFirstProbe: true,
         bootAtStart: undefined,
-        registeredCount: 0
-      })
+        registeredCount: 0,
+      }),
     ).toBe("adopt");
   });
 
@@ -55,7 +55,11 @@ describe("decideDevLinkAction", () => {
   // nothing, so it never adopted a generation, and the socket it opened is dead.
   it("reloads when it never attached to anything", () => {
     expect(
-      decideDevLinkAction({ ...linked, bootAtStart: undefined, registeredCount: 0 })
+      decideDevLinkAction({
+        ...linked,
+        bootAtStart: undefined,
+        registeredCount: 0,
+      }),
     ).toBe("reload");
   });
 
@@ -64,20 +68,30 @@ describe("decideDevLinkAction", () => {
   });
 
   it("reloads when the registration never happened", () => {
-    expect(decideDevLinkAction({ ...linked, registeredCount: 0 })).toBe("reload");
+    expect(decideDevLinkAction({ ...linked, registeredCount: 0 })).toBe(
+      "reload",
+    );
   });
 
   // One reload per generation. Coming back to the same state means something
   // else is wrong, and a loop would only hide it.
   it("reloads once per generation and then waits", () => {
     expect(
-      decideDevLinkAction({ ...linked, boot: "server-2", reloadedForBoot: "server-2" })
+      decideDevLinkAction({
+        ...linked,
+        boot: "server-2",
+        reloadedForBoot: "server-2",
+      }),
     ).toBe("waiting");
   });
 
   it("does not let a reload for an earlier generation excuse the next one", () => {
     expect(
-      decideDevLinkAction({ ...linked, boot: "server-3", reloadedForBoot: "server-2" })
+      decideDevLinkAction({
+        ...linked,
+        boot: "server-3",
+        reloadedForBoot: "server-2",
+      }),
     ).toBe("reload");
   });
 });

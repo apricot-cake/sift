@@ -43,7 +43,7 @@ const MISSKEY_SELECTORS = Object.freeze({
   // (which says nothing about its type) or for one the data saver held back.
   hiddenMedia: "i.ti-photo, i.ti-eye-exclamation",
   // Written into the page the server sends, before any of the client runs.
-  application: 'meta[name="application-name"][content="Misskey"]'
+  application: 'meta[name="application-name"][content="Misskey"]',
 });
 
 // Whether this page is a Misskey instance. Asked of hosts Sift was not built
@@ -61,13 +61,21 @@ const EMOJI_SHORTCODE = /^:.+:$/;
 // Emoji drawn as characters rather than as an image: what a native-emoji
 // reaction leaves in a chip's text, and what MkEmoji puts in an img's alt.
 // Digits are deliberately not stripped — \p{Emoji_Component} would take them.
-const EMOJI_TEXT = /[\p{Extended_Pictographic}\p{Regional_Indicator}️‍\s]/gu;
+//
+// \uFE0F (variation selector-16) and \u200D (zero-width joiner) are what holds a
+// multi-codepoint emoji together, and this takes them one codepoint at a time on
+// purpose: the point is to leave nothing of the emoji behind, not to match it as
+// one grapheme. An alternation rather than one character class, because a
+// combining mark inside a class matches on its own there anyway and reads as if
+// it were part of the character before it.
+const EMOJI_TEXT =
+  /\p{Extended_Pictographic}|\p{Regional_Indicator}|\uFE0F|\u200D|\s/gu;
 // A reaction chip's text is its count and nothing else, once the emoji is out.
 const COUNT_ONLY = /^\d[\d,]*$/;
 
 function noteCards(root: ParentNode): Element[] {
   return Array.from(root.querySelectorAll(MISSKEY_SELECTORS.postCard)).filter(
-    (postCard) => postCard.querySelector(MISSKEY_SELECTORS.createdAt)
+    (postCard) => postCard.querySelector(MISSKEY_SELECTORS.createdAt),
   );
 }
 
@@ -142,7 +150,7 @@ export const misskeyAdapter = Object.freeze({
     let total = 0;
 
     for (const button of postCard.querySelectorAll(
-      MISSKEY_SELECTORS.reactionButton
+      MISSKEY_SELECTORS.reactionButton,
     )) {
       if (button.querySelector(MISSKEY_SELECTORS.icon)) {
         continue;
@@ -180,10 +188,14 @@ export const misskeyAdapter = Object.freeze({
   // file is there but not what it is, and a note read as having no media at all
   // would be hidden outright.
   readMedia(postCard: Element) {
-    const images = Array.from(postCard.querySelectorAll("img")).some(isNoteImage);
+    const images = Array.from(postCard.querySelectorAll("img")).some(
+      isNoteImage,
+    );
     return {
-      hasImage: images || Boolean(postCard.querySelector(MISSKEY_SELECTORS.hiddenMedia)),
-      hasVideo: Boolean(postCard.querySelector(MISSKEY_SELECTORS.video))
+      hasImage:
+        images ||
+        Boolean(postCard.querySelector(MISSKEY_SELECTORS.hiddenMedia)),
+      hasVideo: Boolean(postCard.querySelector(MISSKEY_SELECTORS.video)),
     };
   },
 
@@ -210,5 +222,5 @@ export const misskeyAdapter = Object.freeze({
     }
 
     return false;
-  }
+  },
 }) satisfies ServiceAdapter;

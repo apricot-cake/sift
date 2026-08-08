@@ -13,7 +13,7 @@ export default defineConfig({
     // the content script would throw on reaching it. Tests get the release
     // build's answer: the development-only halves talk to a server no test
     // starts.
-    __SIFT_DEV__: "false"
+    __SIFT_DEV__: "false",
   },
   test: {
     // Every adapter is a set of selectors run against a page, so the page has to
@@ -21,6 +21,6 @@ export default defineConfig({
     // `firstElementChild` and attribute matching mean what they mean in a
     // browser — a hand-written stub answers whatever the test told it to answer,
     // which is a test of the test.
-    environment: "happy-dom"
-  }
+    environment: "happy-dom",
+  },
 });

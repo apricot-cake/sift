@@ -35,7 +35,7 @@ describe("the stored settings", () => {
     await fakeBrowser.storage.sync.set({
       minLikes: 42,
       misskeyInstances: ["misskey.io"],
-      hideReposts: false
+      hideReposts: false,
     });
 
     const { settingsItem } = await importStorage();
@@ -75,7 +75,9 @@ describe("instanceStorage", () => {
     await instanceStorage.setInstances(["misskey.io"]);
 
     expect(await instanceStorage.getInstances()).toEqual(["misskey.io"]);
-    expect((await settingsItem.getValue()).misskeyInstances).toEqual(["misskey.io"]);
+    expect((await settingsItem.getValue()).misskeyInstances).toEqual([
+      "misskey.io",
+    ]);
   });
 
   // The same normalization every other read gets: a host that cannot be turned
@@ -83,7 +85,11 @@ describe("instanceStorage", () => {
   it("drops a host that is not one https host", async () => {
     const { instanceStorage } = await importStorage();
 
-    await instanceStorage.setInstances(["misskey.io", "http://bad", "misskey.io"]);
+    await instanceStorage.setInstances([
+      "misskey.io",
+      "http://bad",
+      "misskey.io",
+    ]);
 
     expect(await instanceStorage.getInstances()).toEqual(["misskey.io"]);
   });

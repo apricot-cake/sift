@@ -88,7 +88,7 @@ export function decideDevLinkAction({
   isFirstProbe,
   bootAtStart,
   registeredCount,
-  reloadedForBoot
+  reloadedForBoot,
 }: DevLinkProbe): DevLinkAction {
   if (boot == null) {
     return "server-down";

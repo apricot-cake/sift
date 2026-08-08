@@ -16,8 +16,11 @@ const likeButton =
 function renderFeed(...posts: string[]): HTMLElement {
   return render(
     posts
-      .map((post) => `<div data-testid="feedItem-by-example.bsky.social">${post}</div>`)
-      .join("")
+      .map(
+        (post) =>
+          `<div data-testid="feedItem-by-example.bsky.social">${post}</div>`,
+      )
+      .join(""),
   );
 }
 
@@ -39,7 +42,7 @@ describe("finding posts", () => {
 
   it("finds a post on the detail screen, which draws its own testid", () => {
     const screen = render(
-      `<div data-testid="postThreadItem-by-example.bsky.social">${likeButton}</div>`
+      `<div data-testid="postThreadItem-by-example.bsky.social">${likeButton}</div>`,
     );
 
     expect(blueskyAdapter.getPostCards(screen)).toHaveLength(1);
@@ -94,17 +97,21 @@ describe("reading the post time", () => {
   // on the permalink, and the record key in that permalink's path.
   it("reads a label Date.parse understands", () => {
     const card = renderPost(
-      `<a href="${postHref}" aria-label="2026-08-01T12:00:00.000Z">1時間前</a>`
+      `<a href="${postHref}" aria-label="2026-08-01T12:00:00.000Z">1時間前</a>`,
     );
 
-    expect(blueskyAdapter.readCreatedAt(card)).toBe(Date.parse("2026-08-01T12:00:00.000Z"));
+    expect(blueskyAdapter.readCreatedAt(card)).toBe(
+      Date.parse("2026-08-01T12:00:00.000Z"),
+    );
   });
 
   // The label Bluesky actually writes is a localized absolute time, which
   // Date.parse rejects — so in practice the record key is what carries the time.
   it("falls back to the record key for a label Date.parse refuses", () => {
     expect(Date.parse("2026年7月10日 20:46")).toBeNaN();
-    const card = renderPost(`<a href="${postHref}" aria-label="2026年7月10日 20:46">1時間前</a>`);
+    const card = renderPost(
+      `<a href="${postHref}" aria-label="2026年7月10日 20:46">1時間前</a>`,
+    );
 
     expect(blueskyAdapter.readCreatedAt(card)).toBe(recordKeyTime);
   });
@@ -134,7 +141,9 @@ describe("reading the post time", () => {
 
   // Neither reading available: the post still classifies, only "rising" drops.
   it("answers NaN for a link whose key is not a record key", () => {
-    const card = renderPost('<a href="/profile/example.bsky.social/post/self"></a>');
+    const card = renderPost(
+      '<a href="/profile/example.bsky.social/post/self"></a>',
+    );
 
     expect(blueskyAdapter.readCreatedAt(card)).toBeNaN();
   });
@@ -148,13 +157,17 @@ describe("timestampFromRecordKey", () => {
   it("decodes the key out of a permalink", () => {
     expect(timestampFromRecordKey(postHref)).toBe(recordKeyTime);
     expect(timestampFromRecordKey(`${postHref}?foo=1`)).toBe(recordKeyTime);
-    expect(timestampFromRecordKey(`https://bsky.app${postHref}#anchor`)).toBe(recordKeyTime);
+    expect(timestampFromRecordKey(`https://bsky.app${postHref}#anchor`)).toBe(
+      recordKeyTime,
+    );
   });
 
   // The key is the segment after /post/, so a link to one of the post's own
   // sub-pages carries it just as well as the permalink does.
   it("decodes the key out of a sub-page link", () => {
-    expect(timestampFromRecordKey(`${postHref}/reposted-by`)).toBe(recordKeyTime);
+    expect(timestampFromRecordKey(`${postHref}/reposted-by`)).toBe(
+      recordKeyTime,
+    );
   });
 
   // A record key is only a TID by convention, so anything that does not decode
@@ -175,49 +188,67 @@ describe("timestampFromRecordKey", () => {
   // And a post cannot predate the clock reading it by more than a small skew.
   it("allows a clock that disagrees, and no more", () => {
     expect(timestampFromRecordKey(postHref, recordKeyTime - 3600000)).toBeNaN();
-    expect(timestampFromRecordKey(postHref, recordKeyTime - 60000)).toBe(recordKeyTime);
+    expect(timestampFromRecordKey(postHref, recordKeyTime - 60000)).toBe(
+      recordKeyTime,
+    );
   });
 });
 
 describe("reading the media", () => {
   it("reads a post's own image", () => {
     const card = renderPost(
-      '<button><img src="https://cdn.bsky.app/img/feed_thumbnail/plain/did/1@jpeg"></button>'
+      '<button><img src="https://cdn.bsky.app/img/feed_thumbnail/plain/did/1@jpeg"></button>',
     );
 
-    expect(blueskyAdapter.readMedia(card)).toEqual({ hasImage: true, hasVideo: false });
+    expect(blueskyAdapter.readMedia(card)).toEqual({
+      hasImage: true,
+      hasVideo: false,
+    });
   });
 
   // An external link card's thumbnail is served from the same path and is told
   // apart only by what encloses it: a link, not a button.
   it("does not read an external link card's thumbnail as media", () => {
     const card = renderPost(
-      '<a href="https://example.com"><img src="https://cdn.bsky.app/img/feed_thumbnail/plain/did/1@jpeg"></a>'
+      '<a href="https://example.com"><img src="https://cdn.bsky.app/img/feed_thumbnail/plain/did/1@jpeg"></a>',
     );
 
-    expect(blueskyAdapter.readMedia(card)).toEqual({ hasImage: false, hasVideo: false });
+    expect(blueskyAdapter.readMedia(card)).toEqual({
+      hasImage: false,
+      hasVideo: false,
+    });
   });
 
   // An unplayed video has no <video> at all: the thumbnail is a CSS background.
   it("reads an unplayed video by the background it is drawn with", () => {
     const card = renderPost(
-      '<div style="background-image: url(https://video.bsky.app/watch/did/cid/thumbnail.jpg)"></div>'
+      '<div style="background-image: url(https://video.bsky.app/watch/did/cid/thumbnail.jpg)"></div>',
     );
 
-    expect(blueskyAdapter.readMedia(card)).toEqual({ hasImage: false, hasVideo: true });
+    expect(blueskyAdapter.readMedia(card)).toEqual({
+      hasImage: false,
+      hasVideo: true,
+    });
   });
 
   // GIFs come through as an external embed rather than as Bluesky media.
   it("reads a GIF as a video", () => {
-    const card = renderPost('<video src="https://t.gifs.bsky.app/gif/1.mp4"></video>');
+    const card = renderPost(
+      '<video src="https://t.gifs.bsky.app/gif/1.mp4"></video>',
+    );
 
-    expect(blueskyAdapter.readMedia(card)).toEqual({ hasImage: false, hasVideo: true });
+    expect(blueskyAdapter.readMedia(card)).toEqual({
+      hasImage: false,
+      hasVideo: true,
+    });
   });
 
   it("reads a post with no media as having none", () => {
-    expect(blueskyAdapter.readMedia(renderPost("<span>text only</span>"))).toEqual({
+    expect(
+      blueskyAdapter.readMedia(renderPost("<span>text only</span>")),
+    ).toEqual({
       hasImage: false,
-      hasVideo: false
+      hasVideo: false,
     });
   });
 });
@@ -228,21 +259,25 @@ describe("reading the media", () => {
 // profile link wraps an avatar image.
 describe("reading a repost", () => {
   it("reads a profile link that wraps an icon as the repost header", () => {
-    const card = renderPost('<a href="/profile/example.bsky.social"><svg></svg></a>');
+    const card = renderPost(
+      '<a href="/profile/example.bsky.social"><svg></svg></a>',
+    );
 
     expect(blueskyAdapter.readIsRepost(card)).toBe(true);
   });
 
   it("does not read an author's link as one, icon or not", () => {
     const card = renderPost(
-      '<a href="/profile/example.bsky.social"><svg></svg><img src="/avatar.jpg"></a>'
+      '<a href="/profile/example.bsky.social"><svg></svg><img src="/avatar.jpg"></a>',
     );
 
     expect(blueskyAdapter.readIsRepost(card)).toBe(false);
   });
 
   it("does not read a profile link wrapping anything else as one", () => {
-    const card = renderPost('<a href="/profile/example.bsky.social"><div></div></a>');
+    const card = renderPost(
+      '<a href="/profile/example.bsky.social"><div></div></a>',
+    );
 
     expect(blueskyAdapter.readIsRepost(card)).toBe(false);
   });

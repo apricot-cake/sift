@@ -2,13 +2,13 @@ const unitMultipliers: Record<string, number> = Object.freeze({
   K: 1000,
   M: 1000000,
   B: 1000000000,
-  "万": 10000,
-  "億": 100000000
+  万: 10000,
+  億: 100000000,
 });
 
 export function normalizeDigits(value: unknown): string {
   return String(value ?? "").replace(/[０-９]/g, (character) =>
-    String.fromCharCode(character.charCodeAt(0) - 0xfee0)
+    String.fromCharCode(character.charCodeAt(0) - 0xfee0),
   );
 }
 
@@ -73,7 +73,7 @@ export interface ClassifyResult {
 export function classifyPost(
   post: Post,
   settings: ClassifyThresholds,
-  nowMs = Date.now()
+  nowMs = Date.now(),
 ): ClassifyResult {
   if (!post.hasMedia) {
     return { state: "hidden", reason: "no-media" };

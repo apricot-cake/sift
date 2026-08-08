@@ -11,12 +11,15 @@
     "dev:browser": "node scripts/dev-browser.ts",
     "build": "wxt build -b chrome && npm run verify:manifest",
     "deploy": "node scripts/deploy-extension.ts",
+    "lint": "biome ci .",
+    "lint:fix": "biome check --write .",
     "test": "tsc --noEmit && vitest run",
     "verify:manifest": "node scripts/verify-manifest.ts",
     "postinstall": "wxt prepare",
     "prepare": "node scripts/setup.ts"
   },
   "devDependencies": {
+    "@biomejs/biome": "2.5.7",
     "@types/node": "^26.1.2",
     "happy-dom": "^20.11.2",
     "typescript": "^7.0.2",

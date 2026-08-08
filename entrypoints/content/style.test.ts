@@ -23,10 +23,16 @@ describe("the content stylesheet", () => {
   // name (it named X's post card once, so the line was drawn on X alone), and
   // every new adapter would have to add a rule here.
   it("names no service's page structure", () => {
-    for (const serviceSpecific of ["data-testid", "tweet", "feedItem", "bsky", "article"]) {
+    for (const serviceSpecific of [
+      "data-testid",
+      "tweet",
+      "feedItem",
+      "bsky",
+      "article",
+    ]) {
       expect(
         contentStyles.includes(serviceSpecific),
-        `entrypoints/content/style.css names ${serviceSpecific}, which is one service's page structure`
+        `entrypoints/content/style.css names ${serviceSpecific}, which is one service's page structure`,
       ).toBe(false);
     }
   });
@@ -37,7 +43,7 @@ describe("the content stylesheet", () => {
     for (const state of ["hit", "rising"]) {
       expect(
         contentStyles,
-        `entrypoints/content/style.css has no rule matching the ${state} cell itself`
+        `entrypoints/content/style.css has no rule matching the ${state} cell itself`,
       ).toMatch(new RegExp(`\\[data-sift-filter-state="${state}"\\]\\s*\\{`));
     }
   });

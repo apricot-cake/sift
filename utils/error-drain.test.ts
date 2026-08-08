@@ -1,11 +1,11 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { fakeBrowser } from "wxt/testing/fake-browser";
 import { drainErrorLog } from "./error-drain.ts";
-import { errorLogItem, type ErrorLogEntry } from "./error-log.ts";
+import { type ErrorLogEntry, errorLogItem } from "./error-log.ts";
 
 const buffered: ErrorLogEntry[] = [
   { source: "test", seq: 1, message: "first" },
-  { source: "test", seq: 2, message: "second" }
+  { source: "test", seq: 2, message: "second" },
 ];
 
 beforeEach(async () => {
@@ -20,7 +20,7 @@ describe("drainErrorLog", () => {
     const result = await drainErrorLog({
       post: (entries) => {
         posted.push(entries);
-      }
+      },
     });
 
     expect(result).toEqual({ forwarded: 2 });
@@ -34,7 +34,7 @@ describe("drainErrorLog", () => {
     const result = await drainErrorLog({
       post: () => {
         posts += 1;
-      }
+      },
     });
 
     expect(result).toEqual({ forwarded: 0 });
@@ -43,13 +43,16 @@ describe("drainErrorLog", () => {
 
   it("forwards only what was added since the last drain", async () => {
     await drainErrorLog({ post: () => {} });
-    await errorLogItem.setValue([...buffered, { source: "test", seq: 3, message: "third" }]);
+    await errorLogItem.setValue([
+      ...buffered,
+      { source: "test", seq: 3, message: "third" },
+    ]);
 
     const posted: ErrorLogEntry[][] = [];
     const result = await drainErrorLog({
       post: (entries) => {
         posted.push(entries);
-      }
+      },
     });
 
     expect(result).toEqual({ forwarded: 1 });
@@ -62,15 +65,15 @@ describe("drainErrorLog", () => {
       drainErrorLog({
         post: () => {
           throw new Error("the development server is down");
-        }
-      })
+        },
+      }),
     ).rejects.toThrow();
 
     const posted: ErrorLogEntry[][] = [];
     const result = await drainErrorLog({
       post: (entries) => {
         posted.push(entries);
-      }
+      },
     });
 
     expect(result).toEqual({ forwarded: 2 });
@@ -82,7 +85,9 @@ describe("drainErrorLog", () => {
   // being withheld until the counter catches up again.
   it("forwards a buffer that restarted below the mark", async () => {
     await drainErrorLog({ post: () => {} });
-    await errorLogItem.setValue([{ source: "test", seq: 1, message: "after a restart" }]);
+    await errorLogItem.setValue([
+      { source: "test", seq: 1, message: "after a restart" },
+    ]);
 
     const result = await drainErrorLog({ post: () => {} });
 

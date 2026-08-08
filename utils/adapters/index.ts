@@ -9,7 +9,7 @@ import { xAdapter } from "./x.ts";
 export const ADAPTERS: readonly ServiceAdapter[] = Object.freeze([
   xAdapter,
   blueskyAdapter,
-  misskeyAdapter
+  misskeyAdapter,
 ]);
 
 // Chrome's match-pattern host: "*" for any, "*.example.com" for a domain and
@@ -40,10 +40,10 @@ export function hostMatchesPattern(pattern: string, hostname: string): boolean {
 // through selectors that were never meant for it.
 export function selectAdapter(
   hostname: string,
-  page: ParentNode
+  page: ParentNode,
 ): ServiceAdapter | null {
   const declared = ADAPTERS.find((adapter) =>
-    adapter.matches.some((pattern) => hostMatchesPattern(pattern, hostname))
+    adapter.matches.some((pattern) => hostMatchesPattern(pattern, hostname)),
   );
   if (declared) {
     return declared;

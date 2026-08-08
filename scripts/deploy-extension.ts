@@ -66,18 +66,22 @@ function swapIn(source: string, destination: string): void {
   fs.mkdirSync(destination, { recursive: true });
   const wanted = new Set(listFiles(source));
   for (const stale of listFiles(destination)) {
-    if (!wanted.has(stale)) fs.rmSync(path.join(destination, stale), { force: true });
+    if (!wanted.has(stale))
+      fs.rmSync(path.join(destination, stale), { force: true });
   }
   fs.cpSync(source, destination, { recursive: true, force: true });
   for (const entry of fs.readdirSync(destination, { withFileTypes: true })) {
     if (!entry.isDirectory()) continue;
     const absolute = path.join(destination, entry.name);
-    if (!listFiles(absolute, destination).length) fs.rmSync(absolute, { recursive: true, force: true });
+    if (!listFiles(absolute, destination).length)
+      fs.rmSync(absolute, { recursive: true, force: true });
   }
 }
 
 if (!isMainWorkingTree()) {
-  console.log("[sift] not the main working tree — skipping the deploy (no browser has loaded this output)");
+  console.log(
+    "[sift] not the main working tree — skipping the deploy (no browser has loaded this output)",
+  );
   process.exit(0);
 }
 
@@ -94,4 +98,6 @@ execSync("npm run build", { cwd: ROOT, stdio: "inherit" });
 
 swapIn(RELEASE, DAILY);
 console.log(`[sift] deployed the verified release to ${DAILY}`);
-console.log("[sift] the daily Chrome picks it up at its next start, or on reload in chrome://extensions.");
+console.log(
+  "[sift] the daily Chrome picks it up at its next start, or on reload in chrome://extensions.",
+);

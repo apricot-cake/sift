@@ -14,7 +14,8 @@ import { DEV_SERVER_HOST, DEV_SERVER_PORT } from "./utils/dev-server.ts";
 // leaves it unset and writes into .output like a release does, which is the
 // right answer for a build nobody's profile has loaded.
 const developmentOutput =
-  process.env.SIFT_DEV_OUTPUT || resolve(homedir(), ".sift-dev", "chrome-mv3-dev");
+  process.env.SIFT_DEV_OUTPUT ||
+  resolve(homedir(), ".sift-dev", "chrome-mv3-dev");
 
 // Whether the folder above currently holds a build. The development worker asks
 // before it reloads itself: starting the server wipes and rewrites that folder,
@@ -24,7 +25,8 @@ const developmentOutput =
 // server's lifetime, the file check says it is still on disk.
 let developmentBuildWritten = false;
 const developmentBuildIsReady = () =>
-  developmentBuildWritten && existsSync(resolve(developmentOutput, "manifest.json"));
+  developmentBuildWritten &&
+  existsSync(resolve(developmentOutput, "manifest.json"));
 
 export default defineConfig({
   // Firefox too. WXT would default Firefox to MV2, and one manifest version
@@ -55,7 +57,7 @@ export default defineConfig({
   // the runner off also means `web-ext` — an optional peer dependency since WXT
   // 0.21.2 — is never installed.
   webExt: {
-    disabled: true
+    disabled: true,
   },
   dev: {
     server: {
@@ -80,8 +82,8 @@ export default defineConfig({
       // server on another port is a server nothing will ever talk to — a failure
       // that looks exactly like the extension being broken. Refusing to start is
       // how the second dev server finds out it is the second one.
-      strictPort: true
-    }
+      strictPort: true,
+    },
   },
   manifest: {
     // The fixed signing key, and therefore the fixed extension id
@@ -108,14 +110,14 @@ export default defineConfig({
     // grow at runtime (see #2's issue comment, section 5).
     optional_host_permissions: ["https://*/*"],
     action: {
-      default_title: "Sift"
-    }
+      default_title: "Sift",
+    },
   },
   hooks: {
     // Fires after every build the dev server writes, including the first one.
     "build:done": () => {
       developmentBuildWritten = true;
-    }
+    },
   },
   vite: (env) => ({
     // Answers the endpoint the development worker posts its error buffer to.
@@ -125,7 +127,7 @@ export default defineConfig({
       // Which build this bundle IS. Keyed on the COMMAND, deliberately:
       // `import.meta.env.DEV` follows NODE_ENV, so a release built from a test
       // runner would come out believing it was a development build.
-      __SIFT_DEV__: JSON.stringify(env.command === "serve")
-    }
-  })
+      __SIFT_DEV__: JSON.stringify(env.command === "serve"),
+    },
+  }),
 });

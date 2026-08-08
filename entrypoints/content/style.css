@@ -1,4 +1,6 @@
-[data-sift-filter-state="hidden"] { display: none !important; }
+[data-sift-filter-state="hidden"] {
+  display: none !important;
+}
 
 body.sift-show-all [data-sift-filter-state="hidden"] {
   display: block !important;

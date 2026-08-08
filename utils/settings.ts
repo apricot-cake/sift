@@ -26,7 +26,7 @@ export const defaults = Object.freeze({
   // ~7-15% of them, and 5 within the rising window is the same wider net X's
   // 100-of-500 draws (measured 2026-08-05 on misskey.io and misskey.design).
   misskeyMinReactions: 20 as number,
-  misskeyRisingMinReactions: 5 as number
+  misskeyRisingMinReactions: 5 as number,
 });
 
 // Derived from `defaults` rather than declared a second time, so the two
@@ -38,7 +38,7 @@ function clampInteger(
   value: unknown,
   fallback: number,
   minimum: number,
-  maximum: number
+  maximum: number,
 ): number {
   const parsed = Number.parseInt(String(value), 10);
   if (!Number.isFinite(parsed)) {
@@ -79,13 +79,13 @@ export function normalizeSettings(value: unknown): Settings {
       source.risingMinLikes,
       defaults.risingMinLikes,
       0,
-      1000000000
+      1000000000,
     ),
     risingMaxAgeHours: clampInteger(
       source.risingMaxAgeHours,
       defaults.risingMaxAgeHours,
       1,
-      168
+      168,
     ),
     mediaMode: source.mediaMode === "images" ? "images" : "any",
     hideReposts: source.hideReposts !== false,
@@ -94,14 +94,14 @@ export function normalizeSettings(value: unknown): Settings {
       source.misskeyMinReactions,
       defaults.misskeyMinReactions,
       0,
-      1000000000
+      1000000000,
     ),
     misskeyRisingMinReactions: clampInteger(
       source.misskeyRisingMinReactions,
       defaults.misskeyRisingMinReactions,
       0,
-      1000000000
-    )
+      1000000000,
+    ),
   };
 }
 
@@ -121,12 +121,12 @@ export type ThresholdKey = ThresholdKeys[keyof ThresholdKeys];
 // X and Bluesky share these: a like means the same thing on both.
 export const LIKE_THRESHOLDS: ThresholdKeys = Object.freeze({
   minReactions: "minLikes",
-  risingMinReactions: "risingMinLikes"
+  risingMinReactions: "risingMinLikes",
 });
 
 export const MISSKEY_REACTION_THRESHOLDS: ThresholdKeys = Object.freeze({
   minReactions: "misskeyMinReactions",
-  risingMinReactions: "misskeyRisingMinReactions"
+  risingMinReactions: "misskeyRisingMinReactions",
 });
 
 // The thresholds classifyPost() takes, filled in from the service's own pair.
@@ -134,13 +134,13 @@ export const MISSKEY_REACTION_THRESHOLDS: ThresholdKeys = Object.freeze({
 // whether reposts are dropped — is one setting shared by every service.
 export function thresholdsFor(
   settings: Settings,
-  keys: ThresholdKeys
+  keys: ThresholdKeys,
 ): ClassifyThresholds {
   return {
     hideReposts: settings.hideReposts,
     minLikes: settings[keys.minReactions],
     risingEnabled: settings.risingEnabled,
     risingMinLikes: settings[keys.risingMinReactions],
-    risingMaxAgeHours: settings.risingMaxAgeHours
+    risingMaxAgeHours: settings.risingMaxAgeHours,
   };
 }

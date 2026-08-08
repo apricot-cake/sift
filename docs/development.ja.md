@@ -61,6 +61,16 @@ npm run deploy
 
 日常側のバッファを読み出す口はまだありません。content scriptは発生元が拡張と分かる例外だけを、popupとservice workerは全件を記録します。
 
+## Lint
+
+```powershell
+npm run lint
+```
+
+Biomeがツリー全体を1度に見ます＝整形・lintルール・importの順序。書き換えはしません。直すのは `npm run lint:fix` で、見るものは同じです。
+
+インデント・改行・末尾改行は `biome.jsonc` で宣言せず `.editorconfig` から読ませてあるので、Biomeを知らないエディタでも同じ結果になります。`biome.jsonc` に残っているのは `.editorconfig` では言えないものと、`entrypoints/content/style.css` の例外1つ（ここでの `!important` は間違いではなく設計そのものです）。
+
 ## ビルドとテスト
 
 ```powershell

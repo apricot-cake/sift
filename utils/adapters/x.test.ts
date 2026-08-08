@@ -10,9 +10,9 @@ function renderTimeline(...posts: string[]): HTMLElement {
     posts
       .map(
         (post) =>
-          `<div data-testid="cellInnerDiv"><article data-testid="tweet">${post}</article></div>`
+          `<div data-testid="cellInnerDiv"><article data-testid="tweet">${post}</article></div>`,
       )
-      .join("")
+      .join(""),
   );
 }
 
@@ -26,7 +26,10 @@ function renderPost(inner = ""): Element {
 
 describe("finding posts", () => {
   it("finds every post on the screen", () => {
-    const timeline = renderTimeline("<span>first</span>", "<span>second</span>");
+    const timeline = renderTimeline(
+      "<span>first</span>",
+      "<span>second</span>",
+    );
 
     expect(xAdapter.getPostCards(timeline)).toHaveLength(2);
     expect(xAdapter.hasPostCards(timeline)).toBe(true);
@@ -53,7 +56,9 @@ describe("the unit that gets hidden", () => {
   });
 
   it("falls back to the post itself where there is no cell", () => {
-    const card = render('<article data-testid="tweet"></article>').firstElementChild;
+    const card = render(
+      '<article data-testid="tweet"></article>',
+    ).firstElementChild;
     if (!card) {
       throw new Error("the rendered post has no card");
     }
@@ -67,7 +72,7 @@ describe("reading the like count", () => {
   // a threshold; the accessible label carries the exact number.
   it("prefers the accessible label over the rounded text next to it", () => {
     const card = renderPost(
-      '<button data-testid="like" aria-label="11788 件のいいね。いいねする"><span>1.1万</span></button>'
+      '<button data-testid="like" aria-label="11788 件のいいね。いいねする"><span>1.1万</span></button>',
     );
 
     expect(xAdapter.readReactionCount(card)).toBe(11788);
@@ -83,7 +88,7 @@ describe("reading the like count", () => {
   // same count.
   it("reads a post the reader already liked", () => {
     const card = renderPost(
-      '<button data-testid="unlike" aria-label="1,234 件のいいね。いいねを取り消す"></button>'
+      '<button data-testid="unlike" aria-label="1,234 件のいいね。いいねを取り消す"></button>',
     );
 
     expect(xAdapter.readReactionCount(card)).toBe(1234);
@@ -97,10 +102,12 @@ describe("reading the like count", () => {
 describe("reading the post time", () => {
   it("reads the machine-readable time X writes", () => {
     const card = renderPost(
-      '<a href="/example/status/1"><time datetime="2026-08-01T12:00:00.000Z">8月1日</time></a>'
+      '<a href="/example/status/1"><time datetime="2026-08-01T12:00:00.000Z">8月1日</time></a>',
     );
 
-    expect(xAdapter.readCreatedAt(card)).toBe(Date.parse("2026-08-01T12:00:00.000Z"));
+    expect(xAdapter.readCreatedAt(card)).toBe(
+      Date.parse("2026-08-01T12:00:00.000Z"),
+    );
   });
 
   // Neither reading available: the post still classifies, only "rising" drops.
@@ -119,29 +126,44 @@ describe("reading the post time", () => {
 // media setting, which is not this adapter's to apply.
 describe("reading the media", () => {
   it("reads an attached photo", () => {
-    const card = renderPost('<div data-testid="tweetPhoto"><img src="/media/1.jpg"></div>');
+    const card = renderPost(
+      '<div data-testid="tweetPhoto"><img src="/media/1.jpg"></div>',
+    );
 
-    expect(xAdapter.readMedia(card)).toEqual({ hasImage: true, hasVideo: false });
+    expect(xAdapter.readMedia(card)).toEqual({
+      hasImage: true,
+      hasVideo: false,
+    });
   });
 
   // A post whose photo is drawn as a link rather than as the testid'd container
   // — the form the detail screen uses.
   it("reads a photo behind its permalink", () => {
-    const card = renderPost('<a href="/example/status/1/photo/1"><img src="/media/1.jpg"></a>');
+    const card = renderPost(
+      '<a href="/example/status/1/photo/1"><img src="/media/1.jpg"></a>',
+    );
 
-    expect(xAdapter.readMedia(card)).toEqual({ hasImage: true, hasVideo: false });
+    expect(xAdapter.readMedia(card)).toEqual({
+      hasImage: true,
+      hasVideo: false,
+    });
   });
 
   it("reads a video", () => {
-    const card = renderPost('<div data-testid="videoPlayer"><video></video></div>');
+    const card = renderPost(
+      '<div data-testid="videoPlayer"><video></video></div>',
+    );
 
-    expect(xAdapter.readMedia(card)).toEqual({ hasImage: false, hasVideo: true });
+    expect(xAdapter.readMedia(card)).toEqual({
+      hasImage: false,
+      hasVideo: true,
+    });
   });
 
   it("reads a post with no media as having none", () => {
     expect(xAdapter.readMedia(renderPost("<span>text only</span>"))).toEqual({
       hasImage: false,
-      hasVideo: false
+      hasVideo: false,
     });
   });
 });
@@ -149,7 +171,7 @@ describe("reading the media", () => {
 describe("reading a repost", () => {
   it("reads the repost header X draws above the post", () => {
     const card = renderPost(
-      '<div data-testid="socialContext">さんがリポストしました</div>'
+      '<div data-testid="socialContext">さんがリポストしました</div>',
     );
 
     expect(xAdapter.readIsRepost(card)).toBe(true);
@@ -157,7 +179,9 @@ describe("reading a repost", () => {
 
   // The same header carries other words: being pinned is not being reposted.
   it("does not read a pinned post as a repost", () => {
-    const card = renderPost('<div data-testid="socialContext">固定されたポスト</div>');
+    const card = renderPost(
+      '<div data-testid="socialContext">固定されたポスト</div>',
+    );
 
     expect(xAdapter.readIsRepost(card)).toBe(false);
   });

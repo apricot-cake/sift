@@ -1,8 +1,8 @@
 import { storage } from "wxt/utils/storage";
 import {
   collectUndrainedEntries,
+  type ErrorLogEntry,
   errorLogItem,
-  type ErrorLogEntry
 } from "./error-log.ts";
 
 const ERROR_LOG_DRAINED_SEQ_KEY = "siftErrorLogDrainedSeq";
@@ -15,7 +15,7 @@ const ERROR_LOG_DRAINED_SEQ_KEY = "siftErrorLogDrainedSeq";
 // No fallback, so an unset mark reads as null and collectUndrainedEntries()
 // takes the whole buffer.
 const drainedSeqItem = storage.defineItem<number>(
-  `session:${ERROR_LOG_DRAINED_SEQ_KEY}`
+  `session:${ERROR_LOG_DRAINED_SEQ_KEY}`,
 );
 
 export interface DrainErrorLogDeps {
@@ -29,11 +29,11 @@ export interface DrainErrorLogDeps {
 // A failed post leaves the mark untouched on purpose — the entries stay in the
 // buffer and go out on the next attempt.
 export async function drainErrorLog({
-  post
+  post,
 }: DrainErrorLogDeps): Promise<{ forwarded: number }> {
   const [stored, drained] = await Promise.all([
     errorLogItem.getValue(),
-    drainedSeqItem.getValue()
+    drainedSeqItem.getValue(),
   ]);
 
   const pending = collectUndrainedEntries(stored, drained);

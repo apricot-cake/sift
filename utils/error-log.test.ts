@@ -4,11 +4,12 @@ import {
   appendErrorEntry,
   collectUndrainedEntries,
   describeUncaughtEvent,
+  type ErrorLogEntry,
   errorLogItem,
   installUncaughtReporting,
   isOwnExtensionError,
   recordErrorEntry,
-  type ErrorLogEntry
+  type UncaughtEventLike,
 } from "./error-log.ts";
 
 const extensionPrefix = "chrome-extension://abcdefghijklmnopabcdefghijklmnop/";
@@ -21,26 +22,35 @@ uncaughtError.stack = `Error: boom\n    at ${extensionPrefix}src/content/index.j
 // own code, which is why what is subscribed — and what is left behind after
 // dispose — is part of the reading.
 function createFakeTarget(href: string | null = null) {
-  const listeners = new Map<string, Array<(event: unknown) => void>>();
+  const listeners = new Map<
+    string,
+    Array<(event: UncaughtEventLike) => void>
+  >();
   return {
     location: href === null ? undefined : { href },
-    addEventListener(type: string, listener: (event: unknown) => void) {
+    addEventListener(
+      type: string,
+      listener: (event: UncaughtEventLike) => void,
+    ) {
       listeners.set(type, [...(listeners.get(type) ?? []), listener]);
     },
-    removeEventListener(type: string, listener: (event: unknown) => void) {
+    removeEventListener(
+      type: string,
+      listener: (event: UncaughtEventLike) => void,
+    ) {
       listeners.set(
         type,
-        (listeners.get(type) ?? []).filter((entry) => entry !== listener)
+        (listeners.get(type) ?? []).filter((entry) => entry !== listener),
       );
     },
-    emit(type: string, event: unknown) {
+    emit(type: string, event: UncaughtEventLike) {
       for (const listener of listeners.get(type) ?? []) {
         listener(event);
       }
     },
     count(type: string) {
       return (listeners.get(type) ?? []).length;
-    }
+    },
   };
 }
 
@@ -52,8 +62,8 @@ describe("isOwnExtensionError", () => {
     expect(
       isOwnExtensionError(
         { filename: `${extensionPrefix}src/content/index.js`, stack: null },
-        extensionPrefix
-      )
+        extensionPrefix,
+      ),
     ).toBe(true);
   });
 
@@ -62,10 +72,10 @@ describe("isOwnExtensionError", () => {
       isOwnExtensionError(
         {
           filename: null,
-          stack: `Error: broke\n    at readLikeCount (${extensionPrefix}src/filter-core.js:12:5)`
+          stack: `Error: broke\n    at readLikeCount (${extensionPrefix}src/filter-core.js:12:5)`,
         },
-        extensionPrefix
-      )
+        extensionPrefix,
+      ),
     ).toBe(true);
   });
 
@@ -74,16 +84,20 @@ describe("isOwnExtensionError", () => {
       isOwnExtensionError(
         {
           filename: "https://x.com/bundle.js",
-          stack: "TypeError: x\n    at https://x.com/bundle.js:1:1"
+          stack: "TypeError: x\n    at https://x.com/bundle.js:1:1",
         },
-        extensionPrefix
-      )
+        extensionPrefix,
+      ),
     ).toBe(false);
   });
 
   it("claims nothing when there is nothing to read", () => {
-    expect(isOwnExtensionError({ filename: null, stack: null }, extensionPrefix)).toBe(false);
-    expect(isOwnExtensionError({ filename: `${extensionPrefix}a.js` }, "")).toBe(false);
+    expect(
+      isOwnExtensionError({ filename: null, stack: null }, extensionPrefix),
+    ).toBe(false);
+    expect(
+      isOwnExtensionError({ filename: `${extensionPrefix}a.js` }, ""),
+    ).toBe(false);
   });
 });
 
@@ -94,30 +108,34 @@ describe("describeUncaughtEvent", () => {
         {
           message: "Uncaught Error: boom",
           filename: `${extensionPrefix}src/content/index.js`,
-          error: uncaughtError
+          error: uncaughtError,
         },
-        "error"
-      )
+        "error",
+      ),
     ).toEqual({
       message: "Uncaught Error: boom",
       stack: uncaughtError.stack,
-      filename: `${extensionPrefix}src/content/index.js`
+      filename: `${extensionPrefix}src/content/index.js`,
     });
   });
 
   it("reads a rejection carrying an Error", () => {
-    expect(describeUncaughtEvent({ reason: uncaughtError }, "unhandledrejection")).toEqual({
+    expect(
+      describeUncaughtEvent({ reason: uncaughtError }, "unhandledrejection"),
+    ).toEqual({
       message: "Error: boom",
       stack: uncaughtError.stack,
-      filename: null
+      filename: null,
     });
   });
 
   it("reads a rejection carrying a bare value", () => {
-    expect(describeUncaughtEvent({ reason: "plain string" }, "unhandledrejection")).toEqual({
+    expect(
+      describeUncaughtEvent({ reason: "plain string" }, "unhandledrejection"),
+    ).toEqual({
       message: "plain string",
       stack: null,
-      filename: null
+      filename: null,
     });
   });
 
@@ -130,11 +148,11 @@ describe("describeUncaughtEvent", () => {
           reason: {
             get message() {
               throw new Error("hostile");
-            }
-          }
+            },
+          },
         },
-        "unhandledrejection"
-      ).message
+        "unhandledrejection",
+      ).message,
     ).toBe("[object Object]");
   });
 
@@ -142,38 +160,44 @@ describe("describeUncaughtEvent", () => {
     expect(
       describeUncaughtEvent(
         { reason: Object.assign(Object.create(null), { toString: null }) },
-        "unhandledrejection"
-      ).message
+        "unhandledrejection",
+      ).message,
     ).toBe("(unstringifiable value)");
   });
 
   // The buffer lives in browser.storage, so one enormous message must not be
   // able to fill it.
   it("cuts an overlong message down", () => {
-    expect(describeUncaughtEvent({ message: "x".repeat(600) }, "error").message).toHaveLength(
-      501
-    );
+    expect(
+      describeUncaughtEvent({ message: "x".repeat(600) }, "error").message,
+    ).toHaveLength(501);
   });
 });
 
 describe("appendErrorEntry", () => {
   it("numbers the first entry from one", () => {
     expect(appendErrorEntry(undefined, { source: "content" })).toEqual([
-      { source: "content", seq: 1 }
+      { source: "content", seq: 1 },
     ]);
   });
 
   it("carries the numbering on from what is already stored", () => {
-    expect(appendErrorEntry([{ source: "popup", seq: 4 }], { source: "content" })).toEqual([
+    expect(
+      appendErrorEntry([{ source: "popup", seq: 4 }], { source: "content" }),
+    ).toEqual([
       { source: "popup", seq: 4 },
-      { source: "content", seq: 5 }
+      { source: "content", seq: 5 },
     ]);
   });
 
   it("keeps the newest entries and drops the oldest", () => {
     let ringBuffer: ErrorLogEntry[] = [];
     for (let index = 0; index < 5; index += 1) {
-      ringBuffer = appendErrorEntry(ringBuffer, { source: "test", message: `error ${index}` }, 3);
+      ringBuffer = appendErrorEntry(
+        ringBuffer,
+        { source: "test", message: `error ${index}` },
+        3,
+      );
     }
 
     expect(ringBuffer.map((entry) => entry.seq)).toEqual([3, 4, 5]);
@@ -183,16 +207,15 @@ describe("appendErrorEntry", () => {
 
 describe("collectUndrainedEntries", () => {
   it("takes what is past the drain mark", () => {
-    expect(collectUndrainedEntries([{ seq: 1 }, { seq: 2 }, { seq: 3 }], 2)).toEqual([
-      { seq: 3 }
-    ]);
+    expect(
+      collectUndrainedEntries([{ seq: 1 }, { seq: 2 }, { seq: 3 }], 2),
+    ).toEqual([{ seq: 3 }]);
   });
 
   it("takes everything when nothing has been drained", () => {
-    expect(collectUndrainedEntries([{ seq: 1 }, { seq: 2 }], undefined)).toEqual([
-      { seq: 1 },
-      { seq: 2 }
-    ]);
+    expect(
+      collectUndrainedEntries([{ seq: 1 }, { seq: 2 }], undefined),
+    ).toEqual([{ seq: 1 }, { seq: 2 }]);
   });
 
   // A buffer that restarted below the drain mark is forwarded whole rather than
@@ -215,7 +238,7 @@ describe("recordErrorEntry", () => {
 
     expect(await errorLogItem.getValue()).toEqual([
       { source: "content", message: "first", seq: 1 },
-      { source: "popup", message: "second", seq: 2 }
+      { source: "popup", message: "second", seq: 2 },
     ]);
   });
 
@@ -224,10 +247,12 @@ describe("recordErrorEntry", () => {
   // must not become an error.
   it("swallows a storage that is gone", async () => {
     vi.spyOn(errorLogItem, "getValue").mockRejectedValue(
-      new Error("Extension context invalidated.")
+      new Error("Extension context invalidated."),
     );
 
-    await expect(recordErrorEntry({ source: "content" })).resolves.toBeUndefined();
+    await expect(
+      recordErrorEntry({ source: "content" }),
+    ).resolves.toBeUndefined();
   });
 });
 
@@ -242,18 +267,18 @@ describe("installUncaughtReporting", () => {
       record: (entry) => {
         recorded.push(entry);
       },
-      now: () => "2026-08-02T00:00:00.000Z"
+      now: () => "2026-08-02T00:00:00.000Z",
     });
 
     target.emit("error", {
       message: "Uncaught Error: boom",
       filename: `${extensionPrefix}src/content/index.js`,
-      error: uncaughtError
+      error: uncaughtError,
     });
     target.emit("error", {
       message: "Uncaught TypeError: page broke",
       filename: "https://x.com/bundle.js",
-      error: new Error("page broke")
+      error: new Error("page broke"),
     });
     target.emit("unhandledrejection", { reason: uncaughtError });
     target.emit("unhandledrejection", { reason: "a bare page rejection" });
@@ -265,7 +290,7 @@ describe("installUncaughtReporting", () => {
         kind: "error",
         message: "Uncaught Error: boom",
         stack: uncaughtError.stack,
-        url: "https://x.com/home"
+        url: "https://x.com/home",
       },
       {
         at: "2026-08-02T00:00:00.000Z",
@@ -273,8 +298,8 @@ describe("installUncaughtReporting", () => {
         kind: "unhandledrejection",
         message: "Error: boom",
         stack: uncaughtError.stack,
-        url: "https://x.com/home"
-      }
+        url: "https://x.com/home",
+      },
     ]);
   });
 
@@ -289,7 +314,7 @@ describe("installUncaughtReporting", () => {
       extensionUrlPrefix: extensionPrefix,
       record: (entry) => {
         recorded.push(entry);
-      }
+      },
     });
 
     stop();
@@ -298,7 +323,7 @@ describe("installUncaughtReporting", () => {
     expect(target.count("unhandledrejection")).toBe(0);
     target.emit("error", {
       filename: `${extensionPrefix}src/content/index.js`,
-      error: uncaughtError
+      error: uncaughtError,
     });
     expect(recorded).toEqual([]);
   });
@@ -313,10 +338,13 @@ describe("installUncaughtReporting", () => {
       source: "popup",
       record: (entry) => {
         recorded.push(entry);
-      }
+      },
     });
 
-    target.emit("error", { message: "anything on an extension page", error: null });
+    target.emit("error", {
+      message: "anything on an extension page",
+      error: null,
+    });
 
     expect(recorded).toHaveLength(1);
     expect(recorded[0]?.source).toBe("popup");
@@ -330,7 +358,7 @@ describe("installUncaughtReporting", () => {
       source: "popup",
       record: () => {
         throw new Error("storage is gone");
-      }
+      },
     });
 
     expect(() => target.emit("error", { message: "x" })).not.toThrow();
@@ -342,7 +370,7 @@ describe("installUncaughtReporting", () => {
     installUncaughtReporting({
       target,
       source: "popup",
-      record: () => Promise.reject(new Error("storage is gone"))
+      record: () => Promise.reject(new Error("storage is gone")),
     });
 
     target.emit("unhandledrejection", { reason: "x" });

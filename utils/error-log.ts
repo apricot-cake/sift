@@ -57,7 +57,7 @@ export interface ErrorLogEntry {
 // this machine, it turns over constantly, and sync's quota is for settings.
 export const errorLogItem = storage.defineItem<ErrorLogEntry[]>(
   `local:${ERROR_LOG_KEY}`,
-  { fallback: [] }
+  { fallback: [] },
 );
 
 function isInteger(value: unknown): value is number {
@@ -109,7 +109,7 @@ function readStack(value: unknown): unknown {
 // server's own socket ever names localhost.
 export function isOwnExtensionError(
   details: Partial<UncaughtEventDetails> | null | undefined,
-  extensionUrlPrefix: string
+  extensionUrlPrefix: string,
 ): boolean {
   if (typeof extensionUrlPrefix !== "string" || extensionUrlPrefix === "") {
     return false;
@@ -126,14 +126,14 @@ export function isOwnExtensionError(
 // escaped from, a PromiseRejectionEvent carries only the rejected value.
 export function describeUncaughtEvent(
   event: UncaughtEventLike,
-  kind: UncaughtEventKind
+  kind: UncaughtEventKind,
 ): UncaughtEventDetails {
   if (kind === "unhandledrejection") {
     const reason = event?.reason;
     return {
       message: truncate(readMessage(reason), MESSAGE_LIMIT),
       stack: truncate(readStack(reason), STACK_LIMIT),
-      filename: null
+      filename: null,
     };
   }
 
@@ -142,10 +142,10 @@ export function describeUncaughtEvent(
       typeof event?.message === "string" && event.message !== ""
         ? event.message
         : readMessage(event?.error),
-      MESSAGE_LIMIT
+      MESSAGE_LIMIT,
     ),
     stack: truncate(readStack(event?.error), STACK_LIMIT),
-    filename: typeof event?.filename === "string" ? event.filename : null
+    filename: typeof event?.filename === "string" ? event.filename : null,
   };
 }
 
@@ -154,7 +154,7 @@ export function describeUncaughtEvent(
 export function appendErrorEntry(
   entries: unknown,
   entry: Omit<ErrorLogEntry, "seq">,
-  limit = ERROR_LOG_LIMIT
+  limit = ERROR_LOG_LIMIT,
 ): ErrorLogEntry[] {
   const existing = Array.isArray(entries) ? entries : [];
   const lastSeq = readSeq(existing.at(-1));
@@ -165,7 +165,7 @@ export function appendErrorEntry(
 
 export function collectUndrainedEntries(
   entries: unknown,
-  drainedSeq: unknown
+  drainedSeq: unknown,
 ): ErrorLogEntry[] {
   const existing: unknown[] = Array.isArray(entries) ? entries : [];
   const lastSeq = readSeq(existing.at(-1));
@@ -178,7 +178,7 @@ export function collectUndrainedEntries(
       : 0;
 
   return existing.filter(
-    (entry) => isInteger(readSeq(entry)) && (readSeq(entry) as number) > from
+    (entry) => isInteger(readSeq(entry)) && (readSeq(entry) as number) > from,
   ) as ErrorLogEntry[];
 }
 
@@ -190,7 +190,7 @@ let pendingWrite: Promise<void> = Promise.resolve();
 
 export function recordErrorEntry(
   entry: Omit<ErrorLogEntry, "seq">,
-  limit = ERROR_LOG_LIMIT
+  limit = ERROR_LOG_LIMIT,
 ): Promise<void> {
   pendingWrite = pendingWrite
     .then(async () => {
@@ -209,8 +209,14 @@ export function recordErrorEntry(
 // dispatchEvent, and nothing here needs one.
 export interface UncaughtReportingTarget {
   location?: { href?: string | null } | null;
-  addEventListener(type: string, listener: (event: any) => void): void;
-  removeEventListener(type: string, listener: (event: any) => void): void;
+  addEventListener(
+    type: string,
+    listener: (event: UncaughtEventLike) => void,
+  ): void;
+  removeEventListener(
+    type: string,
+    listener: (event: UncaughtEventLike) => void,
+  ): void;
 }
 
 export interface InstallUncaughtReportingOptions {
@@ -237,7 +243,7 @@ export function installUncaughtReporting({
   extensionUrlPrefix = null,
   record,
   now = () => new Date().toISOString(),
-  readPageUrl = () => target.location?.href ?? null
+  readPageUrl = () => target.location?.href ?? null,
 }: InstallUncaughtReportingOptions): () => void {
   function report(event: UncaughtEventLike, kind: UncaughtEventKind) {
     try {
@@ -255,7 +261,7 @@ export function installUncaughtReporting({
         kind,
         message: details.message,
         stack: details.stack,
-        url: readPageUrl()
+        url: readPageUrl(),
       });
       // A rejection escaping here would be caught by this very handler.
       if (isThenable(written)) {
@@ -290,12 +296,12 @@ export interface StartUncaughtReportingOptions {
 export function startUncaughtReporting({
   target,
   source,
-  filterToOwnCode
+  filterToOwnCode,
 }: StartUncaughtReportingOptions): () => void {
   return installUncaughtReporting({
     target,
     source,
     extensionUrlPrefix: filterToOwnCode ? browser.runtime.getURL("") : null,
-    record: (entry) => recordErrorEntry(entry)
+    record: (entry) => recordErrorEntry(entry),
   });
 }

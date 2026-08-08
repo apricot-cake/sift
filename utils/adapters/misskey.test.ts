@@ -13,7 +13,7 @@ const noteTime = "2026/8/5 17:44:21";
 function renderNoteRoot({
   time = noteTime as string | null,
   header = "",
-  body = ""
+  body = "",
 } = {}): HTMLElement {
   return render(`
     <div>
@@ -36,7 +36,9 @@ function renderNote(options?: Parameters<typeof renderNoteRoot>[0]): Element {
 
 describe("finding notes", () => {
   it("finds the notes on a timeline", () => {
-    const timeline = render(`${renderNoteRoot().innerHTML}${renderNoteRoot().innerHTML}`);
+    const timeline = render(
+      `${renderNoteRoot().innerHTML}${renderNoteRoot().innerHTML}`,
+    );
 
     expect(misskeyAdapter.getPostCards(timeline)).toHaveLength(2);
     expect(misskeyAdapter.hasPostCards(timeline)).toBe(true);
@@ -47,7 +49,7 @@ describe("finding notes", () => {
   // timestamp, and that is what tells the two apart.
   it("leaves out an article that carries no note time", () => {
     const timeline = render(
-      `${renderNoteRoot().innerHTML}${renderNoteRoot({ time: null }).innerHTML}`
+      `${renderNoteRoot().innerHTML}${renderNoteRoot({ time: null }).innerHTML}`,
     );
 
     expect(misskeyAdapter.getPostCards(timeline)).toHaveLength(1);
@@ -103,7 +105,7 @@ describe("reading the reaction count", () => {
           <button class="_button"><i class="ti ti-repeat"></i>16</button>
           <button class="_button"><i class="ti ti-plus"></i>2,397</button>
         </footer>
-      `
+      `,
     });
 
     expect(misskeyAdapter.readReactionCount(note)).toBe(20);
@@ -118,7 +120,9 @@ describe("reading the reaction count", () => {
 // readers and not others. When it does not, only "rising" drops.
 describe("reading the note time", () => {
   it("reads a time Date.parse understands", () => {
-    expect(misskeyAdapter.readCreatedAt(renderNote())).toBe(Date.parse(noteTime));
+    expect(misskeyAdapter.readCreatedAt(renderNote())).toBe(
+      Date.parse(noteTime),
+    );
   });
 
   it("answers NaN for a locale Date.parse refuses", () => {
@@ -137,9 +141,14 @@ describe("reading the note time", () => {
 // leaves in `alt`: the file's name or comment, and nothing else readable.
 describe("reading the media", () => {
   it("reads an attached image by the text its alt carries", () => {
-    const note = renderNote({ body: '<img alt="IMG_8802.png" src="/files/1.png">' });
+    const note = renderNote({
+      body: '<img alt="IMG_8802.png" src="/files/1.png">',
+    });
 
-    expect(misskeyAdapter.readMedia(note)).toEqual({ hasImage: true, hasVideo: false });
+    expect(misskeyAdapter.readMedia(note)).toEqual({
+      hasImage: true,
+      hasVideo: false,
+    });
   });
 
   it("reads the avatar, the badges and the emoji as no media at all", () => {
@@ -149,10 +158,13 @@ describe("reading the media", () => {
         <img alt=":party@example.com:" src="/emoji.png">
         <img alt="😀" src="/emoji.png">
         <img src="/decoration.png">
-      `
+      `,
     });
 
-    expect(misskeyAdapter.readMedia(note)).toEqual({ hasImage: false, hasVideo: false });
+    expect(misskeyAdapter.readMedia(note)).toEqual({
+      hasImage: false,
+      hasVideo: false,
+    });
   });
 
   // A video's poster frame is an <img> carrying the file's own comment, which
@@ -166,16 +178,22 @@ describe("reading the media", () => {
           <img alt="道具箱を開けて中身を紹介する動画。" src="/files/thumb.png">
           <i class="ti ti-player-play"></i>
         </div>
-      `
+      `,
     });
 
-    expect(misskeyAdapter.readMedia(note)).toEqual({ hasImage: false, hasVideo: true });
+    expect(misskeyAdapter.readMedia(note)).toEqual({
+      hasImage: false,
+      hasVideo: true,
+    });
   });
 
   it("reads a video the build draws as a video element", () => {
     const note = renderNote({ body: '<video src="/files/1.mp4"></video>' });
 
-    expect(misskeyAdapter.readMedia(note)).toEqual({ hasImage: false, hasVideo: true });
+    expect(misskeyAdapter.readMedia(note)).toEqual({
+      hasImage: false,
+      hasVideo: true,
+    });
   });
 
   // A file the client is holding back behind a click says a file is there but
@@ -183,13 +201,18 @@ describe("reading the media", () => {
   it("reads a file held back behind a click as an image", () => {
     const note = renderNote({ body: '<i class="ti ti-eye-exclamation"></i>' });
 
-    expect(misskeyAdapter.readMedia(note)).toEqual({ hasImage: true, hasVideo: false });
+    expect(misskeyAdapter.readMedia(note)).toEqual({
+      hasImage: true,
+      hasVideo: false,
+    });
   });
 
   it("reads a note with no files as having none", () => {
-    expect(misskeyAdapter.readMedia(renderNote({ body: "<p>text only</p>" }))).toEqual({
+    expect(
+      misskeyAdapter.readMedia(renderNote({ body: "<p>text only</p>" })),
+    ).toEqual({
       hasImage: false,
-      hasVideo: false
+      hasVideo: false,
     });
   });
 });
@@ -200,21 +223,24 @@ describe("reading the media", () => {
 describe("reading a renote", () => {
   it("reads the header drawn above the note", () => {
     const note = renderNote({
-      header: '<div><i class="ti ti-repeat"></i><span>さんがリノート</span></div>'
+      header:
+        '<div><i class="ti ti-repeat"></i><span>さんがリノート</span></div>',
     });
 
     expect(misskeyAdapter.readIsRepost(note)).toBe(true);
   });
 
   it("does not read the reply header above a note as one", () => {
-    const note = renderNote({ header: '<div><i class="ti ti-arrow-back-up"></i></div>' });
+    const note = renderNote({
+      header: '<div><i class="ti ti-arrow-back-up"></i></div>',
+    });
 
     expect(misskeyAdapter.readIsRepost(note)).toBe(false);
   });
 
   it("does not read the footer's own renote button as one", () => {
     const note = renderNote({
-      body: '<footer><button class="_button"><i class="ti ti-repeat"></i></button></footer>'
+      body: '<footer><button class="_button"><i class="ti ti-repeat"></i></button></footer>',
     });
 
     expect(misskeyAdapter.readIsRepost(note)).toBe(false);
