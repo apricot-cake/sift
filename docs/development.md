@@ -4,6 +4,10 @@
 
 Development runs in a Chrome profile separate from your everyday one. Your everyday Chrome only ever gets verified release builds.
 
+## Node
+
+Node 24.12 or newer. `.node-version` and `engines` in `package.json` both say so, and CI installs whatever `.node-version` names. The scripts under `scripts\` are run by node directly, with no build step of their own, so they depend on node's own type stripping — 24.12 is the release where that stopped being experimental.
+
 ## Dev server
 
 ```powershell

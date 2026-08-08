@@ -1,0 +1,11 @@
+# https://editorconfig.org — what the editor applies while you type. What git
+# writes on checkout is .gitattributes, and the two agree on LF on purpose.
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+indent_style = space
+indent_size = 2
+insert_final_newline = true
+trim_trailing_whitespace = true
