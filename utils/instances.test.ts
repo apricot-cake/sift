@@ -14,7 +14,7 @@ import {
   type RegisteredContentScript
 } from "./instances.ts";
 
-// chrome.permissions, as a set of granted origins.
+// browser.permissions, as a set of granted origins.
 function createFakePermissions(grantedOrigins: string[] = []) {
   const origins = new Set(grantedOrigins);
   return {
@@ -50,7 +50,7 @@ interface FakeRegisteredScript {
   persistAcrossSessions?: boolean;
 }
 
-// chrome.scripting, which refuses a duplicate id and an unregister of something
+// browser.scripting, which refuses a duplicate id and an unregister of something
 // it never registered — both of which the code has to work around rather than
 // walk into.
 function createFakeScripting(initialScripts: FakeRegisteredScript[] = []) {
@@ -332,7 +332,7 @@ describe("handlePermissionsAdded", () => {
   });
 });
 
-// chrome.permissions can be revoked outside the extension, so what is stored and
+// browser.permissions can be revoked outside the extension, so what is stored and
 // what is registered are reconciled against the grants at every startup.
 describe("reconcileInstances", () => {
   it("re-registers a stored host whose registration was lost", async () => {

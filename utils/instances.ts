@@ -5,18 +5,19 @@
 // requested is the one they typed (see #2's issue comment, section 5, for
 // why host_permissions and a hard-coded instance were both rejected).
 //
-// Adding a host requests exactly its origin — chrome.permissions.request()
+// Adding a host requests exactly its origin — browser.permissions.request()
 // against the wildcard declared in optional_host_permissions (wxt.config.ts)
 // — and, once granted, registers a content script through
-// chrome.scripting.registerContentScripts() pointing at the same built files
+// browser.scripting.registerContentScripts() pointing at the same built files
 // WXT already produces for the static X/Bluesky entry (entrypoints/content).
 // There is no separate Misskey content script: #29 is what makes an adapter
 // exist for it to select.
 //
-// Every function here takes the chrome.permissions/scripting/storage
-// surfaces as parameters, so tests can supply fakes instead of a real
-// browser — the same shape utils/error-drain.ts uses for chrome.storage.
+// Every function here takes the permissions/scripting/storage surfaces as
+// parameters, so tests can supply fakes instead of a real browser — the same
+// shape utils/error-drain.ts uses for storage.
 
+import type { Browser } from "wxt/browser";
 import type { ErrorLogStorage } from "./error-log.ts";
 
 export const MISSKEY_INSTANCES_KEY = "misskeyInstances";
@@ -26,7 +27,7 @@ export const MISSKEY_CONTENT_SCRIPT_FILES = Object.freeze({
   css: Object.freeze(["content-scripts/content.css"])
 });
 
-const RUN_AT: chrome.extensionTypes.RunAt = "document_idle";
+const RUN_AT: Browser.extensionTypes.RunAt = "document_idle";
 const REGISTRATION_ID_PREFIX = "misskey-";
 
 export interface RegisteredContentScript {
@@ -34,7 +35,7 @@ export interface RegisteredContentScript {
   matches: string[];
   js: string[];
   css: string[];
-  runAt: chrome.extensionTypes.RunAt;
+  runAt: Browser.extensionTypes.RunAt;
   persistAcrossSessions: boolean;
 }
 
@@ -149,7 +150,7 @@ async function readInstances(storage: InstanceDeps["storage"]): Promise<string[]
 
 // Requests the one origin the host needs and, only if the user grants it,
 // registers the content script and adds the host to storage. Must be called
-// from within a user gesture (a click handler) — chrome.permissions.request()
+// from within a user gesture (a click handler) — browser.permissions.request()
 // rejects otherwise — so this cannot be relayed through a background message
 // without losing that gesture; the popup calls it directly.
 export async function addInstance(
@@ -180,7 +181,7 @@ export async function addInstance(
   // (measured 2026-08-04, sift #28) — the grant itself still goes through on
   // Chrome's side, but everything queued after this `await` can simply never
   // run, silently, with nothing left to catch or log the interruption.
-  // handlePermissionsAdded, wired to chrome.permissions.onAdded in the
+  // handlePermissionsAdded, wired to browser.permissions.onAdded in the
   // background entrypoint, is the backstop: it reacts to the grant Chrome
   // actually made, independent of whether this popup survived to hear its
   // own answer. That backstop can win the race and register this host before
@@ -224,7 +225,7 @@ export async function removeInstance(
   });
 }
 
-// Wired to chrome.permissions.onAdded in the background entrypoint. This is
+// Wired to browser.permissions.onAdded in the background entrypoint. This is
 // not the mirror of handlePermissionsRemoved below so much as the backstop
 // for addInstance() itself: Chrome fires this the moment a grant lands,
 // whether or not the popup that called permissions.request() is still alive
@@ -265,7 +266,7 @@ export async function handlePermissionsAdded(
   }
 }
 
-// Wired to chrome.permissions.onRemoved in the background entrypoint: a
+// Wired to browser.permissions.onRemoved in the background entrypoint: a
 // reader can revoke a host from chrome://extensions directly, without going
 // through removeInstance, and the registration and stored host must not
 // outlive that. Only fires while the service worker is alive to hear it —
