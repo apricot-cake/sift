@@ -63,7 +63,7 @@ There is no way to read the everyday profile's buffer yet. Content scripts recor
 npm run build
 ```
 
-Outputs to `.output\chrome-mv3-release` and compares the generated manifest against the permissions, host list, and content-script settings in `manifest.legacy.json`. `.output\chrome-mv3` is left alone.
+Outputs to `.output\chrome-mv3-release`, then checks that the generated manifest carries what the sources declare: the permissions, the signing key and the name from `wxt.config.ts`, the sites from `utils/site-matches.ts`, the version from `package.json`, and a content script that actually reached the manifest. `.output\chrome-mv3` is left alone.
 
 ```powershell
 npm test

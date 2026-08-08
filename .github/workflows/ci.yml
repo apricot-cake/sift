@@ -33,5 +33,5 @@ jobs:
       - run: npm test
 
       # `wxt build` followed by verify:manifest — the generated release manifest
-      # has to keep matching the hand-written manifest.legacy.json.
+      # has to carry what the sources declare, the content script included.
       - run: npm run build
