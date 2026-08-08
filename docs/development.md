@@ -80,6 +80,12 @@ npm run build
 Outputs to `.output\chrome-mv3-release`, then checks that the generated manifest carries what the sources declare: the permissions, the signing key and the name from `wxt.config.ts`, the sites from `utils/site-matches.ts`, the version from `package.json`, and a content script that actually reached the manifest. `.output\chrome-mv3` is left alone.
 
 ```powershell
+npm run build:firefox
+```
+
+The same build and the same check for Firefox, into `.output\firefox-mv3-release`. This is not a claim that Sift runs on Firefox — nothing has ever been tested against it. `wxt.config.ts` pins `manifestVersion` to 3 so Firefox does not fall back to MV2, and this build is the only thing that exercises that decision; CI runs it for the same reason.
+
+```powershell
 npm test
 ```
 

@@ -39,3 +39,10 @@ jobs:
       # `wxt build` followed by verify:manifest — the generated release manifest
       # has to carry what the sources declare, the content script included.
       - run: npm run build
+
+      # The same build for Firefox, which is not a claim that Sift runs there —
+      # nothing has ever been tested against it. wxt.config.ts pins
+      # manifestVersion to 3 so that Firefox does not fall back to MV2, and this
+      # is the only thing that ever exercises that decision: without it, the
+      # config could drift into something Chrome-only and nothing would say so.
+      - run: npm run build:firefox

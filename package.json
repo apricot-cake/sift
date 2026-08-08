@@ -10,6 +10,7 @@
     "dev": "node scripts/dev.ts",
     "dev:browser": "node scripts/dev-browser.ts",
     "build": "wxt build -b chrome && npm run verify:manifest",
+    "build:firefox": "wxt build -b firefox && npm run verify:manifest -- firefox",
     "deploy": "node scripts/deploy-extension.ts",
     "lint": "biome ci .",
     "lint:fix": "biome check --write .",
