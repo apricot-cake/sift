@@ -2,7 +2,7 @@ import { existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, dirname, resolve } from "node:path";
 import { defineConfig } from "wxt";
-import { devErrorLog } from "./scripts/dev-error-log.ts";
+import { devErrorLog } from "./plugins/dev-error-log.ts";
 import { DEV_SERVER_HOST, DEV_SERVER_PORT } from "./utils/dev-server.ts";
 
 // Where a DEVELOPMENT build lands. Deliberately outside the working tree and
