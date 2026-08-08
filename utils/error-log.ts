@@ -16,9 +16,11 @@
 // by the code it watches. A lost diagnostic line is always better than a
 // diagnostic that breaks filtering.
 import { browser } from "wxt/browser";
+import { storage } from "wxt/utils/storage";
 
-export const ERROR_LOG_KEY = "siftErrorLog";
-export const ERROR_LOG_LIMIT = 50;
+// The key the buffer is kept under, and how many entries it holds.
+const ERROR_LOG_KEY = "siftErrorLog";
+const ERROR_LOG_LIMIT = 50;
 
 const MESSAGE_LIMIT = 500;
 const STACK_LIMIT = 4000;
@@ -51,14 +53,12 @@ export interface ErrorLogEntry {
   seq: number;
 }
 
-// Read-only surface `browser.storage.local`/`.session` and the test's fake
-// storage areas both satisfy, without pulling in the rest of
-// StorageArea (clear, remove, getBytesInUse, onChanged...) that nothing here
-// uses.
-export interface ErrorLogStorage {
-  get(key: string): Promise<Record<string, unknown>>;
-  set(values: Record<string, unknown>): Promise<void>;
-}
+// The ring buffer itself. Local rather than sync: it is about this browser on
+// this machine, it turns over constantly, and sync's quota is for settings.
+export const errorLogItem = storage.defineItem<ErrorLogEntry[]>(
+  `local:${ERROR_LOG_KEY}`,
+  { fallback: [] }
+);
 
 function isInteger(value: unknown): value is number {
   return Number.isInteger(value);
@@ -189,16 +189,13 @@ export function collectUndrainedEntries(
 let pendingWrite: Promise<void> = Promise.resolve();
 
 export function recordErrorEntry(
-  storage: ErrorLogStorage,
   entry: Omit<ErrorLogEntry, "seq">,
   limit = ERROR_LOG_LIMIT
 ): Promise<void> {
   pendingWrite = pendingWrite
     .then(async () => {
-      const stored = await storage.get(ERROR_LOG_KEY);
-      await storage.set({
-        [ERROR_LOG_KEY]: appendErrorEntry(stored?.[ERROR_LOG_KEY], entry, limit)
-      });
+      const stored = await errorLogItem.getValue();
+      await errorLogItem.setValue(appendErrorEntry(stored, entry, limit));
     })
     .catch(() => {
       // The extension context can be invalidated mid-write after a reload.
@@ -299,6 +296,6 @@ export function startUncaughtReporting({
     target,
     source,
     extensionUrlPrefix: filterToOwnCode ? browser.runtime.getURL("") : null,
-    record: (entry) => recordErrorEntry(browser.storage.local, entry)
+    record: (entry) => recordErrorEntry(entry)
   });
 }
