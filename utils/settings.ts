@@ -1,3 +1,7 @@
+// What a setting is and what a valid one looks like. Where they are kept is
+// utils/settings-storage.ts — kept apart so this file stays readable by the
+// build scripts, which run under node and have no extension APIs at all
+// (scripts/verify-manifest.ts reaches this file through the adapters).
 import type { ClassifyThresholds } from "./filter-core.ts";
 import { normalizeInstanceHost } from "./instances.ts";
 

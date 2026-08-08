@@ -1,11 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { createFakeStorageArea } from "../test/storage.ts";
 import {
   addInstance,
   handlePermissionsAdded,
   handlePermissionsRemoved,
   MISSKEY_CONTENT_SCRIPT_FILES,
-  MISSKEY_INSTANCES_KEY,
   normalizeInstanceHost,
   originForHost,
   reconcileInstances,
@@ -50,9 +48,9 @@ interface FakeRegisteredScript {
   persistAcrossSessions?: boolean;
 }
 
-// browser.scripting, which refuses a duplicate id and an unregister of something
-// it never registered — both of which the code has to work around rather than
-// walk into.
+// browser.scripting, which refuses a duplicate id and an unregister of
+// something it never registered — both of which the code has to work around
+// rather than walk into.
 function createFakeScripting(initialScripts: FakeRegisteredScript[] = []) {
   const scripts = new Map<string, FakeRegisteredScript>(
     initialScripts.map((script) => [script.id, script])
@@ -78,6 +76,29 @@ function createFakeScripting(initialScripts: FakeRegisteredScript[] = []) {
     },
     async getRegisteredContentScripts() {
       return [...scripts.values()];
+    }
+  };
+}
+
+// The host list as utils/settings.ts hands it over. `writes` is what tells an
+// untouched list from one written back unchanged — the assertions about a call
+// storing nothing are about the write, not about the value.
+function createFakeInstanceStorage(initialHosts: string[] = []) {
+  let hosts = [...initialHosts];
+  let writes = 0;
+  return {
+    get hosts() {
+      return hosts;
+    },
+    get writes() {
+      return writes;
+    },
+    async getInstances() {
+      return [...hosts];
+    },
+    async setInstances(next: string[]) {
+      hosts = [...next];
+      writes += 1;
     }
   };
 }
@@ -128,13 +149,13 @@ describe("addInstance", () => {
     const permissions = createFakePermissions();
     permissions.request = async () => false;
     const scripting = createFakeScripting();
-    const storage = { sync: createFakeStorageArea() };
+    const storage = createFakeInstanceStorage();
 
     const result = await addInstance("misskey.io", { permissions, scripting, storage });
 
     expect(result).toEqual({ added: false, reason: "permission-denied" });
     expect(scripting.scripts.size).toBe(0);
-    expect(storage.sync.state[MISSKEY_INSTANCES_KEY]).toBeUndefined();
+    expect(storage.writes).toBe(0);
   });
 
   it("rejects an invalid host before asking for anything", async () => {
@@ -145,7 +166,7 @@ describe("addInstance", () => {
       return true;
     };
     const scripting = createFakeScripting();
-    const storage = { sync: createFakeStorageArea() };
+    const storage = createFakeInstanceStorage();
 
     const result = await addInstance("http://misskey.io", { permissions, scripting, storage });
 
@@ -156,20 +177,20 @@ describe("addInstance", () => {
   it("registers the same built files the static content script uses", async () => {
     const permissions = createFakePermissions();
     const scripting = createFakeScripting();
-    const storage = { sync: createFakeStorageArea() };
+    const storage = createFakeInstanceStorage();
 
     const result = await addInstance("misskey.io", { permissions, scripting, storage });
 
     expect(result).toEqual({ added: true });
     expect(permissions.origins.has("https://misskey.io/*")).toBe(true);
     expect(scripting.scripts.get("misskey-misskey.io")).toEqual(registration);
-    expect(storage.sync.state[MISSKEY_INSTANCES_KEY]).toEqual(["misskey.io"]);
+    expect(storage.hosts).toEqual(["misskey.io"]);
   });
 
   it("is a no-op for a host that is already added", async () => {
     const permissions = createFakePermissions();
     const scripting = createFakeScripting();
-    const storage = { sync: createFakeStorageArea() };
+    const storage = createFakeInstanceStorage();
     await addInstance("misskey.io", { permissions, scripting, storage });
 
     // Neither re-requests the permission nor tries to register the now-duplicate
@@ -180,7 +201,7 @@ describe("addInstance", () => {
     const repeated = await addInstance("misskey.io", { permissions, scripting, storage });
 
     expect(repeated).toEqual({ added: true });
-    expect(storage.sync.state[MISSKEY_INSTANCES_KEY]).toEqual(["misskey.io"]);
+    expect(storage.hosts).toEqual(["misskey.io"]);
   });
 
   // Chrome tears the popup down the instant its permission dialog appears, so
@@ -192,14 +213,12 @@ describe("addInstance", () => {
     const scripting = createFakeScripting([
       { id: "misskey-misskey.io", matches: ["https://misskey.io/*"] }
     ]);
-    const storage = {
-      sync: createFakeStorageArea({ [MISSKEY_INSTANCES_KEY]: ["misskey.io"] })
-    };
+    const storage = createFakeInstanceStorage(["misskey.io"]);
 
     const result = await addInstance("misskey.io", { permissions, scripting, storage });
 
     expect(result).toEqual({ added: true });
-    expect(storage.sync.state[MISSKEY_INSTANCES_KEY]).toEqual(["misskey.io"]);
+    expect(storage.hosts).toEqual(["misskey.io"]);
   });
 });
 
@@ -209,31 +228,25 @@ describe("removeInstance", () => {
     const scripting = createFakeScripting([
       { id: "misskey-misskey.io", matches: ["https://misskey.io/*"] }
     ]);
-    const storage = {
-      sync: createFakeStorageArea({
-        [MISSKEY_INSTANCES_KEY]: ["misskey.io", "other.example"]
-      })
-    };
+    const storage = createFakeInstanceStorage(["misskey.io", "other.example"]);
 
     await removeInstance("misskey.io", { permissions, scripting, storage });
 
     expect(scripting.scripts.has("misskey-misskey.io")).toBe(false);
     expect(permissions.origins.has("https://misskey.io/*")).toBe(false);
-    expect(storage.sync.state[MISSKEY_INSTANCES_KEY]).toEqual(["other.example"]);
+    expect(storage.hosts).toEqual(["other.example"]);
   });
 
   // A previous removal that died partway through leaves no registration to drop.
   it("cleans up the permission and the storage anyway", async () => {
     const permissions = createFakePermissions(["https://misskey.io/*"]);
     const scripting = createFakeScripting();
-    const storage = {
-      sync: createFakeStorageArea({ [MISSKEY_INSTANCES_KEY]: ["misskey.io"] })
-    };
+    const storage = createFakeInstanceStorage(["misskey.io"]);
 
     await removeInstance("misskey.io", { permissions, scripting, storage });
 
     expect(permissions.origins.has("https://misskey.io/*")).toBe(false);
-    expect(storage.sync.state[MISSKEY_INSTANCES_KEY]).toEqual([]);
+    expect(storage.hosts).toEqual([]);
   });
 });
 
@@ -242,30 +255,25 @@ describe("handlePermissionsRemoved", () => {
     const scripting = createFakeScripting([
       { id: "misskey-misskey.io", matches: ["https://misskey.io/*"] }
     ]);
-    const storage = {
-      sync: createFakeStorageArea({
-        [MISSKEY_INSTANCES_KEY]: ["misskey.io", "other.example"]
-      })
-    };
+    const storage = createFakeInstanceStorage(["misskey.io", "other.example"]);
 
     await handlePermissionsRemoved({ origins: ["https://misskey.io/*"] }, { scripting, storage });
 
     expect(scripting.scripts.has("misskey-misskey.io")).toBe(false);
-    expect(storage.sync.state[MISSKEY_INSTANCES_KEY]).toEqual(["other.example"]);
+    expect(storage.hosts).toEqual(["other.example"]);
   });
 
   it("leaves an unrelated revocation alone", async () => {
     const scripting = createFakeScripting([
       { id: "misskey-misskey.io", matches: ["https://misskey.io/*"] }
     ]);
-    const storage = {
-      sync: createFakeStorageArea({ [MISSKEY_INSTANCES_KEY]: ["misskey.io"] })
-    };
+    const storage = createFakeInstanceStorage(["misskey.io"]);
 
     await handlePermissionsRemoved({ origins: ["https://other.test/*"] }, { scripting, storage });
 
     expect(scripting.scripts.has("misskey-misskey.io")).toBe(true);
-    expect(storage.sync.state[MISSKEY_INSTANCES_KEY]).toEqual(["misskey.io"]);
+    expect(storage.hosts).toEqual(["misskey.io"]);
+    expect(storage.writes).toBe(0);
   });
 });
 
@@ -273,43 +281,40 @@ describe("handlePermissionsRemoved", () => {
 describe("handlePermissionsAdded", () => {
   it("registers and stores a grant nothing else caught", async () => {
     const scripting = createFakeScripting();
-    const storage = { sync: createFakeStorageArea() };
+    const storage = createFakeInstanceStorage();
 
     await handlePermissionsAdded({ origins: ["https://misskey.io/*"] }, { scripting, storage });
 
     expect(scripting.scripts.get("misskey-misskey.io")).toEqual(registration);
-    expect(storage.sync.state[MISSKEY_INSTANCES_KEY]).toEqual(["misskey.io"]);
+    expect(storage.hosts).toEqual(["misskey.io"]);
   });
 
   it("leaves a host addInstance() already finished alone", async () => {
     const scripting = createFakeScripting([
       { id: "misskey-misskey.io", matches: ["https://misskey.io/*"] }
     ]);
-    const storage = {
-      sync: createFakeStorageArea({ [MISSKEY_INSTANCES_KEY]: ["misskey.io"] })
-    };
+    const storage = createFakeInstanceStorage(["misskey.io"]);
 
     await handlePermissionsAdded({ origins: ["https://misskey.io/*"] }, { scripting, storage });
 
-    expect(storage.sync.state[MISSKEY_INSTANCES_KEY]).toEqual(["misskey.io"]);
+    expect(storage.hosts).toEqual(["misskey.io"]);
+    expect(storage.writes).toBe(0);
   });
 
   it("adopts a registration whose storage write has not landed yet", async () => {
     const scripting = createFakeScripting([
       { id: "misskey-misskey.io", matches: ["https://misskey.io/*"] }
     ]);
-    const storage = { sync: createFakeStorageArea() };
+    const storage = createFakeInstanceStorage();
 
     await handlePermissionsAdded({ origins: ["https://misskey.io/*"] }, { scripting, storage });
 
-    expect(storage.sync.state[MISSKEY_INSTANCES_KEY]).toEqual(["misskey.io"]);
+    expect(storage.hosts).toEqual(["misskey.io"]);
   });
 
   it("registers nothing for a grant that is not one https host", async () => {
     const scripting = createFakeScripting();
-    const storage = {
-      sync: createFakeStorageArea({ [MISSKEY_INSTANCES_KEY]: ["kept.example"] })
-    };
+    const storage = createFakeInstanceStorage(["kept.example"]);
 
     await handlePermissionsAdded(
       { origins: ["<all_urls>", "https://example.com/path/*"] },
@@ -317,35 +322,34 @@ describe("handlePermissionsAdded", () => {
     );
 
     expect(scripting.scripts.size).toBe(0);
-    expect(storage.sync.state[MISSKEY_INSTANCES_KEY]).toEqual(["kept.example"]);
+    expect(storage.hosts).toEqual(["kept.example"]);
+    expect(storage.writes).toBe(0);
   });
 
   // An empty onAdded payload should not occur, but guarding it costs nothing.
   it("does nothing for no origins at all", async () => {
     const scripting = createFakeScripting();
-    const storage = { sync: createFakeStorageArea() };
+    const storage = createFakeInstanceStorage();
 
     await handlePermissionsAdded({ origins: [] }, { scripting, storage });
 
     expect(scripting.scripts.size).toBe(0);
-    expect(storage.sync.state[MISSKEY_INSTANCES_KEY]).toBeUndefined();
+    expect(storage.writes).toBe(0);
   });
 });
 
-// browser.permissions can be revoked outside the extension, so what is stored and
-// what is registered are reconciled against the grants at every startup.
+// browser.permissions can be revoked outside the extension, so what is stored
+// and what is registered are reconciled against the grants at every startup.
 describe("reconcileInstances", () => {
   it("re-registers a stored host whose registration was lost", async () => {
     const permissions = createFakePermissions(["https://misskey.io/*"]);
     const scripting = createFakeScripting();
-    const storage = {
-      sync: createFakeStorageArea({ [MISSKEY_INSTANCES_KEY]: ["misskey.io"] })
-    };
+    const storage = createFakeInstanceStorage(["misskey.io"]);
 
     await reconcileInstances({ permissions, scripting, storage });
 
     expect(scripting.scripts.has("misskey-misskey.io")).toBe(true);
-    expect(storage.sync.state[MISSKEY_INSTANCES_KEY]).toEqual(["misskey.io"]);
+    expect(storage.hosts).toEqual(["misskey.io"]);
   });
 
   it("drops a stored host whose permission was revoked while Sift was down", async () => {
@@ -353,14 +357,12 @@ describe("reconcileInstances", () => {
     const scripting = createFakeScripting([
       { id: "misskey-misskey.io", matches: ["https://misskey.io/*"] }
     ]);
-    const storage = {
-      sync: createFakeStorageArea({ [MISSKEY_INSTANCES_KEY]: ["misskey.io"] })
-    };
+    const storage = createFakeInstanceStorage(["misskey.io"]);
 
     await reconcileInstances({ permissions, scripting, storage });
 
     expect(scripting.scripts.has("misskey-misskey.io")).toBe(false);
-    expect(storage.sync.state[MISSKEY_INSTANCES_KEY]).toEqual([]);
+    expect(storage.hosts).toEqual([]);
   });
 
   // A removeInstance() that saved storage but died before unregistering.
@@ -370,14 +372,12 @@ describe("reconcileInstances", () => {
       { id: "misskey-kept.example", matches: ["https://kept.example/*"] },
       { id: "misskey-orphan.example", matches: ["https://orphan.example/*"] }
     ]);
-    const storage = {
-      sync: createFakeStorageArea({ [MISSKEY_INSTANCES_KEY]: ["kept.example"] })
-    };
+    const storage = createFakeInstanceStorage(["kept.example"]);
 
     await reconcileInstances({ permissions, scripting, storage });
 
     expect(scripting.scripts.has("misskey-kept.example")).toBe(true);
     expect(scripting.scripts.has("misskey-orphan.example")).toBe(false);
-    expect(storage.sync.state[MISSKEY_INSTANCES_KEY]).toEqual(["kept.example"]);
+    expect(storage.hosts).toEqual(["kept.example"]);
   });
 });
