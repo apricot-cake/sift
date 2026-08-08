@@ -108,3 +108,32 @@ npm test
 ```
 
 Typechecks the whole tree (`tsc --noEmit`), then runs the unit tests with Vitest. Each test file sits next to the code it covers (`utils/filter-core.test.ts` and so on), and the adapters are tested by running their selectors against a real DOM — happy-dom parses the markup a test writes, so what passes is a selector that would find the element on the page. There is no separate typecheck command — this is it, and CI runs the same one.
+
+## Commits
+
+The subject line is a Conventional Commits type, then a summary in Japanese: `feat: 設定を options ページへ移し、popup は入口だけにする`. The types in use are `feat`, `fix`, `refactor`, `chore`, `docs`, `test` and `perf`, with a scope where one narrows it usefully (`chore(ci):`).
+
+The body says why. What changed is in the diff, and a message that repeats it is a second copy that goes stale; what the diff cannot show is the reason the old shape was wrong. Long is fine.
+
+Pull requests are squash-merged, so the PR title becomes the subject line on `main` and the PR body is what a reader lands on from `git log`. Write both as if they were the commit — because one of them is.
+
+## Releases
+
+The version lives in `package.json` and nowhere else. WXT copies it into the generated manifest, and `verify-manifest.ts` checks that it arrived.
+
+Every merge into `main` reaches the everyday Chrome through the `post-merge` hook, so there is no release event to speak of. What the version is for is being able to say which build a profile is running: `chrome://extensions` shows it, and a tag makes it something you can check out.
+
+Raise it when the extension a reader sees has changed — a feature, a UI that moved, a fix worth pointing at. Not for every merge.
+
+```powershell
+npm version minor --no-git-tag-version
+```
+
+`--no-git-tag-version` because `main` takes pull requests only: the bump goes in as one, and the tag is placed afterwards, on the merge commit.
+
+```powershell
+git tag v0.2.0
+git push origin v0.2.0
+```
+
+There is no `CHANGELOG.md`. The commit messages already carry the reasons in prose, so `git log v0.1.0..v0.2.0` is the change list — a second copy would only be the one that goes stale.
