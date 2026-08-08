@@ -29,7 +29,7 @@ export function startContentRuntime(maybeAdapter: ServiceAdapter | null) {
     // narrowing into hoisted function declarations on its own.
     const adapter = maybeAdapter;
 
-    const toolbarHostId = "xif-toolbar-host";
+    const toolbarHostId = "sift-toolbar-host";
 
     // Tied to the runtime's life rather than the world's: the injection that
     // replaces this script disposes the previous runtime first, so there is no
@@ -63,13 +63,13 @@ export function startContentRuntime(maybeAdapter: ServiceAdapter | null) {
       state: ClassifyState,
       reason: ClassifyReason
     ): void {
-      cell.dataset.xifFilterState = state;
-      cell.dataset.xifFilterReason = reason;
+      cell.dataset.siftFilterState = state;
+      cell.dataset.siftFilterReason = reason;
     }
 
     function clearCellState(cell: HTMLElement): void {
-      delete cell.dataset.xifFilterState;
-      delete cell.dataset.xifFilterReason;
+      delete cell.dataset.siftFilterState;
+      delete cell.dataset.siftFilterReason;
     }
 
     function updateToolbarCounts(counts: {
@@ -116,7 +116,7 @@ export function startContentRuntime(maybeAdapter: ServiceAdapter | null) {
       }
 
       mountToolbar();
-      document.body.classList.toggle("xif-show-all", showAllTemporarily);
+      document.body.classList.toggle("sift-show-all", showAllTemporarily);
 
       const counts = { hit: 0, rising: 0, hidden: 0 };
 
@@ -170,9 +170,9 @@ export function startContentRuntime(maybeAdapter: ServiceAdapter | null) {
     }
 
     function clearAllFiltering(): void {
-      document.body.classList.remove("xif-show-all");
+      document.body.classList.remove("sift-show-all");
       for (const cell of document.querySelectorAll<HTMLElement>(
-        "[data-xif-filter-state]"
+        "[data-sift-filter-state]"
       )) {
         clearCellState(cell);
       }
