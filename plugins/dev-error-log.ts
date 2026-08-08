@@ -1,3 +1,10 @@
+// The development server's other half: the endpoint the service worker posts its
+// error buffer to, and the liveness probe it polls. A Vite plugin, applied to
+// `serve` alone, which wxt.config.ts installs.
+//
+// It sits here rather than in scripts/ because it is never run — scripts/ is
+// what node executes directly (`npm run dev`, `npm run deploy`,
+// `npm run verify:manifest`), and this is imported by the build config instead.
 import { randomUUID } from "node:crypto";
 import fs from "node:fs";
 import type { IncomingMessage, ServerResponse } from "node:http";
