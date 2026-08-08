@@ -63,7 +63,7 @@ npm run deploy
 npm run build
 ```
 
-`.output\chrome-mv3-release` へ出力し、生成manifestを `manifest.legacy.json` の権限・対象ホスト・content script設定と比較します。`.output\chrome-mv3` は書き換えません。
+`.output\chrome-mv3-release` へ出力し、生成manifestがソースの宣言どおりかを確認します＝権限と署名鍵と名前は `wxt.config.ts`、対象ホストは `utils/site-matches.ts`、バージョンは `package.json`、そしてcontent scriptがmanifestに載っていること。`.output\chrome-mv3` は書き換えません。
 
 ```powershell
 npm test
