@@ -32,7 +32,7 @@ export default defineConfig({
   manifestVersion: 3,
   // Two outputs that must never be confused for each other:
   //   dev     → the fixed path above, read only by the development profile
-  //   release → .output/<browser>-mv3-release, which scripts/deploy-extension.js
+  //   release → .output/<browser>-mv3-release, which scripts/deploy-extension.ts
   //             promotes into .output/chrome-mv3 — the folder the daily Chrome
   //             has loaded. `wxt build` therefore CANNOT write to the daily
   //             folder: only a promoted build gets there.
@@ -59,7 +59,7 @@ export default defineConfig({
   },
   dev: {
     server: {
-      // utils/dev-server.js is the single source: the development worker posts
+      // utils/dev-server.ts is the single source: the development worker posts
       // its error buffer and its liveness probe to this same address.
       //
       // The HOST is pinned for the same reason as the port. WXT's default is
@@ -97,11 +97,11 @@ export default defineConfig({
     // `scripting` is also what WXT's dev mode adds on its own to register
     // content scripts — declaring it here is no longer dev-only, since a
     // release build now registers Misskey instances the reader adds the same
-    // way (utils/instances.js).
+    // way (utils/instances.ts).
     permissions: ["storage", "scripting"],
     // The origin a reader can grant is never wider than the single host they
     // add: chrome.permissions.request() only ever asks for one origin at a
-    // time (utils/instances.js), and Chrome's runtime dialog is scoped to
+    // time (utils/instances.ts), and Chrome's runtime dialog is scoped to
     // that origin regardless of how wide this wildcard is. Declaring the
     // wildcard here is what makes ANY host requestable at all — the
     // alternative, host_permissions, is a set fixed at build time and cannot

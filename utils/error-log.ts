@@ -9,7 +9,7 @@
 // with a local destination instead of a server. Every surface writes to a ring
 // buffer in chrome.storage.local, in every build. In development the service
 // worker forwards that buffer to the development server, which appends it to
-// ~/.sift/extension-errors.log (scripts/dev-error-log.js). A release build keeps
+// ~/.sift/extension-errors.log (scripts/dev-error-log.ts). A release build keeps
 // filling the buffer and has nobody to forward it to.
 //
 // Best-effort by construction: nothing here throws, and nothing here is awaited
