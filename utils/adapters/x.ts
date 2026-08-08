@@ -5,9 +5,10 @@ import { parseMetric } from "../filter-core.ts";
 import { LIKE_THRESHOLDS } from "../settings.ts";
 import type { ServiceAdapter } from "./types.ts";
 
-// Named so a test can build a fake node keyed by the same selectors the adapter
-// asks for, without restating them.
-export const X_SELECTORS = Object.freeze({
+// X's page structure in one place, so a redraw on X's side is one edit here.
+// Not exported: what a test supplies is markup, and what it reads is the answer
+// this file gives for it (utils/adapters/x.test.ts).
+const X_SELECTORS = Object.freeze({
   postCard: 'article[data-testid="tweet"]',
   postCell: '[data-testid="cellInnerDiv"]',
   reactionButton: 'button[data-testid="like"], button[data-testid="unlike"]',

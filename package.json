@@ -8,7 +8,7 @@
     "dev:browser": "node scripts/dev-browser.ts",
     "build": "wxt build -b chrome && npm run verify:manifest",
     "deploy": "node scripts/deploy-extension.ts",
-    "test": "tsc --noEmit && node --test test.ts",
+    "test": "tsc --noEmit && vitest run",
     "verify:manifest": "node scripts/verify-manifest.ts",
     "postinstall": "wxt prepare",
     "prepare": "node scripts/setup.ts"
@@ -16,8 +16,10 @@
   "devDependencies": {
     "@types/chrome": "^0.2.5",
     "@types/node": "^26.1.2",
+    "happy-dom": "^20.11.2",
     "typescript": "^7.0.2",
     "vite": "8.2.0",
+    "vitest": "^4.1.10",
     "wxt": "0.21.3"
   }
 }
