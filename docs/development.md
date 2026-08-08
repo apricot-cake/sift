@@ -63,7 +63,7 @@ If verification does not pass, nothing is replaced and your everyday Chrome keep
 
 Exceptions the code fails to catch are caught by the extension itself and written to a ring buffer (the newest 50) in `browser.storage.local`. That part ships in release builds too. In development builds, the service worker sends the buffer to the dev server, which appends it to `~\.sift\extension-errors.log` as one JSON object per line.
 
-There is no way to read the everyday profile's buffer yet. Content scripts record only the exceptions they can attribute to the extension; the popup and the service worker record everything.
+There is no way to read the everyday profile's buffer yet. Content scripts record only the exceptions they can attribute to the extension; the popup, the settings page and the service worker record everything.
 
 ## Strings
 
@@ -72,10 +72,10 @@ Every string a reader sees lives in `public\_locales\<language>\messages.json` a
 Three shapes reach a message:
 
 - `t("name")` in code, with the message names typed from the English file (`i18n.d.ts` merges them into WXT's own `browser.i18n` types, so a typo does not compile)
-- `data-i18n`, `data-i18n-placeholder` and `data-i18n-aria-label` in `entrypoints\popup\index.html`, filled in by `localizeDocument()` — static HTML cannot carry `__MSG_name__` the way the manifest can
+- `data-i18n`, `data-i18n-placeholder` and `data-i18n-aria-label` in the two static pages (`entrypoints\options\index.html` and `entrypoints\popup\index.html`), filled in by `localizeDocument()` — static HTML cannot carry `__MSG_name__` the way the manifest can
 - `__MSG_name__` in `wxt.config.ts`, which only the manifest's own fields take
 
-The popup's markup also carries the English text itself, for the moment before `main.ts` runs. `utils\i18n.test.ts` holds it to the same words as the messages file, checks the two locales name the same messages, and fails on a name that exists in neither. `verify-manifest.ts` does the same for the manifest's description.
+Both pages' markup also carries the English text itself, for the moment before `main.ts` runs. `utils\i18n.test.ts` holds it to the same words as the messages file, checks the two locales name the same messages, and fails on a name that exists in neither. `verify-manifest.ts` does the same for the manifest's description.
 
 Tests read `public\_locales\en` through `test\i18n.ts`, which is what stands in for `browser.i18n.getMessage` — WXT's fake browser leaves it unimplemented.
 

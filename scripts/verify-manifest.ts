@@ -100,6 +100,15 @@ assert.equal(
 );
 assert.equal(generatedManifest.action.default_popup, "popup.html");
 
+// The settings page, and the one thing about it that is a decision rather than
+// a consequence: `open_in_tab`. Embedded in chrome://extensions instead, it
+// would be a surface Chrome can tear down when the host-permission dialog
+// appears, which is the failure adding a Misskey instance used to hit (#28).
+// wxt.config.ts does not declare any of this — it comes from the meta tags in
+// entrypoints/options/index.html, which nothing else reads back.
+assert.equal(generatedManifest.options_ui.page, "options.html");
+assert.equal(generatedManifest.options_ui.open_in_tab, true);
+
 // The one entry the two targets genuinely differ on: Chrome MV3 takes a service
 // worker, Firefox MV3 takes a list of scripts. Both are built from the same
 // entrypoints/background.ts, so this is what says WXT shaped the output for the

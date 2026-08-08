@@ -9,91 +9,21 @@
     <title>Sift</title>
     <link rel="stylesheet" href="./style.css">
   </head>
-  <!-- Every reader-visible string carries the message name that replaces it:
-       `data-i18n` for the element's text, the two suffixed forms for an
-       attribute. localizeDocument() in main.ts is what fills them in.
-
-       The English text is written out rather than left empty, and
-       utils/i18n.test.ts holds it to the same words as public/_locales/en. An
-       empty element would read as empty to everything that looks at the markup
-       without running it — a screen reader in the moment before main.ts runs, a
-       linter, a person. -->
+  <!-- The one switch worth reaching from the toolbar icon, and the way to the
+       rest. Everything else is on the settings page: adding a Misskey instance
+       asks Chrome for a permission, and Chrome tears a popup down the instant
+       that dialog appears (#28) — a tab does not go anywhere. The thresholds
+       are on the timeline's own toolbar as well, which is where a reader is
+       already looking when they want to move one. -->
   <body>
-    <main class="settings">
-      <header class="app-header">
-        <h1>Sift</h1>
-        <p data-i18n="popupTagline">Filters the posts on screen by one shared set of rules</p>
-      </header>
-      <section aria-labelledby="filter-heading">
-        <h2 id="filter-heading" data-i18n="popupSectionFilter">Filter</h2>
-        <label class="setting-row">
-          <span class="setting-label" data-i18n="popupEnabled">Turn filtering on</span>
-          <input data-setting="enabled" type="checkbox">
-        </label>
-      </section>
-      <section aria-labelledby="standard-heading">
-        <h2 id="standard-heading" data-i18n="popupSectionStandard">Standard</h2>
-        <label class="setting-row">
-          <span class="setting-label" data-i18n="popupMinLikes">Minimum likes</span>
-          <input data-setting="minLikes" type="number" min="0" step="50">
-        </label>
-        <label class="setting-row">
-          <span class="setting-label" data-i18n="popupMinReactions">Minimum reactions (Misskey)</span>
-          <input data-setting="misskeyMinReactions" type="number" min="0" step="2">
-        </label>
-      </section>
-      <section aria-labelledby="rising-heading">
-        <h2 id="rising-heading" data-i18n="popupSectionRising">Rising</h2>
-        <label class="setting-row">
-          <span class="setting-label" data-i18n="popupRisingEnabled">Show rising posts</span>
-          <input data-setting="risingEnabled" type="checkbox">
-        </label>
-        <label class="setting-row">
-          <span class="setting-label" data-i18n="popupMinLikes">Minimum likes</span>
-          <input data-setting="risingMinLikes" type="number" min="0" step="10">
-        </label>
-        <label class="setting-row">
-          <span class="setting-label" data-i18n="popupMinReactions">Minimum reactions (Misskey)</span>
-          <input data-setting="misskeyRisingMinReactions" type="number" min="0" step="1">
-        </label>
-        <label class="setting-row">
-          <span class="setting-label" data-i18n="popupMaxAge">Time since posting</span>
-          <span class="input-with-unit"><input data-setting="risingMaxAgeHours" type="number" min="1" max="168"><span data-i18n="popupUnitHours">hours</span></span>
-        </label>
-        <p class="note" data-i18n="popupThresholdNote">Likes are read on X and Bluesky, reactions on Misskey. Instances differ in size by orders of magnitude, so the two carry separate thresholds.</p>
-      </section>
-      <section aria-labelledby="post-heading">
-        <h2 id="post-heading" data-i18n="popupSectionPost">Post</h2>
-        <label class="setting-row">
-          <span class="setting-label" data-i18n="popupMedia">Media</span>
-          <select data-setting="mediaMode"><option value="any" data-i18n="popupMediaAny">Images and video</option><option value="images" data-i18n="popupMediaImages">Images only</option></select>
-        </label>
-        <label class="setting-row">
-          <span class="setting-label" data-i18n="popupHideReposts">Leave out reposts</span>
-          <input data-setting="hideReposts" type="checkbox">
-        </label>
-      </section>
-      <section aria-labelledby="misskey-heading">
-        <h2 id="misskey-heading" data-i18n="popupSectionInstances">Misskey instances</h2>
-        <ul class="instance-list" data-role="instance-list"></ul>
-        <form class="instance-form" data-role="instance-form">
-          <input
-            data-role="instance-input"
-            type="text"
-            placeholder="e.g. misskey.io"
-            data-i18n-placeholder="popupInstancePlaceholder"
-            aria-label="Hostname of the Misskey instance to add"
-            data-i18n-aria-label="popupInstanceInputLabel"
-          >
-          <button type="submit" data-i18n="popupInstanceAdd">Add</button>
-        </form>
-        <p class="instance-error" data-role="instance-error" role="alert"></p>
-        <p class="note" data-i18n="popupInstanceNote">Adding one has Chrome ask you to allow access to that host and no other.</p>
-      </section>
-      <footer>
-        <p class="status" data-role="status" role="status" aria-live="polite" data-i18n="popupStatusLoading">Loading…</p>
-        <p class="note" data-i18n="popupAutosaveNote">Settings save themselves and reach every supported timeline.</p>
-      </footer>
+    <main class="popup">
+      <h1>Sift</h1>
+      <label class="setting-row">
+        <span class="setting-label" data-i18n="popupEnabled">Turn filtering on</span>
+        <input data-setting="enabled" type="checkbox">
+      </label>
+      <button type="button" data-role="open-options" data-i18n="popupOpenOptions">Open settings</button>
+      <p class="status" data-role="status" role="status" aria-live="polite"></p>
     </main>
     <script type="module" src="./main.js"></script>
   </body>

@@ -1,0 +1,217 @@
+import { browser } from "wxt/browser";
+import { startUncaughtReporting } from "../../utils/error-log.ts";
+import { localizeDocument, t } from "../../utils/i18n.ts";
+import {
+  addInstance,
+  type InstanceDeps,
+  normalizeInstanceHost,
+  removeInstance,
+} from "../../utils/instances.ts";
+import { normalizeSettings, type Settings } from "../../utils/settings.ts";
+import { instanceStorage, settingsItem } from "../../utils/settings-storage.ts";
+
+// Everything running on this page is the extension's own, so nothing is
+// filtered out. The subscription lives as long as the page does.
+startUncaughtReporting({
+  target: window,
+  source: "options",
+  filterToOwnCode: false,
+});
+
+// Wrapped in a function, rather than left at module top level, so a markup
+// element that failed to resolve can early-return instead of throwing partway
+// through — see the null check right below. The elements themselves are
+// always present at runtime (index.html declares every one of them), so the
+// early return never actually fires.
+function main(): void {
+  // Before anything is read off the page or shown on it: index.html ships with
+  // message names where its text goes, and the empty document is what a reader
+  // would see for the moment in between.
+  localizeDocument(document);
+  document.documentElement.lang = browser.i18n.getUILanguage();
+
+  const maybeStatus = document.querySelector<HTMLElement>(
+    '[data-role="status"]',
+  );
+  const maybeInstanceList = document.querySelector<HTMLElement>(
+    '[data-role="instance-list"]',
+  );
+  const maybeInstanceForm = document.querySelector<HTMLFormElement>(
+    '[data-role="instance-form"]',
+  );
+  const maybeInstanceInput = document.querySelector<HTMLInputElement>(
+    '[data-role="instance-input"]',
+  );
+  const maybeInstanceError = document.querySelector<HTMLElement>(
+    '[data-role="instance-error"]',
+  );
+  if (
+    !maybeStatus ||
+    !maybeInstanceList ||
+    !maybeInstanceForm ||
+    !maybeInstanceInput ||
+    !maybeInstanceError
+  ) {
+    return;
+  }
+  // Reassigned into fresh, never-reassigned consts so the functions declared
+  // below keep the non-null narrowing — TS does not carry a variable's
+  // narrowing into hoisted function declarations on its own.
+  const status = maybeStatus;
+  const instanceList = maybeInstanceList;
+  const instanceForm = maybeInstanceForm;
+  const instanceInput = maybeInstanceInput;
+  const instanceError = maybeInstanceError;
+
+  const instanceDeps: InstanceDeps = {
+    permissions: browser.permissions,
+    scripting: browser.scripting,
+    storage: instanceStorage,
+  };
+  let settings = normalizeSettings(defaults);
+  let statusTimer: number | null = null;
+
+  function syncForm(): void {
+    for (const element of document.querySelectorAll<
+      HTMLInputElement | HTMLSelectElement
+    >("[data-setting]")) {
+      const key = element.dataset.setting as keyof Settings;
+      if (element instanceof HTMLInputElement && element.type === "checkbox") {
+        element.checked = Boolean(settings[key]);
+      } else {
+        element.value = String(settings[key]);
+      }
+    }
+  }
+
+  function showSavedStatus(): void {
+    status.textContent = t("optionsStatusSaved");
+    if (statusTimer !== null) {
+      window.clearTimeout(statusTimer);
+    }
+    statusTimer = window.setTimeout(() => {
+      status.textContent = "";
+    }, 1400);
+  }
+
+  function renderInstances(): void {
+    instanceList.innerHTML = "";
+
+    for (const host of settings.misskeyInstances) {
+      const item = document.createElement("li");
+      item.className = "instance-row";
+
+      const label = document.createElement("span");
+      label.textContent = host;
+
+      const removeButton = document.createElement("button");
+      removeButton.type = "button";
+      removeButton.textContent = t("optionsInstanceRemove");
+      removeButton.addEventListener("click", async () => {
+        removeButton.disabled = true;
+        await removeInstance(host, instanceDeps);
+        await refreshInstances();
+      });
+
+      item.append(label, removeButton);
+      instanceList.append(item);
+    }
+  }
+
+  // Re-reads storage rather than patching `settings.misskeyInstances` locally:
+  // addInstance()/removeInstance() are the source of truth for what actually
+  // got registered, and this page is not the only surface that can change it
+  // (chrome://extensions can revoke a permission out from under it).
+  async function refreshInstances(): Promise<void> {
+    settings = normalizeSettings(await settingsItem.getValue());
+    renderInstances();
+  }
+
+  void settingsItem
+    .getValue()
+    .then((storedSettings) => {
+      settings = normalizeSettings(storedSettings);
+      syncForm();
+      renderInstances();
+      status.textContent = "";
+    })
+    .catch(() => {
+      status.textContent = t("optionsErrorLoadFailed");
+    });
+
+  // Storage, not the addInstance() call's own return value, is what drives the
+  // list. On a tab this is the ordinary path — the permission dialog leaves the
+  // page standing and addInstance() returns to it. It is also the backstop for
+  // the case the settings once lived in: a surface Chrome tears down when the
+  // dialog appears, where the background entrypoint's handlePermissionsAdded
+  // finishes the write that the torn-down call never got to (#28). Reading the
+  // list from storage covers both without knowing which one it is on.
+  settingsItem.watch((storedSettings) => {
+    settings = normalizeSettings(storedSettings);
+    renderInstances();
+  });
+
+  instanceForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    instanceError.textContent = "";
+
+    const host = normalizeInstanceHost(instanceInput.value);
+    if (host === null) {
+      instanceError.textContent = t("optionsErrorBadHost");
+      return;
+    }
+
+    const submitButton = instanceForm.querySelector<HTMLButtonElement>(
+      "button[type=submit]",
+    );
+    if (!submitButton) {
+      return;
+    }
+    submitButton.disabled = true;
+    try {
+      const result = await addInstance(host, instanceDeps);
+      if (!result.added) {
+        instanceError.textContent = t("optionsErrorPermissionDenied");
+        return;
+      }
+      instanceInput.value = "";
+      await refreshInstances();
+    } finally {
+      submitButton.disabled = false;
+    }
+  });
+
+  document.addEventListener("change", (event) => {
+    const target = event.target as Element | null;
+    const element = target?.closest("[data-setting]");
+    if (
+      !element ||
+      !(
+        element instanceof HTMLInputElement ||
+        element instanceof HTMLSelectElement
+      )
+    ) {
+      return;
+    }
+
+    const rawValue =
+      element instanceof HTMLInputElement && element.type === "checkbox"
+        ? element.checked
+        : element.value;
+    const key = element.dataset.setting as keyof Settings;
+    settings = normalizeSettings({
+      ...settings,
+      [key]: rawValue,
+    });
+
+    void settingsItem
+      .setValue(settings)
+      .then(showSavedStatus)
+      .catch(() => {
+        status.textContent = t("optionsErrorSaveFailed");
+      });
+    syncForm();
+  });
+}
+
+main();

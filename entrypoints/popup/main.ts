@@ -1,14 +1,8 @@
 import { browser } from "wxt/browser";
 import { startUncaughtReporting } from "../../utils/error-log.ts";
 import { localizeDocument, t } from "../../utils/i18n.ts";
-import {
-  addInstance,
-  type InstanceDeps,
-  normalizeInstanceHost,
-  removeInstance,
-} from "../../utils/instances.ts";
-import { normalizeSettings, type Settings } from "../../utils/settings.ts";
-import { instanceStorage, settingsItem } from "../../utils/settings-storage.ts";
+import { normalizeSettings } from "../../utils/settings.ts";
+import { settingsItem } from "../../utils/settings-storage.ts";
 
 // Everything running on this page is the extension's own, so nothing is
 // filtered out. The subscription lives as long as the popup does.
@@ -20,197 +14,62 @@ startUncaughtReporting({
 
 // Wrapped in a function, rather than left at module top level, so a markup
 // element that failed to resolve can early-return instead of throwing partway
-// through — see the null check right below. The elements themselves are
-// always present at runtime (popup.html declares every one of them), so the
-// early return never actually fires.
+// through. The elements themselves are always present at runtime (index.html
+// declares every one of them), so the early return never actually fires.
 function main(): void {
-  // Before anything is read off the page or shown on it: index.html ships with
-  // message names where its text goes, and the empty document is what a reader
-  // would see for the moment in between.
+  // Before anything is shown: index.html carries English text where the
+  // messages go, and this is what puts the reader's own language there.
   localizeDocument(document);
   document.documentElement.lang = browser.i18n.getUILanguage();
 
+  const maybeToggle = document.querySelector<HTMLInputElement>(
+    '[data-setting="enabled"]',
+  );
+  const maybeOpenOptions = document.querySelector<HTMLButtonElement>(
+    '[data-role="open-options"]',
+  );
   const maybeStatus = document.querySelector<HTMLElement>(
     '[data-role="status"]',
   );
-  const maybeInstanceList = document.querySelector<HTMLElement>(
-    '[data-role="instance-list"]',
-  );
-  const maybeInstanceForm = document.querySelector<HTMLFormElement>(
-    '[data-role="instance-form"]',
-  );
-  const maybeInstanceInput = document.querySelector<HTMLInputElement>(
-    '[data-role="instance-input"]',
-  );
-  const maybeInstanceError = document.querySelector<HTMLElement>(
-    '[data-role="instance-error"]',
-  );
-  if (
-    !maybeStatus ||
-    !maybeInstanceList ||
-    !maybeInstanceForm ||
-    !maybeInstanceInput ||
-    !maybeInstanceError
-  ) {
+  if (!maybeToggle || !maybeOpenOptions || !maybeStatus) {
     return;
   }
-  // Reassigned into fresh, never-reassigned consts so the functions declared
-  // below keep the non-null narrowing — TS does not carry a variable's
-  // narrowing into hoisted function declarations on its own.
+  const toggle = maybeToggle;
   const status = maybeStatus;
-  const instanceList = maybeInstanceList;
-  const instanceForm = maybeInstanceForm;
-  const instanceInput = maybeInstanceInput;
-  const instanceError = maybeInstanceError;
-
-  const instanceDeps: InstanceDeps = {
-    permissions: browser.permissions,
-    scripting: browser.scripting,
-    storage: instanceStorage,
-  };
-  let settings = normalizeSettings(defaults);
-  let statusTimer: number | null = null;
-
-  function syncForm(): void {
-    for (const element of document.querySelectorAll<
-      HTMLInputElement | HTMLSelectElement
-    >("[data-setting]")) {
-      const key = element.dataset.setting as keyof Settings;
-      if (element instanceof HTMLInputElement && element.type === "checkbox") {
-        element.checked = Boolean(settings[key]);
-      } else {
-        element.value = String(settings[key]);
-      }
-    }
-  }
-
-  function showSavedStatus(): void {
-    status.textContent = t("popupStatusSaved");
-    if (statusTimer !== null) {
-      window.clearTimeout(statusTimer);
-    }
-    statusTimer = window.setTimeout(() => {
-      status.textContent = "";
-    }, 1400);
-  }
-
-  function renderInstances(): void {
-    instanceList.innerHTML = "";
-
-    for (const host of settings.misskeyInstances) {
-      const item = document.createElement("li");
-      item.className = "instance-row";
-
-      const label = document.createElement("span");
-      label.textContent = host;
-
-      const removeButton = document.createElement("button");
-      removeButton.type = "button";
-      removeButton.textContent = t("popupInstanceRemove");
-      removeButton.addEventListener("click", async () => {
-        removeButton.disabled = true;
-        await removeInstance(host, instanceDeps);
-        await refreshInstances();
-      });
-
-      item.append(label, removeButton);
-      instanceList.append(item);
-    }
-  }
-
-  // Re-reads storage rather than patching `settings.misskeyInstances` locally:
-  // addInstance()/removeInstance() are the source of truth for what actually
-  // got registered, and this popup is not the only surface that can change it
-  // (chrome://extensions can revoke a permission out from under it).
-  async function refreshInstances(): Promise<void> {
-    settings = normalizeSettings(await settingsItem.getValue());
-    renderInstances();
-  }
 
   void settingsItem
     .getValue()
     .then((storedSettings) => {
-      settings = normalizeSettings(storedSettings);
-      syncForm();
-      renderInstances();
-      status.textContent = "";
+      toggle.checked = normalizeSettings(storedSettings).enabled;
     })
     .catch(() => {
-      status.textContent = t("popupErrorLoadFailed");
+      status.textContent = t("optionsErrorLoadFailed");
     });
 
-  // Storage, not the addInstance() call's own return value, is what drives the
-  // list: the backstop in the background entrypoint (handlePermissionsAdded)
-  // can finish writing the host after this popup's own addInstance() call was
-  // torn down along with the popup that made it (Chrome does that the instant
-  // the permission dialog appears). This listener is what shows the addition
-  // once that happens, since nothing in this document survived to call
-  // refreshInstances() itself.
+  // Storage rather than this checkbox is what the state follows: the settings
+  // page and the timeline's toolbar can both change it while this popup is up.
   settingsItem.watch((storedSettings) => {
-    settings = normalizeSettings(storedSettings);
-    renderInstances();
+    toggle.checked = normalizeSettings(storedSettings).enabled;
   });
 
-  instanceForm.addEventListener("submit", async (event) => {
-    event.preventDefault();
-    instanceError.textContent = "";
-
-    const host = normalizeInstanceHost(instanceInput.value);
-    if (host === null) {
-      instanceError.textContent = t("popupErrorBadHost");
-      return;
-    }
-
-    const submitButton = instanceForm.querySelector<HTMLButtonElement>(
-      "button[type=submit]",
-    );
-    if (!submitButton) {
-      return;
-    }
-    submitButton.disabled = true;
-    try {
-      const result = await addInstance(host, instanceDeps);
-      if (!result.added) {
-        instanceError.textContent = t("popupErrorPermissionDenied");
-        return;
-      }
-      instanceInput.value = "";
-      await refreshInstances();
-    } finally {
-      submitButton.disabled = false;
-    }
-  });
-
-  document.addEventListener("change", (event) => {
-    const target = event.target as Element | null;
-    const element = target?.closest("[data-setting]");
-    if (
-      !element ||
-      !(
-        element instanceof HTMLInputElement ||
-        element instanceof HTMLSelectElement
-      )
-    ) {
-      return;
-    }
-
-    const rawValue =
-      element instanceof HTMLInputElement && element.type === "checkbox"
-        ? element.checked
-        : element.value;
-    const key = element.dataset.setting as keyof Settings;
-    settings = normalizeSettings({
-      ...settings,
-      [key]: rawValue,
-    });
-
+  toggle.addEventListener("change", () => {
     void settingsItem
-      .setValue(settings)
-      .then(showSavedStatus)
+      .getValue()
+      .then((storedSettings) =>
+        settingsItem.setValue(
+          normalizeSettings({ ...storedSettings, enabled: toggle.checked }),
+        ),
+      )
       .catch(() => {
-        status.textContent = t("popupErrorSaveFailed");
+        status.textContent = t("optionsErrorSaveFailed");
       });
-    syncForm();
+  });
+
+  maybeOpenOptions.addEventListener("click", () => {
+    // Chrome closes the popup on its own once the page is open. Whether that
+    // page is a tab or the embedded pane is options_ui's to decide, and
+    // entrypoints/options/index.html asks for a tab.
+    void browser.runtime.openOptionsPage();
   });
 }
 
