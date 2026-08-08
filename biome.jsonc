@@ -1,0 +1,55 @@
+{
+  "$schema": "https://biomejs.dev/schemas/2.5.7/schema.json",
+  // .gitignore is the list of things not to look at, and it already names the
+  // two generated trees (.output, .wxt). Repeating them here would be a second
+  // list to keep in step with the first.
+  "vcs": {
+    "enabled": true,
+    "clientKind": "git",
+    "useIgnoreFile": true
+  },
+  "formatter": {
+    // Indentation, line endings and the final newline are declared in
+    // .editorconfig, which the editor reads too. This is off by default, so
+    // without it Biome would format to its own defaults (tabs) and quietly
+    // disagree with the editor on every file.
+    "useEditorconfig": true
+  },
+  "linter": {
+    "rules": {
+      "preset": "recommended"
+    }
+  },
+  "javascript": {
+    "formatter": {
+      // Not expressible in .editorconfig, and this is what the tree already
+      // uses.
+      "quoteStyle": "double"
+    }
+  },
+  "assist": {
+    "actions": {
+      "source": {
+        "organizeImports": "on"
+      }
+    }
+  },
+  "overrides": [
+    {
+      // This stylesheet is injected into a page whose own CSS Sift does not
+      // control and cannot outrank by specificity — X, Bluesky and every
+      // Misskey instance style their own posts. !important is the only thing
+      // that reliably hides a post there, so the rule that warns about it is
+      // reporting the design rather than a mistake. Scoped to this one file:
+      // everywhere else Sift owns the cascade and the warning still applies.
+      "includes": ["entrypoints/content/style.css"],
+      "linter": {
+        "rules": {
+          "complexity": {
+            "noImportantStyles": "off"
+          }
+        }
+      }
+    }
+  ]
+}

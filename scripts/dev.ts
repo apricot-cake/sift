@@ -31,7 +31,8 @@ import { DEV_SERVER_HOST, DEV_SERVER_PORT } from "../utils/dev-server.ts";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const output =
-  process.env.SIFT_DEV_OUTPUT || path.join(homedir(), ".sift-dev", "chrome-mv3-dev");
+  process.env.SIFT_DEV_OUTPUT ||
+  path.join(homedir(), ".sift-dev", "chrome-mv3-dev");
 
 // Is one already up? A TCP connect is enough — this only needs to know whether
 // something owns the port.
@@ -43,7 +44,10 @@ const output =
 // not responding" warning was wrong every time it fired (2026-08-04).
 function devServerAlive(): Promise<boolean> {
   return new Promise((resolve) => {
-    const socket = net.createConnection({ port: DEV_SERVER_PORT, host: DEV_SERVER_HOST });
+    const socket = net.createConnection({
+      port: DEV_SERVER_PORT,
+      host: DEV_SERVER_HOST,
+    });
     const finish = (alive: boolean) => {
       socket.removeAllListeners();
       socket.destroy();
@@ -65,13 +69,19 @@ function devServerAlive(): Promise<boolean> {
 // it running" for a person, but an agent cannot see the taskbar, and a step
 // written in a checklist only works while it is being read.
 if (await devServerAlive()) {
-  console.log(`[sift] the dev server is already up on ${DEV_SERVER_HOST}:${DEV_SERVER_PORT} — leaving it alone.`);
-  console.log("[sift] one server serves every worktree. To stop it, close its console window.");
+  console.log(
+    `[sift] the dev server is already up on ${DEV_SERVER_HOST}:${DEV_SERVER_PORT} — leaving it alone.`,
+  );
+  console.log(
+    "[sift] one server serves every worktree. To stop it, close its console window.",
+  );
   process.exit(0);
 }
 
 console.log(`[sift] development build folder: ${output}`);
-console.log("[sift] load THAT folder as an unpacked extension in the development Chrome profile (once).");
+console.log(
+  "[sift] load THAT folder as an unpacked extension in the development Chrome profile (once).",
+);
 
 // Started WITHOUT a terminal — an agent session, a task runner — hand the server
 // to a console window of its own and return. The window is then the status light:
@@ -87,16 +97,25 @@ console.log("[sift] load THAT folder as an unpacked extension in the development
 //
 // The window-opening rules (one command string, no `cmd /k`, the pause below) are
 // Windows-wide, not sift's: skill `windows-scripting`.
-if (process.platform === "win32" && !process.stdout.isTTY && !process.env.CI && !process.env.SIFT_DEV_WINDOW) {
+if (
+  process.platform === "win32" &&
+  !process.stdout.isTTY &&
+  !process.env.CI &&
+  !process.env.SIFT_DEV_WINDOW
+) {
   spawn('start "sift dev" node scripts/dev.ts', {
     cwd: ROOT,
     shell: true,
     detached: true,
     stdio: "ignore",
-    env: { ...process.env, SIFT_DEV_WINDOW: "1" }
+    env: { ...process.env, SIFT_DEV_WINDOW: "1" },
   }).unref();
-  console.log("[sift] opened a console window — the server runs THERE, under Node on the taskbar.");
-  console.log("[sift] the window is up only while the server is: close it to stop, and it closing means it stopped.");
+  console.log(
+    "[sift] opened a console window — the server runs THERE, under Node on the taskbar.",
+  );
+  console.log(
+    "[sift] the window is up only while the server is: close it to stop, and it closing means it stopped.",
+  );
   process.exit(0);
 }
 
@@ -118,7 +137,7 @@ const child = spawn("npx wxt", {
   cwd: ROOT,
   shell: true,
   stdio: [stdin, "inherit", "inherit"],
-  env: { ...process.env, SIFT_DEV_OUTPUT: output }
+  env: { ...process.env, SIFT_DEV_OUTPUT: output },
 });
 
 // Ctrl+C has to reach the server rather than orphan it behind a dead parent.
@@ -136,8 +155,15 @@ child.on("exit", (code, signal) => {
   // Ctrl+C is not a failure: Windows reports it as its own exit status, and
   // stopping the server by hand should close the window the way closing it does.
   const CONTROL_C_EXIT = 3221225786; // 0xC000013A
-  if (process.env.SIFT_DEV_WINDOW && !signal && code && code !== CONTROL_C_EXIT) {
-    console.error("\n[sift] the dev server exited. The window stays open so the reason above can be read.");
+  if (
+    process.env.SIFT_DEV_WINDOW &&
+    !signal &&
+    code &&
+    code !== CONTROL_C_EXIT
+  ) {
+    console.error(
+      "\n[sift] the dev server exited. The window stays open so the reason above can be read.",
+    );
     try {
       execFileSync("cmd", ["/c", "pause"], { stdio: "inherit" });
     } catch {

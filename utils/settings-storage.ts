@@ -28,7 +28,8 @@ export const settingsItem = storage.defineItem<Settings>("sync:settings", {
   // Removable once every profile running Sift has started on this version or a
   // later one. Nothing is published yet, so that is the author's two Chrome
   // profiles and whoever built this repository themselves.
-  init: async () => normalizeSettings(await browser.storage.sync.get(LEGACY_KEYS))
+  init: async () =>
+    normalizeSettings(await browser.storage.sync.get(LEGACY_KEYS)),
 });
 
 // How utils/instances.ts reaches the host list: one field of the settings value
@@ -42,7 +43,7 @@ export const instanceStorage: InstanceStorage = {
   async setInstances(hosts) {
     const settings = normalizeSettings(await settingsItem.getValue());
     await settingsItem.setValue(
-      normalizeSettings({ ...settings, misskeyInstances: hosts })
+      normalizeSettings({ ...settings, misskeyInstances: hosts }),
     );
-  }
+  },
 };

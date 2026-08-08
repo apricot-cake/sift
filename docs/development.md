@@ -61,6 +61,16 @@ Exceptions the code fails to catch are caught by the extension itself and writte
 
 There is no way to read the everyday profile's buffer yet. Content scripts record only the exceptions they can attribute to the extension; the popup and the service worker record everything.
 
+## Lint
+
+```powershell
+npm run lint
+```
+
+Biome over the whole tree: formatting, lint rules and import order in one pass, nothing rewritten. `npm run lint:fix` is the same pass with the fixes applied.
+
+Indentation, line endings and the final newline are read from `.editorconfig` rather than declared in `biome.jsonc`, so an editor that knows nothing about Biome still agrees with it. What is left in `biome.jsonc` is what `.editorconfig` cannot say — and one exception for `entrypoints/content/style.css`, where `!important` is the design rather than a mistake.
+
 ## Build and test
 
 ```powershell

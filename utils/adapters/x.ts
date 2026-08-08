@@ -16,7 +16,7 @@ const X_SELECTORS = Object.freeze({
   image: '[data-testid="tweetPhoto"], a[href*="/photo/"]',
   video:
     '[data-testid="videoPlayer"], [data-testid="videoComponent"], video, a[href*="/video/"]',
-  socialContext: '[data-testid="socialContext"]'
+  socialContext: '[data-testid="socialContext"]',
 });
 
 // `satisfies` rather than a `:` annotation, so the literal types Object.freeze
@@ -68,7 +68,7 @@ export const xAdapter = Object.freeze({
   readMedia(postCard: Element) {
     return {
       hasImage: Boolean(postCard.querySelector(X_SELECTORS.image)),
-      hasVideo: Boolean(postCard.querySelector(X_SELECTORS.video))
+      hasVideo: Boolean(postCard.querySelector(X_SELECTORS.video)),
     };
   },
 
@@ -79,5 +79,5 @@ export const xAdapter = Object.freeze({
     }
 
     return /repost|retweeted|リポスト/i.test(socialContext.textContent ?? "");
-  }
+  },
 }) satisfies ServiceAdapter;

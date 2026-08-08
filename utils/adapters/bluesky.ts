@@ -24,7 +24,7 @@ const BLUESKY_SELECTORS = Object.freeze({
   video: '[style*="video.bsky.app"]',
   // GIFs come through as an external embed rather than as Bluesky media.
   animatedImage: 'video[src*="t.gifs.bsky.app"]',
-  profileLink: 'a[href^="/profile/"]'
+  profileLink: 'a[href^="/profile/"]',
 });
 
 // AT Protocol record keys are TIDs: 13 characters of base32-sortable holding a
@@ -52,7 +52,10 @@ const FUTURE_TOLERANCE_MS = 6 * 60 * 1000;
 //
 // Being a TID is a convention of the official client, not a guarantee of the
 // protocol, so this stays the fallback and never the primary reading.
-export function timestampFromRecordKey(href: unknown, nowMs = Date.now()): number {
+export function timestampFromRecordKey(
+  href: unknown,
+  nowMs = Date.now(),
+): number {
   const recordKey = RECORD_KEY_IN_PATH.exec(String(href ?? ""))?.[1] ?? "";
 
   if (recordKey.length !== TID_LENGTH) {
@@ -80,7 +83,7 @@ export function timestampFromRecordKey(href: unknown, nowMs = Date.now()): numbe
 // post every post has and no notification row does.
 function readablePostCards(root: ParentNode): Element[] {
   return Array.from(root.querySelectorAll(BLUESKY_SELECTORS.postCard)).filter(
-    (postCard) => postCard.querySelector(BLUESKY_SELECTORS.reactionButton)
+    (postCard) => postCard.querySelector(BLUESKY_SELECTORS.reactionButton),
   );
 }
 
@@ -150,8 +153,8 @@ export const blueskyAdapter = Object.freeze({
       hasImage: Boolean(postCard.querySelector(BLUESKY_SELECTORS.image)),
       hasVideo: Boolean(
         postCard.querySelector(BLUESKY_SELECTORS.video) ||
-          postCard.querySelector(BLUESKY_SELECTORS.animatedImage)
-      )
+          postCard.querySelector(BLUESKY_SELECTORS.animatedImage),
+      ),
     };
   },
 
@@ -167,5 +170,5 @@ export const blueskyAdapter = Object.freeze({
 
     const firstChild = profileLink.firstElementChild;
     return firstChild?.tagName?.toLowerCase() === "svg";
-  }
+  },
 }) satisfies ServiceAdapter;

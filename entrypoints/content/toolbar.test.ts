@@ -27,7 +27,10 @@ beforeEach(() => {
 describe("the toolbar", () => {
   it("is on the page once there are posts to filter", async () => {
     document.body.innerHTML = timelineMarkup;
-    const runtime = startContentRuntime(new ContentScriptContext("sift-test"), xAdapter);
+    const runtime = startContentRuntime(
+      new ContentScriptContext("sift-test"),
+      xAdapter,
+    );
 
     await vi.waitFor(() => {
       expect(toolbarHost()).not.toBeNull();
@@ -38,14 +41,19 @@ describe("the toolbar", () => {
 
   it("carries its controls inside a shadow root, away from the page", async () => {
     document.body.innerHTML = timelineMarkup;
-    const runtime = startContentRuntime(new ContentScriptContext("sift-test"), xAdapter);
+    const runtime = startContentRuntime(
+      new ContentScriptContext("sift-test"),
+      xAdapter,
+    );
 
     await vi.waitFor(() => {
       expect(toolbarHost()?.shadowRoot).toBeTruthy();
     });
     const shadow = toolbarHost()?.shadowRoot;
 
-    expect(shadow?.querySelector('[data-action="toggle-enabled"]')).not.toBeNull();
+    expect(
+      shadow?.querySelector('[data-action="toggle-enabled"]'),
+    ).not.toBeNull();
     expect(shadow?.querySelector('[data-role="panel"]')).not.toBeNull();
     // Nothing the toolbar draws is reachable from the page's own document.
     expect(document.querySelector('[data-action="toggle-enabled"]')).toBeNull();
@@ -55,7 +63,10 @@ describe("the toolbar", () => {
 
   it("stays off a page with no posts on it", async () => {
     document.body.innerHTML = '<div data-testid="primaryColumn">settings</div>';
-    const runtime = startContentRuntime(new ContentScriptContext("sift-test"), xAdapter);
+    const runtime = startContentRuntime(
+      new ContentScriptContext("sift-test"),
+      xAdapter,
+    );
 
     // Nothing to wait for, so let the runtime's own startup settle first.
     await vi.waitFor(() => {
@@ -70,7 +81,10 @@ describe("the toolbar", () => {
   // what it leaves behind would be a second toolbar over the same posts.
   it("goes away with the runtime that made it", async () => {
     document.body.innerHTML = timelineMarkup;
-    const runtime = startContentRuntime(new ContentScriptContext("sift-test"), xAdapter);
+    const runtime = startContentRuntime(
+      new ContentScriptContext("sift-test"),
+      xAdapter,
+    );
     await vi.waitFor(() => {
       expect(toolbarHost()).not.toBeNull();
     });

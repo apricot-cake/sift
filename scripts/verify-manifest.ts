@@ -17,12 +17,12 @@
 // visible at all.
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
-import config from "../wxt.config.ts";
 import { SITE_MATCHES } from "../utils/site-matches.ts";
+import config from "../wxt.config.ts";
 
 const packageJson = JSON.parse(await readFile("package.json", "utf8"));
 const generatedManifest = JSON.parse(
-  await readFile(".output/chrome-mv3-release/manifest.json", "utf8")
+  await readFile(".output/chrome-mv3-release/manifest.json", "utf8"),
 );
 
 // WXT accepts a function or a promise here as well as an object. This project
@@ -35,7 +35,7 @@ if (
   declaredManifest instanceof Promise
 ) {
   throw new Error(
-    "wxt.config.ts no longer declares its manifest as a plain object — this check reads it as one"
+    "wxt.config.ts no longer declares its manifest as a plain object — this check reads it as one",
   );
 }
 
@@ -48,7 +48,7 @@ assert.equal(generatedManifest.key, declaredManifest.key);
 assert.deepEqual(generatedManifest.permissions, declaredManifest.permissions);
 assert.deepEqual(
   generatedManifest.optional_host_permissions,
-  declaredManifest.optional_host_permissions
+  declaredManifest.optional_host_permissions,
 );
 
 // The version lives in package.json alone; WXT copies it here.
@@ -56,14 +56,20 @@ assert.equal(generatedManifest.version, packageJson.version);
 
 // `action` is the one entry both sides write to: the title comes from
 // wxt.config.ts, the popup from the entrypoint existing at all.
-assert.equal(generatedManifest.action.default_title, declaredManifest.action?.default_title);
+assert.equal(
+  generatedManifest.action.default_title,
+  declaredManifest.action?.default_title,
+);
 assert.equal(generatedManifest.action.default_popup, "popup.html");
 
 // The content script, which no declaration in wxt.config.ts produces — it is
 // here only because entrypoints/content/index.ts was built into it.
 assert.equal(generatedManifest.content_scripts.length, 1);
 const [generatedContentScript] = generatedManifest.content_scripts;
-assert.deepEqual([...generatedContentScript.matches].sort(), [...SITE_MATCHES].sort());
+assert.deepEqual(
+  [...generatedContentScript.matches].sort(),
+  [...SITE_MATCHES].sort(),
+);
 // One bundle and one stylesheet: the script's imports and its `import
 // "./style.css"` both came through.
 assert.equal(generatedContentScript.js.length, 1);

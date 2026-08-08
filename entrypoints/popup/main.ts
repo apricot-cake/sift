@@ -2,19 +2,19 @@ import { browser } from "wxt/browser";
 import { startUncaughtReporting } from "../../utils/error-log.ts";
 import {
   addInstance,
+  type InstanceDeps,
   normalizeInstanceHost,
   removeInstance,
-  type InstanceDeps
 } from "../../utils/instances.ts";
-import { instanceStorage, settingsItem } from "../../utils/settings-storage.ts";
 import { normalizeSettings, type Settings } from "../../utils/settings.ts";
+import { instanceStorage, settingsItem } from "../../utils/settings-storage.ts";
 
 // Everything running on this page is the extension's own, so nothing is
 // filtered out. The subscription lives as long as the popup does.
 startUncaughtReporting({
   target: window,
   source: "popup",
-  filterToOwnCode: false
+  filterToOwnCode: false,
 });
 
 // Wrapped in a function, rather than left at module top level, so a markup
@@ -23,18 +23,20 @@ startUncaughtReporting({
 // always present at runtime (popup.html declares every one of them), so the
 // early return never actually fires.
 function main(): void {
-  const maybeStatus = document.querySelector<HTMLElement>('[data-role="status"]');
+  const maybeStatus = document.querySelector<HTMLElement>(
+    '[data-role="status"]',
+  );
   const maybeInstanceList = document.querySelector<HTMLElement>(
-    '[data-role="instance-list"]'
+    '[data-role="instance-list"]',
   );
   const maybeInstanceForm = document.querySelector<HTMLFormElement>(
-    '[data-role="instance-form"]'
+    '[data-role="instance-form"]',
   );
   const maybeInstanceInput = document.querySelector<HTMLInputElement>(
-    '[data-role="instance-input"]'
+    '[data-role="instance-input"]',
   );
   const maybeInstanceError = document.querySelector<HTMLElement>(
-    '[data-role="instance-error"]'
+    '[data-role="instance-error"]',
   );
   if (
     !maybeStatus ||
@@ -57,7 +59,7 @@ function main(): void {
   const instanceDeps: InstanceDeps = {
     permissions: browser.permissions,
     scripting: browser.scripting,
-    storage: instanceStorage
+    storage: instanceStorage,
   };
   let settings = normalizeSettings(defaults);
   let statusTimer: number | null = null;
@@ -154,7 +156,7 @@ function main(): void {
     }
 
     const submitButton = instanceForm.querySelector<HTMLButtonElement>(
-      "button[type=submit]"
+      "button[type=submit]",
     );
     if (!submitButton) {
       return;
@@ -163,7 +165,8 @@ function main(): void {
     try {
       const result = await addInstance(host, instanceDeps);
       if (!result.added) {
-        instanceError.textContent = "権限が許可されなかったため、追加していません。";
+        instanceError.textContent =
+          "権限が許可されなかったため、追加していません。";
         return;
       }
       instanceInput.value = "";
@@ -178,7 +181,10 @@ function main(): void {
     const element = target?.closest("[data-setting]");
     if (
       !element ||
-      !(element instanceof HTMLInputElement || element instanceof HTMLSelectElement)
+      !(
+        element instanceof HTMLInputElement ||
+        element instanceof HTMLSelectElement
+      )
     ) {
       return;
     }
@@ -190,7 +196,7 @@ function main(): void {
     const key = element.dataset.setting as keyof Settings;
     settings = normalizeSettings({
       ...settings,
-      [key]: rawValue
+      [key]: rawValue,
     });
 
     void settingsItem

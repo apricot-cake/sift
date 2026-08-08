@@ -4,26 +4,22 @@ import {
   DEV_CONTENT_STARTED,
   DEV_FILTER_PASS,
   DEV_LINK_RELOAD_KEY,
-  decideDevLinkAction,
   type DevLinkAction,
-  type DevLinkMessage
+  type DevLinkMessage,
+  decideDevLinkAction,
 } from "../utils/dev-link.ts";
 import {
   DEV_PING_ENDPOINT,
   DEV_SERVER_ORIGIN,
-  ERROR_LOG_ENDPOINT
+  ERROR_LOG_ENDPOINT,
 } from "../utils/dev-server.ts";
 import { drainErrorLog } from "../utils/error-drain.ts";
-import {
-  errorLogItem,
-  startUncaughtReporting,
-  type ErrorLogEntry
-} from "../utils/error-log.ts";
+import { errorLogItem, startUncaughtReporting } from "../utils/error-log.ts";
 import {
   handlePermissionsAdded,
   handlePermissionsRemoved,
+  type InstanceDeps,
   reconcileInstances,
-  type InstanceDeps
 } from "../utils/instances.ts";
 import { instanceStorage } from "../utils/settings-storage.ts";
 
@@ -71,14 +67,14 @@ const DEV_LINK_INTERVAL_MS = 5000;
 // storage, so it outlives the reload it records and is gone by the next browser
 // session — one reload per generation, and a clean slate after a restart.
 const devLinkReloadItem = storage.defineItem<string>(
-  `session:${DEV_LINK_RELOAD_KEY}`
+  `session:${DEV_LINK_RELOAD_KEY}`,
 );
 
 export default defineBackground(() => {
   const instanceDeps: InstanceDeps = {
     permissions: browser.permissions,
     scripting: browser.scripting,
-    storage: instanceStorage
+    storage: instanceStorage,
   };
 
   // Repairs drift between settings and what Chrome actually still grants —
@@ -111,7 +107,7 @@ export default defineBackground(() => {
   startUncaughtReporting({
     target: globalThis,
     source: "background",
-    filterToOwnCode: false
+    filterToOwnCode: false,
   });
 
   const errorLogUrl = `${DEV_SERVER_ORIGIN}${ERROR_LOG_ENDPOINT}`;
@@ -121,11 +117,11 @@ export default defineBackground(() => {
       // text/plain keeps this a simple request, so the post never depends on a
       // preflight being answered.
       headers: { "content-type": "text/plain;charset=UTF-8" },
-      body: JSON.stringify(entries)
+      body: JSON.stringify(entries),
     });
     if (!response.ok) {
       throw new Error(
-        `The development error log returned HTTP ${response.status}.`
+        `The development error log returned HTTP ${response.status}.`,
       );
     }
   };
@@ -146,8 +142,8 @@ export default defineBackground(() => {
         at: new Date().toISOString(),
         kind: "dev-link",
         source: "background",
-        message
-      }
+        message,
+      },
     ]).catch(() => {});
   };
 
@@ -161,19 +157,21 @@ export default defineBackground(() => {
   // evidence from outside the browser that the runtime registration took effect
   // — and worth a listener: Chrome starts a sleeping worker to deliver this, so
   // opening a matching page is one of the things that can bring the link back.
-  browser.runtime.onMessage.addListener((message: DevLinkMessage | undefined) => {
-    if (message?.type === DEV_CONTENT_STARTED) {
-      note(`content script started on ${message.page}`);
-    }
-    if (message?.type === DEV_FILTER_PASS) {
-      const { hit, rising, hidden } = message.counts;
-      note(
-        `filter pass: ${hit} hit, ${rising} rising, ${hidden} hidden, toolbar ${
-          message.toolbar ? "mounted" : "absent"
-        }`
-      );
-    }
-  });
+  browser.runtime.onMessage.addListener(
+    (message: DevLinkMessage | undefined) => {
+      if (message?.type === DEV_CONTENT_STARTED) {
+        note(`content script started on ${message.page}`);
+      }
+      if (message?.type === DEV_FILTER_PASS) {
+        const { hit, rising, hidden } = message.counts;
+        note(
+          `filter pass: ${hit} hit, ${rising} rising, ${hidden} hidden, toolbar ${
+            message.toolbar ? "mounted" : "absent"
+          }`,
+        );
+      }
+    },
+  );
 
   // Chrome only starts a worker to deliver an event it is listening for. Without
   // this one, a development build has nothing to wake it at browser start, and a
@@ -188,7 +186,7 @@ export default defineBackground(() => {
   const probeDevServer = async () => {
     try {
       const response = await fetch(`${DEV_SERVER_ORIGIN}${DEV_PING_ENDPOINT}`, {
-        cache: "no-store"
+        cache: "no-store",
       });
       if (!response.ok) {
         return null;
@@ -207,7 +205,7 @@ export default defineBackground(() => {
       probe == null
         ? Promise.resolve([])
         : browser.scripting.getRegisteredContentScripts(),
-      devLinkReloadItem.getValue()
+      devLinkReloadItem.getValue(),
     ]);
 
     const boot = probe?.boot ?? null;
@@ -217,7 +215,7 @@ export default defineBackground(() => {
       isFirstProbe,
       bootAtStart,
       registeredCount: registered.length,
-      reloadedForBoot: reloadedForBoot ?? undefined
+      reloadedForBoot: reloadedForBoot ?? undefined,
     });
     // A server that has not written its build yet tells us nothing about
     // whether this worker is attached, so the first probe stays unspent.

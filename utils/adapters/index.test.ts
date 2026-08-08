@@ -20,9 +20,10 @@ describe("picking the adapter for a page", () => {
           .replace(/\/.*$/, "")
           .replace(/^\*\./, "");
 
-        expect(selectAdapter(host, otherPage), `${pattern} selects ${adapter.id}`).toBe(
-          adapter
-        );
+        expect(
+          selectAdapter(host, otherPage),
+          `${pattern} selects ${adapter.id}`,
+        ).toBe(adapter);
       }
     }
   });
@@ -58,9 +59,11 @@ describe("isMisskeyPage", () => {
   });
 
   it("is not fooled by a page naming another application", () => {
-    expect(isMisskeyPage(render('<meta name="application-name" content="Mastodon">'))).toBe(
-      false
-    );
+    expect(
+      isMisskeyPage(
+        render('<meta name="application-name" content="Mastodon">'),
+      ),
+    ).toBe(false);
   });
 
   // Nothing for the manifest to declare at build time: the hosts are the
@@ -72,9 +75,15 @@ describe("isMisskeyPage", () => {
 
 describe("hostMatchesPattern", () => {
   it("covers a domain and its subdomains behind the wildcard", () => {
-    expect(hostMatchesPattern("https://*.example.com/*", "example.com")).toBe(true);
-    expect(hostMatchesPattern("https://*.example.com/*", "a.example.com")).toBe(true);
-    expect(hostMatchesPattern("https://*.example.com/*", "notexample.com")).toBe(false);
+    expect(hostMatchesPattern("https://*.example.com/*", "example.com")).toBe(
+      true,
+    );
+    expect(hostMatchesPattern("https://*.example.com/*", "a.example.com")).toBe(
+      true,
+    );
+    expect(
+      hostMatchesPattern("https://*.example.com/*", "notexample.com"),
+    ).toBe(false);
   });
 
   it("covers everything behind the bare wildcard", () => {
@@ -86,6 +95,8 @@ describe("the sites the manifest registers", () => {
   // A service Sift cannot read must not be a page it loads into, and an adapter
   // with no matching registration would never run.
   it("is derived from the adapters rather than declared a second time", () => {
-    expect(SITE_MATCHES).toEqual(ADAPTERS.flatMap((adapter) => [...adapter.matches]));
+    expect(SITE_MATCHES).toEqual(
+      ADAPTERS.flatMap((adapter) => [...adapter.matches]),
+    );
   });
 });

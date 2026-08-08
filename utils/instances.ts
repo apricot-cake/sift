@@ -20,7 +20,7 @@ import type { Browser } from "wxt/browser";
 
 export const MISSKEY_CONTENT_SCRIPT_FILES = Object.freeze({
   js: Object.freeze(["content-scripts/content.js"]),
-  css: Object.freeze(["content-scripts/content.css"])
+  css: Object.freeze(["content-scripts/content.css"]),
 });
 
 const RUN_AT: Browser.extensionTypes.RunAt = "document_idle";
@@ -140,7 +140,7 @@ function contentScriptDefinition(host: string): RegisteredContentScript {
     // Chrome's default, named explicitly: the registration must survive a
     // browser restart without this module re-registering it (reconcileInstances
     // is the backstop for when that default is not enough on its own).
-    persistAcrossSessions: true
+    persistAcrossSessions: true,
   };
 }
 
@@ -151,7 +151,7 @@ function contentScriptDefinition(host: string): RegisteredContentScript {
 // without losing that gesture; the popup calls it directly.
 export async function addInstance(
   host: string,
-  { permissions, scripting, storage }: InstanceDeps
+  { permissions, scripting, storage }: InstanceDeps,
 ): Promise<AddInstanceResult> {
   const normalizedHost = normalizeInstanceHost(host);
   if (normalizedHost === null) {
@@ -167,7 +167,7 @@ export async function addInstance(
   }
 
   const granted = await permissions.request({
-    origins: [originForHost(normalizedHost)]
+    origins: [originForHost(normalizedHost)],
   });
   if (!granted) {
     return { added: false, reason: "permission-denied" };
@@ -184,11 +184,13 @@ export async function addInstance(
   // this line runs, so the check below is not an optimization — without it
   // this call throws on the now-duplicate script id.
   const registrationId = registrationIdForHost(normalizedHost);
-  const alreadyRegistered = (await scripting.getRegisteredContentScripts()).some(
-    (script) => script.id === registrationId
-  );
+  const alreadyRegistered = (
+    await scripting.getRegisteredContentScripts()
+  ).some((script) => script.id === registrationId);
   if (!alreadyRegistered) {
-    await scripting.registerContentScripts([contentScriptDefinition(normalizedHost)]);
+    await scripting.registerContentScripts([
+      contentScriptDefinition(normalizedHost),
+    ]);
   }
 
   const current = await storage.getInstances();
@@ -204,7 +206,7 @@ export async function addInstance(
 // than silently keeping access the UI no longer shows.
 export async function removeInstance(
   host: string,
-  { permissions, scripting, storage }: InstanceDeps
+  { permissions, scripting, storage }: InstanceDeps,
 ): Promise<void> {
   await scripting
     .unregisterContentScripts({ ids: [registrationIdForHost(host)] })
@@ -228,7 +230,7 @@ export async function removeInstance(
 // without the service worker already up to hold the popup's message port.
 export async function handlePermissionsAdded(
   addedPermissions: { origins?: string[] } | undefined,
-  { scripting, storage }: Pick<InstanceDeps, "scripting" | "storage">
+  { scripting, storage }: Pick<InstanceDeps, "scripting" | "storage">,
 ): Promise<void> {
   const addedOrigins = addedPermissions?.origins ?? [];
   if (addedOrigins.length === 0) {
@@ -265,7 +267,7 @@ export async function handlePermissionsAdded(
 // reconcileInstances() below covers the gap left when it was not.
 export async function handlePermissionsRemoved(
   removedPermissions: { origins?: string[] } | undefined,
-  { scripting, storage }: Pick<InstanceDeps, "scripting" | "storage">
+  { scripting, storage }: Pick<InstanceDeps, "scripting" | "storage">,
 ): Promise<void> {
   const removedOrigins = new Set(removedPermissions?.origins ?? []);
   if (removedOrigins.size === 0) {
@@ -274,7 +276,7 @@ export async function handlePermissionsRemoved(
 
   const instances = await storage.getInstances();
   const removedHosts = instances.filter((host) =>
-    removedOrigins.has(originForHost(host))
+    removedOrigins.has(originForHost(host)),
   );
   if (removedHosts.length === 0) {
     return;
@@ -287,7 +289,7 @@ export async function handlePermissionsRemoved(
     });
 
   await storage.setInstances(
-    instances.filter((host) => !removedHosts.includes(host))
+    instances.filter((host) => !removedHosts.includes(host)),
   );
 }
 
@@ -300,7 +302,7 @@ export async function handlePermissionsRemoved(
 export async function reconcileInstances({
   permissions,
   scripting,
-  storage
+  storage,
 }: InstanceDeps): Promise<void> {
   const instances = await storage.getInstances();
   const registered = await scripting.getRegisteredContentScripts();
@@ -311,7 +313,7 @@ export async function reconcileInstances({
 
   for (const host of instances) {
     const hasPermission = await permissions.contains({
-      origins: [originForHost(host)]
+      origins: [originForHost(host)],
     });
     const registrationId = registrationIdForHost(host);
 

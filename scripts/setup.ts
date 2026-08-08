@@ -9,8 +9,12 @@
 import { execFileSync } from "node:child_process";
 
 try {
-  execFileSync("git", ["config", "core.hooksPath", ".githooks"], { stdio: "ignore" });
+  execFileSync("git", ["config", "core.hooksPath", ".githooks"], {
+    stdio: "ignore",
+  });
   console.log("[sift] git hooks: .githooks");
 } catch {
-  console.log("[sift] skipped the git hooks setup (not a git checkout, or git is unavailable)");
+  console.log(
+    "[sift] skipped the git hooks setup (not a git checkout, or git is unavailable)",
+  );
 }

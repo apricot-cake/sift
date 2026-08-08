@@ -9,7 +9,7 @@ import { DEV_PING_ENDPOINT, ERROR_LOG_ENDPOINT } from "../utils/dev-server.ts";
 export const DEFAULT_ERROR_LOG_PATH = path.join(
   os.homedir(),
   ".sift",
-  "extension-errors.log"
+  "extension-errors.log",
 );
 
 const BODY_LIMIT_BYTES = 512 * 1024;
@@ -44,7 +44,7 @@ function readBody(request: IncomingMessage): Promise<string> {
 // the server's own CORS configuration.
 function allowExtensionOrigin(
   request: IncomingMessage,
-  response: ServerResponse
+  response: ServerResponse,
 ): void {
   const origin = request.headers.origin;
   if (typeof origin === "string" && origin.startsWith("chrome-extension://")) {
@@ -69,7 +69,7 @@ export interface DevErrorLogOptions {
 // first.
 export function devErrorLog({
   logPath = DEFAULT_ERROR_LOG_PATH,
-  isBuilt = () => true
+  isBuilt = () => true,
 }: DevErrorLogOptions = {}): Plugin {
   // Identifies this server process to the extension. A worker that sees an id it
   // did not start with knows its HMR socket belongs to a server that is gone,
@@ -97,40 +97,43 @@ export function devErrorLog({
         response.end(JSON.stringify({ boot, ready: isBuilt() }));
       });
 
-      server.middlewares.use(ERROR_LOG_ENDPOINT, async (request, response, next) => {
-        if (request.method === "OPTIONS") {
-          allowExtensionOrigin(request, response);
-          response.setHeader("access-control-allow-methods", "POST, OPTIONS");
-          response.setHeader("access-control-allow-headers", "content-type");
-          response.statusCode = 204;
-          response.end();
-          return;
-        }
-
-        if (request.method !== "POST") {
-          next();
-          return;
-        }
-
-        allowExtensionOrigin(request, response);
-
-        try {
-          const entries = JSON.parse(await readBody(request));
-          const lines = formatErrorLogLines(entries);
-          if (lines !== "") {
-            fs.mkdirSync(path.dirname(logPath), { recursive: true });
-            fs.appendFileSync(logPath, lines, "utf8");
+      server.middlewares.use(
+        ERROR_LOG_ENDPOINT,
+        async (request, response, next) => {
+          if (request.method === "OPTIONS") {
+            allowExtensionOrigin(request, response);
+            response.setHeader("access-control-allow-methods", "POST, OPTIONS");
+            response.setHeader("access-control-allow-headers", "content-type");
+            response.statusCode = 204;
+            response.end();
+            return;
           }
-          response.statusCode = 204;
-          response.end();
-        } catch (error) {
-          server.config.logger.warn(
-            `[sift] Could not write the extension error log: ${error instanceof Error ? error.message : String(error)}`
-          );
-          response.statusCode = 400;
-          response.end();
-        }
-      });
-    }
+
+          if (request.method !== "POST") {
+            next();
+            return;
+          }
+
+          allowExtensionOrigin(request, response);
+
+          try {
+            const entries = JSON.parse(await readBody(request));
+            const lines = formatErrorLogLines(entries);
+            if (lines !== "") {
+              fs.mkdirSync(path.dirname(logPath), { recursive: true });
+              fs.appendFileSync(logPath, lines, "utf8");
+            }
+            response.statusCode = 204;
+            response.end();
+          } catch (error) {
+            server.config.logger.warn(
+              `[sift] Could not write the extension error log: ${error instanceof Error ? error.message : String(error)}`,
+            );
+            response.statusCode = 400;
+            response.end();
+          }
+        },
+      );
+    },
   };
 }

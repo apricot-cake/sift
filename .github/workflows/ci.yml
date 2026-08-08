@@ -30,6 +30,10 @@ jobs:
       # to never fail an install).
       - run: npm ci
 
+      # `biome ci` — formatting, lint rules and import order, none of it
+      # rewritten. First because it is the fastest way for the run to fail.
+      - run: npm run lint
+
       - run: npm test
 
       # `wxt build` followed by verify:manifest — the generated release manifest

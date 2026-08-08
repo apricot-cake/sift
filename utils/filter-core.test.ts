@@ -6,7 +6,7 @@ const settings = {
   risingEnabled: true,
   risingMinLikes: 100,
   risingMaxAgeHours: 6,
-  hideReposts: true
+  hideReposts: true,
 };
 
 const now = Date.parse("2026-08-01T12:00:00Z");
@@ -29,30 +29,45 @@ describe("classifyPost", () => {
   it("keeps a post that reaches the minimum reaction count", () => {
     expect(
       classifyPost(
-        { hasMedia: true, likeCount: 500, createdAtMs: now - 24 * 3600000, isRepost: false },
+        {
+          hasMedia: true,
+          likeCount: 500,
+          createdAtMs: now - 24 * 3600000,
+          isRepost: false,
+        },
         settings,
-        now
-      )
+        now,
+      ),
     ).toEqual({ state: "hit", reason: "minimum-likes" });
   });
 
   it("keeps a young post that reaches the lower rising count", () => {
     expect(
       classifyPost(
-        { hasMedia: true, likeCount: 120, createdAtMs: now - 2 * 3600000, isRepost: false },
+        {
+          hasMedia: true,
+          likeCount: 120,
+          createdAtMs: now - 2 * 3600000,
+          isRepost: false,
+        },
         settings,
-        now
-      )
+        now,
+      ),
     ).toEqual({ state: "rising", reason: "rising" });
   });
 
   it("hides the same post once it is past the rising window", () => {
     expect(
       classifyPost(
-        { hasMedia: true, likeCount: 120, createdAtMs: now - 7 * 3600000, isRepost: false },
+        {
+          hasMedia: true,
+          likeCount: 120,
+          createdAtMs: now - 7 * 3600000,
+          isRepost: false,
+        },
         settings,
-        now
-      )
+        now,
+      ),
     ).toEqual({ state: "hidden", reason: "below-threshold" });
   });
 
@@ -61,8 +76,8 @@ describe("classifyPost", () => {
       classifyPost(
         { hasMedia: false, likeCount: 1000, createdAtMs: now, isRepost: false },
         settings,
-        now
-      )
+        now,
+      ),
     ).toEqual({ state: "hidden", reason: "no-media" });
   });
 
@@ -71,8 +86,8 @@ describe("classifyPost", () => {
       classifyPost(
         { hasMedia: true, likeCount: 1000, createdAtMs: now, isRepost: true },
         settings,
-        now
-      )
+        now,
+      ),
     ).toEqual({ state: "hidden", reason: "repost" });
   });
 });
