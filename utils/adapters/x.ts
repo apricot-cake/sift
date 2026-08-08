@@ -3,7 +3,7 @@
 // classification itself lives in filter-core.ts and is shared by every service.
 import { parseMetric } from "../filter-core.ts";
 import { LIKE_THRESHOLDS } from "../settings.ts";
-import type { ServiceAdapter } from "./types.ts";
+import { LIKE_LABELS, type ServiceAdapter } from "./types.ts";
 
 // X's page structure in one place, so a redraw on X's side is one edit here.
 // Not exported: what a test supplies is markup, and what it reads is the answer
@@ -25,8 +25,8 @@ const X_SELECTORS = Object.freeze({
 export const xAdapter = Object.freeze({
   id: "x",
   matches: Object.freeze(["https://x.com/*", "https://twitter.com/*"]),
-  // The word this service uses for the reaction the thresholds count.
-  reactionLabel: "いいね",
+  // What this service calls the reaction the thresholds count.
+  reactionLabels: LIKE_LABELS,
   thresholdKeys: LIKE_THRESHOLDS,
 
   getPostCards(root: ParentNode) {

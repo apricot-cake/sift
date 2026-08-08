@@ -22,5 +22,9 @@ export default defineConfig({
     // browser — a hand-written stub answers whatever the test told it to answer,
     // which is a test of the test.
     environment: "happy-dom",
+    // Fills in browser.i18n.getMessage from public/_locales/en, which WXT's
+    // fake browser leaves unimplemented. Every surface that shows a string goes
+    // through it, so without this they all throw.
+    setupFiles: ["./test/i18n.ts"],
   },
 });

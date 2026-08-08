@@ -93,9 +93,15 @@ export default defineConfig({
     // development and release: the two live in separate Chrome profiles, so the
     // same id cannot collide with itself.
     key: "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA7HRMGxpsFxVmyHkVNzHAtaSVuu6vJVFCC0gSSYBT9t31XfT68U7NYyn15N3rLuvZRhRAXYBgZiouzH619jVc2lbHGRzRUPYjm8o0XW70TW6NB+g7P510902pHXw1TmcrN9wqFfFsFhV50DObPKfY+GYfgNzWo+A4raQ4+sCQaCv9TNR78CU2HAi81oGJthhxPYRfdZdqLiZ7FWSnz+Nv9Ie0Q0RAn6W21ekSRpN6wfJf4AjgBe5sj3zRRTGH6CcUSvfUehjKjSbsS5KX5OhL4KWsio4GYRmUZa3SJxWexZN3kLSo4ugA+0AaT0rFjLTZhxOl/ULBeMvBvnnZ+xEqyQIDAQAB",
+    // Which messages file the browser falls back to when it has no locale of
+    // its own here. `en`, matching the README: the Japanese one is the pair,
+    // not the primary. public/_locales is where both live.
+    default_locale: "en",
+    // Left as a literal, unlike the description: the name is "Sift" in every
+    // language, and __MSG_extensionName__ would only add a level of indirection
+    // to say so.
     name: "Sift",
-    description:
-      "X・Bluesky・Misskeyの投稿画面を、メディア・反応の数・投稿後の時間で絞り込みます。",
+    description: "__MSG_extensionDescription__",
     // `scripting` is also what WXT's dev mode adds on its own to register
     // content scripts — declaring it here is no longer dev-only, since a
     // release build now registers Misskey instances the reader adds the same

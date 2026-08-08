@@ -3,7 +3,7 @@
 // classification itself lives in filter-core.ts and is shared by every service.
 import { parseMetric } from "../filter-core.ts";
 import { LIKE_THRESHOLDS } from "../settings.ts";
-import type { ServiceAdapter } from "./types.ts";
+import { LIKE_LABELS, type ServiceAdapter } from "./types.ts";
 
 // Bluesky's page structure in one place, so a redraw on Bluesky's side is one
 // edit here. Not exported: what a test supplies is markup, and what it reads is
@@ -91,9 +91,9 @@ function readablePostCards(root: ParentNode): Element[] {
 export const blueskyAdapter = Object.freeze({
   id: "bluesky",
   matches: Object.freeze(["https://bsky.app/*"]),
-  // The word this service uses for the reaction the thresholds count. Same
-  // reaction as X's, so the two share the thresholds as well.
-  reactionLabel: "いいね",
+  // What this service calls the reaction the thresholds count. Same reaction as
+  // X's, so the two share the thresholds as well.
+  reactionLabels: LIKE_LABELS,
   thresholdKeys: LIKE_THRESHOLDS,
 
   getPostCards(root: ParentNode) {
