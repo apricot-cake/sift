@@ -20,9 +20,21 @@ import { readFile } from "node:fs/promises";
 import { SITE_MATCHES } from "../utils/site-matches.ts";
 import config from "../wxt.config.ts";
 
+// Which build to read. `wxt build -b <target>` writes to
+// .output/<target>-mv3-release, and everything below holds for both targets —
+// the manifest is one declaration in wxt.config.ts, and the point of checking
+// the second target is that it stays that way.
+const TARGETS = new Set(["chrome", "firefox"]);
+const target = process.argv[2] ?? "chrome";
+if (!TARGETS.has(target)) {
+  throw new Error(
+    `unknown build target: ${target} (expected one of ${[...TARGETS].join(", ")})`,
+  );
+}
+
 const packageJson = JSON.parse(await readFile("package.json", "utf8"));
 const generatedManifest = JSON.parse(
-  await readFile(".output/chrome-mv3-release/manifest.json", "utf8"),
+  await readFile(`.output/${target}-mv3-release/manifest.json`, "utf8"),
 );
 
 // WXT accepts a function or a promise here as well as an object. This project
@@ -62,6 +74,16 @@ assert.equal(
 );
 assert.equal(generatedManifest.action.default_popup, "popup.html");
 
+// The one entry the two targets genuinely differ on: Chrome MV3 takes a service
+// worker, Firefox MV3 takes a list of scripts. Both are built from the same
+// entrypoints/background.ts, so this is what says WXT shaped the output for the
+// target it was asked for rather than emitting the Chrome one twice.
+if (target === "firefox") {
+  assert.deepEqual(generatedManifest.background.scripts, ["background.js"]);
+} else {
+  assert.equal(generatedManifest.background.service_worker, "background.js");
+}
+
 // The content script, which no declaration in wxt.config.ts produces — it is
 // here only because entrypoints/content/index.ts was built into it.
 assert.equal(generatedManifest.content_scripts.length, 1);
@@ -75,4 +97,6 @@ assert.deepEqual(
 assert.equal(generatedContentScript.js.length, 1);
 assert.equal(generatedContentScript.css.length, 1);
 
-console.log("the generated manifest carries what the sources declare");
+console.log(
+  `the generated ${target} manifest carries what the sources declare`,
+);

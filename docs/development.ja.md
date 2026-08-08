@@ -80,6 +80,12 @@ npm run build
 `.output\chrome-mv3-release` へ出力し、生成manifestがソースの宣言どおりかを確認します＝権限と署名鍵と名前は `wxt.config.ts`、対象ホストは `utils/site-matches.ts`、バージョンは `package.json`、そしてcontent scriptがmanifestに載っていること。`.output\chrome-mv3` は書き換えません。
 
 ```powershell
+npm run build:firefox
+```
+
+同じビルドと同じ確認をFirefox向けに、`.output\firefox-mv3-release` へ。SiftがFirefoxで動くという主張ではありません＝一度も検証していません。`wxt.config.ts` がFirefoxのMV2フォールバックを避けるために `manifestVersion` を3に固定しており、その判断を触るのはこのビルドだけです。CIが走らせているのも同じ理由です。
+
+```powershell
 npm test
 ```
 
