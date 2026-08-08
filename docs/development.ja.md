@@ -4,6 +4,10 @@
 
 開発は日常のChromeとは別のプロファイルで行います。日常のChromeには検証済みのreleaseだけを載せます。
 
+## Node
+
+Node 24.12以降。`.node-version` と `package.json` の `engines` の両方に書いてあり、CIは `.node-version` が指すものを入れます。`scripts\` 配下はビルドを挟まずnodeが直接動かすので、node自身の型剥ぎに乗っています——それがexperimentalでなくなったのが24.12です。
+
 ## 開発サーバー
 
 ```powershell

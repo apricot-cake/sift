@@ -1,3 +1,9 @@
-# Git hooks are run by sh. A CRLF checkout makes every line end in \r, which sh
-# reports as a command not found for a command that is plainly there.
-.githooks/* text eol=lf
+# Every checkout gets LF, on every platform. Without this line a Windows
+# checkout follows core.autocrlf, which defaults to true and writes CRLF into a
+# working tree the repository holds as LF.
+#
+# Two things break on CRLF. Git hooks are run by sh, which reads the trailing \r
+# as part of the command and reports a command not found for a command that is
+# plainly there. And .editorconfig declares end_of_line = lf; a checkout that
+# says otherwise makes that declaration a lie in the one place tools read it.
+* text=auto eol=lf
