@@ -1,4 +1,5 @@
 import { browser } from "wxt/browser";
+import { DEFAULT_MISSKEY_HOSTS } from "../../utils/default-instances.ts";
 import { startUncaughtReporting } from "../../utils/error-log.ts";
 import { localizeDocument, t } from "../../utils/i18n.ts";
 import {
@@ -96,7 +97,34 @@ function main(): void {
   function renderInstances(): void {
     instanceList.innerHTML = "";
 
+    // misskey.io はビルド時に host_permissions へ静的に含めた既定のホスト
+    // （#41）＝removeInstance() の permissions.remove() はここに効かないので、
+    // 削除できるかのように見せない。バッジだけを添えて、一覧の先頭に固定で
+    // 出す。
+    for (const host of DEFAULT_MISSKEY_HOSTS) {
+      const item = document.createElement("li");
+      item.className = "instance-row";
+      item.title = t("optionsInstanceDefaultHint");
+
+      const label = document.createElement("span");
+      label.textContent = host;
+
+      const badge = document.createElement("span");
+      badge.className = "instance-badge";
+      badge.textContent = t("optionsInstanceDefault");
+
+      item.append(label, badge);
+      instanceList.append(item);
+    }
+
     for (const host of settings.misskeyInstances) {
+      // この機能より前に読み手が misskey.io を自分で追加していた保管庫を
+      // 引き継いだ場合の受け皿＝上のループで既に出しているので、ここでは
+      // 出さない。
+      if (DEFAULT_MISSKEY_HOSTS.includes(host)) {
+        continue;
+      }
+
       const item = document.createElement("li");
       item.className = "instance-row";
 
@@ -157,6 +185,12 @@ function main(): void {
     const host = normalizeInstanceHost(instanceInput.value);
     if (host === null) {
       instanceError.textContent = t("optionsErrorBadHost");
+      return;
+    }
+    if (DEFAULT_MISSKEY_HOSTS.includes(host)) {
+      // 既に host_permissions で許可済み＝addInstance() へ回しても、既定の
+      // 一覧が二重に出るだけの登録を増やす。
+      instanceError.textContent = t("optionsErrorAlreadyDefault");
       return;
     }
 

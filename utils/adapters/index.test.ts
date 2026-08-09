@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { render } from "../../test/dom.ts";
+import { DEFAULT_MISSKEY_HOSTS } from "../default-instances.ts";
+import { originForHost } from "../instances.ts";
 import { SITE_MATCHES } from "../site-matches.ts";
 import { blueskyAdapter } from "./bluesky.ts";
 import { ADAPTERS, hostMatchesPattern, selectAdapter } from "./index.ts";
@@ -93,10 +95,12 @@ describe("hostMatchesPattern", () => {
 
 describe("manifest が登録するサイト", () => {
   // Sift が読めないサービスは読み込み先にしてはならないし、対応する登録の無い
-  // アダプターは一度も動かない。
-  it("二度目の宣言ではなくアダプターから導出されている", () => {
-    expect(SITE_MATCHES).toEqual(
-      ADAPTERS.flatMap((adapter) => [...adapter.matches]),
-    );
+  // アダプターは一度も動かない。misskey.io だけは例外＝ビルド時の既定ホスト
+  // （#41）として、アダプターとは別に DEFAULT_MISSKEY_HOSTS から足される。
+  it("二度目の宣言ではなくアダプターと既定ホストから導出されている", () => {
+    expect(SITE_MATCHES).toEqual([
+      ...ADAPTERS.flatMap((adapter) => [...adapter.matches]),
+      ...DEFAULT_MISSKEY_HOSTS.map((host) => originForHost(host)),
+    ]);
   });
 });
