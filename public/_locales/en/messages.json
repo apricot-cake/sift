@@ -71,6 +71,12 @@
   "optionsInstanceRemove": {
     "message": "Remove"
   },
+  "optionsInstanceDefault": {
+    "message": "Default"
+  },
+  "optionsInstanceDefaultHint": {
+    "message": "misskey.io ships with Sift and can't be removed."
+  },
   "optionsInstanceNote": {
     "message": "Adding one has Chrome ask you to allow access to that host and no other."
   },
@@ -94,6 +100,9 @@
   },
   "optionsErrorPermissionDenied": {
     "message": "Nothing was added: the permission was not granted."
+  },
+  "optionsErrorAlreadyDefault": {
+    "message": "misskey.io is already included by default."
   },
   "toolbarPanelLabel": {
     "message": "Sift settings"

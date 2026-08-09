@@ -71,6 +71,12 @@
   "optionsInstanceRemove": {
     "message": "削除"
   },
+  "optionsInstanceDefault": {
+    "message": "既定"
+  },
+  "optionsInstanceDefaultHint": {
+    "message": "misskey.ioはSiftに組み込まれているため削除できません。"
+  },
   "optionsInstanceNote": {
     "message": "追加すると、そのホストだけへのアクセス許可をChromeが確認します。"
   },
@@ -94,6 +100,9 @@
   },
   "optionsErrorPermissionDenied": {
     "message": "権限が許可されなかったため、追加していません。"
+  },
+  "optionsErrorAlreadyDefault": {
+    "message": "misskey.ioは既定で含まれています。"
   },
   "toolbarPanelLabel": {
     "message": "Siftの設定"
