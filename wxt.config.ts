@@ -29,6 +29,11 @@ const developmentBuildIsReady = () =>
   existsSync(resolve(developmentOutput, "manifest.json"));
 
 export default defineConfig({
+  // @wxt-dev/i18n（WXT公式のi18nモジュール）。locales/<言語>.yml を読み、
+  // ビルド時に _locales/<言語>/messages.json を生成する。型（#i18n の
+  // GeneratedI18nStructure）は locales/<default_locale>.yml から作られる＝
+  // manifest.default_locale の設定が要る（下の manifest 節）。
+  modules: ["@wxt-dev/i18n/module"],
   // Firefox も対象。WXT は Firefox を既定で MV2 にするが、manifest の版を1つに
   // 揃えておけばリリース時の確認も1組で済む。
   manifestVersion: 3,
@@ -92,7 +97,7 @@ export default defineConfig({
     // 自身とぶつかることはない。
     key: "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA7HRMGxpsFxVmyHkVNzHAtaSVuu6vJVFCC0gSSYBT9t31XfT68U7NYyn15N3rLuvZRhRAXYBgZiouzH619jVc2lbHGRzRUPYjm8o0XW70TW6NB+g7P510902pHXw1TmcrN9wqFfFsFhV50DObPKfY+GYfgNzWo+A4raQ4+sCQaCv9TNR78CU2HAi81oGJthhxPYRfdZdqLiZ7FWSnz+Nv9Ie0Q0RAn6W21ekSRpN6wfJf4AjgBe5sj3zRRTGH6CcUSvfUehjKjSbsS5KX5OhL4KWsio4GYRmUZa3SJxWexZN3kLSo4ugA+0AaT0rFjLTZhxOl/ULBeMvBvnnZ+xEqyQIDAQAB",
     // ブラウザがここに自分のロケールを持たないとき、どのメッセージファイルへ
-    // 落ちるか。`en`。両方とも public/_locales にある。
+    // 落ちるか。`en`。@wxt-dev/i18n が locales/en.yml から生成する。
     default_locale: "en",
     // 説明文と違ってリテラルのまま＝名前はどの言語でも "Sift" で、
     // __MSG_extensionName__ はそう言うために間接の層を1つ増やすだけ。

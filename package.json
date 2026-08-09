@@ -19,6 +19,9 @@
     "postinstall": "wxt prepare",
     "prepare": "node scripts/setup.ts"
   },
+  "dependencies": {
+    "@wxt-dev/i18n": "0.2.7"
+  },
   "devDependencies": {
     "@biomejs/biome": "2.5.7",
     "@types/node": "26.1.2",

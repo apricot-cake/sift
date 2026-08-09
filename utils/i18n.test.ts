@@ -2,11 +2,10 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { render } from "../test/dom.ts";
-import { readMessages } from "../test/i18n.ts";
+import { readLocaleMessages } from "../test/i18n.ts";
 import { I18N_ATTRIBUTES, localizeDocument, t } from "./i18n.ts";
 
-const english = readMessages("en");
-const japanese = readMessages("ja");
+const english = await readLocaleMessages("en");
 
 // import ではなく node で読む＝Vitest の下では `import.meta.url` が http の URL
 // になるし、HTML のエントリポイントを Vite の `?raw` で読むと、書いたままの
@@ -33,42 +32,15 @@ const STATIC_PAGES = [
   "entrypoints/popup/index.html",
 ];
 
-// 名前が欠けたロケールファイルは黙って英語へ落ちる＝失敗としてではなく、
-// 半分だけ違う言語のページとして読み手に届く。
-describe("ロケールのファイル", () => {
-  it("同じメッセージを名指ししている", () => {
-    expect(Object.keys(japanese).sort()).toEqual(Object.keys(english).sort());
-  });
-
-  // 片方にしか書かれていない差し込みは、その言語のページに $HIT$ をそのまま
-  // 残すか、もう片方で数を丸ごと落とす。
-  it("どのメッセージが差し込みを取るかで一致している", () => {
-    for (const [key, entry] of Object.entries(english)) {
-      expect({
-        key,
-        placeholders: Object.keys(entry.placeholders ?? {}),
-      }).toEqual({
-        key,
-        placeholders: Object.keys(japanese[key]?.placeholders ?? {}),
-      });
-    }
-  });
-
-  it("空のメッセージを残さない", () => {
-    for (const [key, entry] of Object.entries({ ...english, ...japanese })) {
-      expect({ key, empty: entry.message.trim() === "" }).toEqual({
-        key,
-        empty: false,
-      });
-    }
-  });
-});
-
 // マークアップの中の名前は、コンパイラから見ればただの文字＝属性の値を型で
 // 見るものは何も無いので、名前の変更を捕まえるのはこれ。index.html は英語の
 // 文そのものも持っている＝main.ts が走る前の一瞬のためと、走らせずに
 // マークアップだけを読むもののため。両者を突き合わせておくことが、その写しが
 // 2つ目の・古い言い回しへずれていくのを止めている。
+//
+// ここで名指すのはどれも差し込みも複数形も持たないメッセージ＝data-i18n 系の
+// 属性は素の文字列を1つ埋めるだけで、その形は locales/locales.test.ts が
+// 別に検査する。
 describe.each(STATIC_PAGES)("%s", (path) => {
   const page = parseEntrypoint(path);
 
@@ -115,10 +87,18 @@ describe("t()", () => {
     expect(t("optionsInstanceAdd")).toBe(english.optionsInstanceAdd?.message);
   });
 
-  it("メッセージが名指しした順で差し込みを入れる", () => {
-    expect(t("toolbarStatusCounts", "3", "2", "1")).toBe(
+  it("差し込みを名指した順で入れる（結合テンプレート）", () => {
+    expect(t("toolbarStatusCounts", ["3 hits", "2 rising", "1 hidden"])).toBe(
       "3 hits · 2 rising · 1 hidden",
     );
+  });
+
+  // 複数形（0/1/n）は count を第2引数に渡すだけで分岐する＝差し込みは省くと
+  // count 自身が $1 へ入る。
+  it("複数形の数に応じて形を変える", () => {
+    expect(t("toolbarHitCount", 1)).toBe("1 hit");
+    expect(t("toolbarHitCount", 3)).toBe("3 hits");
+    expect(t("toolbarHitCount", 0)).toBe("0 hits");
   });
 });
 
