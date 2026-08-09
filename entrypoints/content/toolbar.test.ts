@@ -4,7 +4,7 @@ import { ContentScriptContext } from "wxt/utils/content-script-context";
 import { xAdapter } from "../../utils/adapters/x.ts";
 import { startContentRuntime } from "./index.ts";
 
-// One X post, enough for the adapter to find something to filter.
+// X の投稿1つ＝アダプターがフィルタする対象を見つけられるだけの最小限。
 const timelineMarkup = `
   <div data-testid="cellInnerDiv">
     <article data-testid="tweet">
@@ -24,8 +24,8 @@ beforeEach(() => {
   document.body.innerHTML = "";
 });
 
-describe("the toolbar", () => {
-  it("is on the page once there are posts to filter", async () => {
+describe("ツールバー", () => {
+  it("フィルタする投稿があればページに出る", async () => {
     document.body.innerHTML = timelineMarkup;
     const runtime = startContentRuntime(
       new ContentScriptContext("sift-test"),
@@ -39,7 +39,7 @@ describe("the toolbar", () => {
     runtime.dispose();
   });
 
-  it("carries its controls inside a shadow root, away from the page", async () => {
+  it("操作を shadow root の中、ページから離した所に持つ", async () => {
     document.body.innerHTML = timelineMarkup;
     const runtime = startContentRuntime(
       new ContentScriptContext("sift-test"),
@@ -55,20 +55,20 @@ describe("the toolbar", () => {
       shadow?.querySelector('[data-action="toggle-enabled"]'),
     ).not.toBeNull();
     expect(shadow?.querySelector('[data-role="panel"]')).not.toBeNull();
-    // Nothing the toolbar draws is reachable from the page's own document.
+    // ツールバーが描くものは、ページ自身の文書からは1つも届かない。
     expect(document.querySelector('[data-action="toggle-enabled"]')).toBeNull();
 
     runtime.dispose();
   });
 
-  it("stays off a page with no posts on it", async () => {
+  it("投稿の無いページには出ない", async () => {
     document.body.innerHTML = '<div data-testid="primaryColumn">settings</div>';
     const runtime = startContentRuntime(
       new ContentScriptContext("sift-test"),
       xAdapter,
     );
 
-    // Nothing to wait for, so let the runtime's own startup settle first.
+    // 待つ対象が無いので、まず実行環境自身の起動が落ち着くのを待つ。
     await vi.waitFor(() => {
       expect(document.body.querySelector("article")).toBeNull();
     });
@@ -77,18 +77,18 @@ describe("the toolbar", () => {
     runtime.dispose();
   });
 
-  // Where the toolbar sits is the one thing about it that no other test would
-  // notice going wrong: it renders, it answers clicks, it just does it halfway
-  // down the timeline instead of in the corner. That is what happened when the
-  // placement moved from a rule on the host in entrypoints/content/style.css to
-  // WXT's shadow root, which prepends `:host{all:initial !important}` unless
-  // told not to — !important beat the rule that placed it, and nothing failed.
+  // ツールバーがどこに座るかは、それが壊れても他のどのテストも気付かない唯一の
+  // 点＝描かれるし、クリックにも答える。ただそれを隅ではなくタイムラインの途中で
+  // やる。置き場所が entrypoints/content/style.css のホストへの規則から WXT の
+  // shadow root へ移ったときに起きたのがこれで、WXT は言われない限り
+  // `:host{all:initial !important}` を先頭へ足す＝!important が置き場所を決める
+  // 規則に勝ち、何も落ちなかった。
   //
-  // Read off the stylesheet WXT actually installed rather than off a computed
-  // style, because happy-dom resolves `all: initial !important` as though the
-  // !important were not there: it reports `position: fixed` either way, so a
-  // computed style would pass on the broken version too (checked 2026-08-08).
-  it("is placed by rules nothing above them can beat", async () => {
+  // 計算後のスタイルではなく、WXT が実際に入れたスタイルシートから読む。
+  // happy-dom は `all: initial !important` を !important が無いものとして解決
+  // するから＝どちらでも `position: fixed` と報告するので、計算後のスタイルでは
+  // 壊れた版でもテストが通る（2026-08-08 に確認）。
+  it("その上のどれにも勝てない規則で置かれている", async () => {
     document.body.innerHTML = timelineMarkup;
     const runtime = startContentRuntime(
       new ContentScriptContext("sift-test"),
@@ -114,16 +114,16 @@ describe("the toolbar", () => {
     ]) {
       expect(
         host.includes(declaration),
-        `the toolbar's :host rule has no ${declaration}`,
+        `ツールバーの :host 規則に ${declaration} が無い`,
       ).toBe(true);
     }
 
     runtime.dispose();
   });
 
-  // The injection that replaces this script disposes the previous runtime, and
-  // what it leaves behind would be a second toolbar over the same posts.
-  it("goes away with the runtime that made it", async () => {
+  // このスクリプトを差し替える注入は前の実行環境を片付ける＝そこで置き去りに
+  // されるものは、同じ投稿の上に載る2つ目のツールバーになる。
+  it("それを作った実行環境と一緒に消える", async () => {
     document.body.innerHTML = timelineMarkup;
     const runtime = startContentRuntime(
       new ContentScriptContext("sift-test"),

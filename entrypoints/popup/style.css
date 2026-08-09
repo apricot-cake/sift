@@ -1,7 +1,7 @@
-/* The settings page's stylesheet, whole. The two surfaces share their colours,
-   their type and their controls, and lifting out the handful of rules this page
-   uses would leave two files to keep in step for no gain — Vite inlines the
-   import, so the popup still ships one stylesheet. */
+/* 設定ページのスタイルシートを丸ごと。2つの画面は色も字も操作も共有していて、
+   このページが使う数本の規則だけを抜き出しても、足並みを揃え続けるファイルが
+   2つになるだけで得るものが無い＝Vite が import を展開するので、popup が出荷
+   するスタイルシートは今も1つ。 */
 @import "../options/style.css";
 
 .popup {
@@ -11,8 +11,8 @@
   padding: 18px;
 }
 
-/* The settings page's rows sit between borders and can afford the height. Here
-   there is one row, and the extra height only pushes the button down. */
+/* 設定ページの行は境界線に挟まれていて、高さに余裕がある。ここは行が1つで、
+   余分な高さはボタンを下へ押しやるだけ。 */
 .popup .setting-row {
   min-height: 0;
 }

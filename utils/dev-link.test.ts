@@ -1,9 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { decideDevLinkAction } from "./dev-link.ts";
 
-// Each case below is a state the worker cannot be talked into reaching on demand
-// inside a browser, which is why the decision is a function rather than a branch
-// buried in the polling loop.
+// 以下のどの場合も、ブラウザの中で worker に頼んで到達させられる状態ではない＝
+// だからこの判断は、問い合わせの繰り返しの中に埋めた分岐ではなく関数になっている。
 const linked = {
   boot: "server-1",
   ready: true,
@@ -14,17 +13,17 @@ const linked = {
 };
 
 describe("decideDevLinkAction", () => {
-  it("stays put while it is attached to the server it started against", () => {
+  it("起動したときのサーバーへ繋がっている間は動かない", () => {
     expect(decideDevLinkAction(linked)).toBe("linked");
   });
 
-  it("reports the server being down", () => {
+  it("サーバーが落ちていることを報告する", () => {
     expect(decideDevLinkAction({ ...linked, boot: null })).toBe("server-down");
   });
 
-  // Reloading into an empty output folder unloads the extension outright, so
-  // every state waits behind this one.
-  it("waits while the server has not written the build yet", () => {
+  // 空の出力先へ再読み込みすると拡張機能はそのまま降ろされるので、どの状態も
+  // これの後ろで待つ。
+  it("サーバーがまだビルドを書いていない間は待つ", () => {
     expect(
       decideDevLinkAction({
         ...linked,
@@ -38,9 +37,9 @@ describe("decideDevLinkAction", () => {
     ).toBe("building");
   });
 
-  // The worker just started and the server answered, so its socket went to this
-  // same server. Whatever it saw before does not matter.
-  it("adopts the server it finds on its first probe", () => {
+  // worker は起動したばかりで、サーバーは応答した＝そのソケットはこの同じ
+  // サーバーへ向かっている。それ以前に何を見ていたかは関係ない。
+  it("最初の問い合わせで見つけたサーバーを引き受ける", () => {
     expect(
       decideDevLinkAction({
         ...linked,
@@ -51,9 +50,9 @@ describe("decideDevLinkAction", () => {
     ).toBe("adopt");
   });
 
-  // The browser was open before the server was: the worker's first probe found
-  // nothing, so it never adopted a generation, and the socket it opened is dead.
-  it("reloads when it never attached to anything", () => {
+  // サーバーより先にブラウザが開いていた＝worker の最初の問い合わせは何も
+  // 見つけず、だから世代を1つも引き受けていないし、開いたソケットは死んでいる。
+  it("どこにも繋がらなかったときは起動し直す", () => {
     expect(
       decideDevLinkAction({
         ...linked,
@@ -63,19 +62,19 @@ describe("decideDevLinkAction", () => {
     ).toBe("reload");
   });
 
-  it("reloads when the server was restarted under it", () => {
+  it("足元でサーバーが起動し直されたら起動し直す", () => {
     expect(decideDevLinkAction({ ...linked, boot: "server-2" })).toBe("reload");
   });
 
-  it("reloads when the registration never happened", () => {
+  it("登録が一度も起きなかったら起動し直す", () => {
     expect(decideDevLinkAction({ ...linked, registeredCount: 0 })).toBe(
       "reload",
     );
   });
 
-  // One reload per generation. Coming back to the same state means something
-  // else is wrong, and a loop would only hide it.
-  it("reloads once per generation and then waits", () => {
+  // 世代ごとに起動し直しは1回。同じ状態に戻ってくるのは別の何かがおかしいと
+  // いうことで、繰り返してもそれを隠すだけ。
+  it("世代ごとに1回だけ起動し直し、あとは待つ", () => {
     expect(
       decideDevLinkAction({
         ...linked,
@@ -85,7 +84,7 @@ describe("decideDevLinkAction", () => {
     ).toBe("waiting");
   });
 
-  it("does not let a reload for an earlier generation excuse the next one", () => {
+  it("前の世代のための起動し直しを、次の世代の言い訳にしない", () => {
     expect(
       decideDevLinkAction({
         ...linked,

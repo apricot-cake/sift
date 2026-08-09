@@ -10,23 +10,22 @@ import {
 import { normalizeSettings, type Settings } from "../../utils/settings.ts";
 import { instanceStorage, settingsItem } from "../../utils/settings-storage.ts";
 
-// Everything running on this page is the extension's own, so nothing is
-// filtered out. The subscription lives as long as the page does.
+// このページで動いているものは全部が拡張機能自身のものなので、何も除かない。
+// 購読はページと同じだけ生きる。
 startUncaughtReporting({
   target: window,
   source: "options",
   filterToOwnCode: false,
 });
 
-// Wrapped in a function, rather than left at module top level, so a markup
-// element that failed to resolve can early-return instead of throwing partway
-// through — see the null check right below. The elements themselves are
-// always present at runtime (index.html declares every one of them), so the
-// early return never actually fires.
+// モジュールの最上位に置かず関数で包んであるのは、見つからなかったマークアップの
+// 要素があったときに、途中で例外を投げるのではなく早く返せるように＝すぐ下の
+// null 検査。要素そのものは実行時に必ずある（index.html がどれも宣言している）
+// ので、この早期の return が実際に走ることはない。
 function main(): void {
-  // Before anything is read off the page or shown on it: index.html ships with
-  // message names where its text goes, and the empty document is what a reader
-  // would see for the moment in between.
+  // ページから何かを読む前・ページに何かを見せる前に。index.html は文字が入る
+  // 場所にメッセージ名を持って出荷され、その間の一瞬に読み手が見ることになるのが
+  // 空の文書。
   localizeDocument(document);
   document.documentElement.lang = browser.i18n.getUILanguage();
 
@@ -54,9 +53,9 @@ function main(): void {
   ) {
     return;
   }
-  // Reassigned into fresh, never-reassigned consts so the functions declared
-  // below keep the non-null narrowing — TS does not carry a variable's
-  // narrowing into hoisted function declarations on its own.
+  // 一度も代入し直されない新しい const へ入れ直してあるのは、下で宣言する関数が
+  // null でないという絞り込みを保てるように＝TS は変数の絞り込みを、巻き上げ
+  // られた関数宣言の中まで自分では運ばない。
   const status = maybeStatus;
   const instanceList = maybeInstanceList;
   const instanceForm = maybeInstanceForm;
@@ -118,10 +117,10 @@ function main(): void {
     }
   }
 
-  // Re-reads storage rather than patching `settings.misskeyInstances` locally:
-  // addInstance()/removeInstance() are the source of truth for what actually
-  // got registered, and this page is not the only surface that can change it
-  // (chrome://extensions can revoke a permission out from under it).
+  // 手元で `settings.misskeyInstances` を繕わず、保管庫を読み直す＝実際に何が
+  // 登録されたかの正本は addInstance() / removeInstance() の側だし、それを変え
+  // られる画面はこのページだけではない（chrome://extensions が足元で権限を
+  // 取り消せる）。
   async function refreshInstances(): Promise<void> {
     settings = normalizeSettings(await settingsItem.getValue());
     renderInstances();
@@ -139,13 +138,13 @@ function main(): void {
       status.textContent = t("optionsErrorLoadFailed");
     });
 
-  // Storage, not the addInstance() call's own return value, is what drives the
-  // list. On a tab this is the ordinary path — the permission dialog leaves the
-  // page standing and addInstance() returns to it. It is also the backstop for
-  // the case the settings once lived in: a surface Chrome tears down when the
-  // dialog appears, where the background entrypoint's handlePermissionsAdded
-  // finishes the write that the torn-down call never got to (#28). Reading the
-  // list from storage covers both without knowing which one it is on.
+  // 一覧を動かすのは保管庫であって、addInstance() の呼び出しが返した値ではない。
+  // タブの上ではこちらが普通の経路＝権限のダイアログが出てもページは立ったまま
+  // で、addInstance() はそこへ戻ってくる。同時にこれは、設定がかつて置かれて
+  // いた場所のための受け皿でもある＝ダイアログが出ると Chrome が壊す画面。
+  // そこでは、壊された呼び出しが辿り着けなかった書き込みを background の
+  // エントリポイントの handlePermissionsAdded が仕上げる（#28）。保管庫から
+  // 一覧を読めば、自分がどちらの上にいるかを知らずに両方を賄える。
   settingsItem.watch((storedSettings) => {
     settings = normalizeSettings(storedSettings);
     renderInstances();

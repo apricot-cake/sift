@@ -4,21 +4,21 @@ import { localizeDocument, t } from "../../utils/i18n.ts";
 import { normalizeSettings } from "../../utils/settings.ts";
 import { settingsItem } from "../../utils/settings-storage.ts";
 
-// Everything running on this page is the extension's own, so nothing is
-// filtered out. The subscription lives as long as the popup does.
+// このページで動いているものは全部が拡張機能自身のものなので、何も除かない。
+// 購読は popup と同じだけ生きる。
 startUncaughtReporting({
   target: window,
   source: "popup",
   filterToOwnCode: false,
 });
 
-// Wrapped in a function, rather than left at module top level, so a markup
-// element that failed to resolve can early-return instead of throwing partway
-// through. The elements themselves are always present at runtime (index.html
-// declares every one of them), so the early return never actually fires.
+// モジュールの最上位に置かず関数で包んであるのは、見つからなかったマークアップの
+// 要素があったときに、途中で例外を投げるのではなく早く返せるように。要素そのものは
+// 実行時に必ずある（index.html がどれも宣言している）ので、この早期の return が
+// 実際に走ることはない。
 function main(): void {
-  // Before anything is shown: index.html carries English text where the
-  // messages go, and this is what puts the reader's own language there.
+  // 何かを見せる前に。index.html はメッセージが入る場所に英語の文を持っていて、
+  // そこへ読み手自身の言語を入れるのがこれ。
   localizeDocument(document);
   document.documentElement.lang = browser.i18n.getUILanguage();
 
@@ -46,8 +46,8 @@ function main(): void {
       status.textContent = t("optionsErrorLoadFailed");
     });
 
-  // Storage rather than this checkbox is what the state follows: the settings
-  // page and the timeline's toolbar can both change it while this popup is up.
+  // 状態が追うのはこのチェックボックスではなく保管庫＝この popup が出ている間
+  // にも、設定のページとタイムラインのツールバーの両方がそれを変えられる。
   settingsItem.watch((storedSettings) => {
     toggle.checked = normalizeSettings(storedSettings).enabled;
   });
@@ -66,9 +66,9 @@ function main(): void {
   });
 
   maybeOpenOptions.addEventListener("click", () => {
-    // Chrome closes the popup on its own once the page is open. Whether that
-    // page is a tab or the embedded pane is options_ui's to decide, and
-    // entrypoints/options/index.html asks for a tab.
+    // ページが開けば Chrome が自分で popup を閉じる。そのページがタブなのか
+    // 埋め込みの枠なのかを決めるのは options_ui で、
+    // entrypoints/options/index.html はタブを求めている。
     void browser.runtime.openOptionsPage();
   });
 }
