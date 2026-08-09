@@ -14,7 +14,7 @@ beforeEach(async () => {
 });
 
 describe("drainErrorLog", () => {
-  it("forwards the buffer and marks how far it got", async () => {
+  it("バッファを送り、どこまで送ったかを印す", async () => {
     const posted: ErrorLogEntry[][] = [];
 
     const result = await drainErrorLog({
@@ -27,7 +27,7 @@ describe("drainErrorLog", () => {
     expect(posted).toEqual([buffered]);
   });
 
-  it("forwards nothing the second time round", async () => {
+  it("2回目には何も送らない", async () => {
     let posts = 0;
 
     await drainErrorLog({ post: () => {} });
@@ -41,7 +41,7 @@ describe("drainErrorLog", () => {
     expect(posts).toBe(0);
   });
 
-  it("forwards only what was added since the last drain", async () => {
+  it("前回の送り出し以降に足されたものだけを送る", async () => {
     await drainErrorLog({ post: () => {} });
     await errorLogItem.setValue([
       ...buffered,
@@ -59,12 +59,12 @@ describe("drainErrorLog", () => {
     expect(posted).toEqual([[{ source: "test", seq: 3, message: "third" }]]);
   });
 
-  // A post that fails leaves the mark alone so the entries go out next time.
-  it("keeps the mark where it was when the post fails", async () => {
+  // 送信が失敗したら印には触れない＝記録は次回に出ていく。
+  it("送信が失敗したら印を元の位置に留める", async () => {
     await expect(
       drainErrorLog({
         post: () => {
-          throw new Error("the development server is down");
+          throw new Error("開発サーバーが落ちている");
         },
       }),
     ).rejects.toThrow();
@@ -80,10 +80,9 @@ describe("drainErrorLog", () => {
     expect(posted).toEqual([buffered]);
   });
 
-  // A buffer whose newest entry predates the mark was started over — storage
-  // cleared, or the extension reinstalled — and goes out whole rather than
-  // being withheld until the counter catches up again.
-  it("forwards a buffer that restarted below the mark", async () => {
+  // 最新の記録が印より古いバッファは作り直されている＝保管庫が消されたか、
+  // 拡張機能を入れ直したか。数え役が追い付くまで留め置かず、丸ごと出ていく。
+  it("印より下から始まり直したバッファを送る", async () => {
     await drainErrorLog({ post: () => {} });
     await errorLogItem.setValue([
       { source: "test", seq: 1, message: "after a restart" },

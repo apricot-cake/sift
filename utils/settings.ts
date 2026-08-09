@@ -1,14 +1,14 @@
-// What a setting is and what a valid one looks like. Where they are kept is
-// utils/settings-storage.ts — kept apart so this file stays readable by the
-// build scripts, which run under node and have no extension APIs at all
-// (scripts/verify-manifest.ts reaches this file through the adapters).
+// 設定とは何で、正しい設定とはどういうものか。どこに置くかは
+// utils/settings-storage.ts＝分けてあるのは、このファイルをビルドスクリプトが
+// 読めるようにしておくため。ビルドスクリプトは node で動き、拡張機能の API を
+// 一切持たない（scripts/verify-manifest.ts がアダプター経由でここへ届く）。
 import type { ClassifyThresholds } from "./filter-core.ts";
 import { normalizeInstanceHost } from "./instances.ts";
 
-// Every value is widened past its own literal (`as boolean`, not left to
-// infer as `true`) — Object.freeze()'s generic parameter otherwise infers
-// each property at its narrowest literal type, which normalizeSettings()
-// could never legally return to (a computed `boolean` is never a `true`).
+// どの値もリテラルより広い型を明示している（推論に任せて `true` にせず
+// `as boolean` と書く）＝Object.freeze() の型引数は各プロパティを最も狭い
+// リテラル型に推論してしまい、normalizeSettings() がそこへ戻れなくなる
+// （計算した `boolean` は `true` ではありえない）。
 export const defaults = Object.freeze({
   enabled: true as boolean,
   minLikes: 500 as number,
@@ -18,20 +18,18 @@ export const defaults = Object.freeze({
   mediaMode: "any" as "any" | "images",
   hideReposts: true as boolean,
   misskeyInstances: Object.freeze([]) as readonly string[],
-  // Misskey counts reactions, not likes, and instance sizes differ from X's by
-  // orders of magnitude — one threshold across both services would leave one of
-  // them permanently empty or permanently unfiltered (see #2's issue comment,
-  // section 4). These two numbers come from the reaction counts actually
-  // observed on media-bearing notes older than two days: 20 keeps the top
-  // ~7-15% of them, and 5 within the rising window is the same wider net X's
-  // 100-of-500 draws (measured 2026-08-05 on misskey.io and misskey.design).
+  // Misskey が数えるのはいいねではなくリアクションで、インスタンスの規模は X
+  // とは桁で違う＝両サービスに1つのしきい値を当てると、どちらかが永久に空か
+  // 永久に素通しになる（#2 の Issue コメント第4節）。この2つの数は、2日より
+  // 古いメディア付きノートで実際に観測したリアクション数から取ったもの＝20 は
+  // その上位およそ 7〜15% を残し、上昇中の窓での 5 は X の 500 に対する 100 と
+  // 同じ広さの網になる（2026-08-05 に misskey.io と misskey.design で計測）。
   misskeyMinReactions: 20 as number,
   misskeyRisingMinReactions: 5 as number,
 });
 
-// Derived from `defaults` rather than declared a second time, so the two
-// cannot drift apart — a field added to `defaults` is a field this type gains
-// for free.
+// 2度目の宣言をせず `defaults` から導いてあるので、両者がずれることがない＝
+// `defaults` にフィールドを足せば、この型は黙ってそれを得る。
 export type Settings = typeof defaults;
 
 function clampInteger(
@@ -47,9 +45,9 @@ function clampInteger(
   return Math.min(maximum, Math.max(minimum, parsed));
 }
 
-// Re-validated on every read, not just on write: storage can hold whatever an
-// older version of this extension put there, or whatever chrome://extensions
-// left behind after a permission was revoked out of step with settings.
+// 書き込み時だけでなく読み出しのたびに検査し直す＝保管庫には、この拡張機能の
+// 古い版が置いたものも、権限が設定と足並みを揃えずに取り消された後で
+// chrome://extensions が残したものも入りうる。
 function normalizeInstanceList(value: unknown): string[] {
   if (!Array.isArray(value)) {
     return [];
@@ -105,20 +103,20 @@ export function normalizeSettings(value: unknown): Settings {
   };
 }
 
-// Which pair of stored numbers a service's reaction count is compared against.
-// The adapter names the pair (utils/adapters/types.ts) and the settings surfaces
-// bind their inputs to the same keys, so the toolbar on a Misskey page edits
-// Misskey's thresholds without knowing which service it is on.
+// あるサービスの反応数を、保管してある2つの数のどちらの組と比べるか。組に
+// 名前を付けるのはアダプター（utils/adapters/types.ts）で、設定の画面は入力を
+// 同じキーに結びつける＝だからツールバーは、自分がどのサービスの上にいるかを
+// 知らないまま Misskey のページで Misskey のしきい値を編集できる。
 export interface ThresholdKeys {
   readonly minReactions: "minLikes" | "misskeyMinReactions";
   readonly risingMinReactions: "risingMinLikes" | "misskeyRisingMinReactions";
 }
 
-// Any one of those four settings, for code that handles a threshold without
-// caring which of the pair it is.
+// その4つの設定のどれか1つ＝組のどちらであるかを気にせずしきい値を扱う
+// コードのためのもの。
 export type ThresholdKey = ThresholdKeys[keyof ThresholdKeys];
 
-// X and Bluesky share these: a like means the same thing on both.
+// X と Bluesky はこれを共有する＝いいねはどちらでも同じ意味だから。
 export const LIKE_THRESHOLDS: ThresholdKeys = Object.freeze({
   minReactions: "minLikes",
   risingMinReactions: "risingMinLikes",
@@ -129,9 +127,9 @@ export const MISSKEY_REACTION_THRESHOLDS: ThresholdKeys = Object.freeze({
   risingMinReactions: "misskeyRisingMinReactions",
 });
 
-// The thresholds classifyPost() takes, filled in from the service's own pair.
-// Everything else about the classification — the rising window, the media mode,
-// whether reposts are dropped — is one setting shared by every service.
+// classifyPost() が取るしきい値を、そのサービス自身の組から埋めたもの。判定に
+// 関わる他のもの＝上昇中の窓・メディアの扱い・リポストを落とすかどうかは、
+// どのサービスでも共通の1つの設定。
 export function thresholdsFor(
   settings: Settings,
   keys: ThresholdKeys,

@@ -1,40 +1,40 @@
-// Where the settings are kept. What they are is utils/settings.ts, which stays
-// free of extension APIs so the build scripts can read it under node.
+// 設定をどこに置くか。設定が何であるかは utils/settings.ts で、そちらは
+// ビルドスクリプトが node で読めるように拡張機能の API を持たないままにしてある。
 import { browser } from "wxt/browser";
 import { storage } from "wxt/utils/storage";
 import type { InstanceStorage } from "./instances.ts";
 import { defaults, normalizeSettings, type Settings } from "./settings.ts";
 
-// The keys the one-per-setting build wrote, which are the field names of
-// `defaults` — derived rather than listed, so the migration below covers a
-// setting that was added before the migration was removed.
+// 設定1つにつきキー1つだった頃のビルドが書いたキー＝`defaults` のフィールド名。
+// 並べ書きせず導いてあるので、この移行が外される前に足された設定も下の移行が
+// 拾う。
 const LEGACY_KEYS: string[] = Object.keys(defaults);
 
-// What every surface reads and writes. One key holding one object, rather than
-// one key per setting: `defaults` is already the single declaration `Settings`
-// is derived from, and a `defineItem` per setting would put a second copy of
-// every default beside it. It also makes a change one event carrying the whole
-// value, instead of a diff to merge back into what the reader already had.
+// どの画面もこれを読み書きする。設定1つにつきキー1つではなく、1つのキーが
+// 1つのオブジェクトを持つ形＝`defaults` は既に `Settings` を導く唯一の宣言で
+// あり、設定ごとに `defineItem` を置くと既定値の写しがその隣にもう1組できる。
+// 変更が「読み手が既に持っているものへ差分を戻す」ではなく「1つのイベントが値
+// 全体を運ぶ」形になる利点もある。
 //
-// `normalizeSettings()` still runs on every read. `fallback` answers for a key
-// holding nothing; it says nothing about a key holding what an older build, or
-// a half-finished write, left there.
+// `normalizeSettings()` は今も読み出しのたびに走る。`fallback` が答えるのは
+// キーに何も入っていない場合だけで、古いビルドや書きかけの書き込みが残した
+// ものについては何も言わない。
 export const settingsItem = storage.defineItem<Settings>("sync:settings", {
   fallback: defaults,
-  // Settings used to live one-per-key at the top level of sync storage. This
-  // folds whatever such a build left behind into the new value — `init` runs
-  // once, and only while the key holds nothing.
+  // 設定はかつて sync ストレージの最上位に1つずつ置かれていた。そういうビルドが
+  // 残したものを新しい値へ畳み込むのがこれ＝`init` は一度だけ、しかもキーに
+  // 何も入っていない間にしか走らない。
   //
-  // Removable once every profile running Sift has started on this version or a
-  // later one. Nothing is published yet, so that is the author's two Chrome
-  // profiles and whoever built this repository themselves.
+  // Sift を動かしているプロファイルが全部この版かそれ以降で立ち上がったら外せる。
+  // まだ公開していないので、それは作者の Chrome プロファイル2つと、このリポジトリ
+  // を自分でビルドした人だけ。
   init: async () =>
     normalizeSettings(await browser.storage.sync.get(LEGACY_KEYS)),
 });
 
-// How utils/instances.ts reaches the host list: one field of the settings value
-// rather than a key of its own, so the popup's list and the registrations it
-// drives are reading the same thing.
+// utils/instances.ts がホストの一覧へ届く経路＝専用のキーではなく設定値の
+// フィールド1つにしてあるので、popup の一覧とそれが動かす登録は同じものを
+// 読んでいる。
 export const instanceStorage: InstanceStorage = {
   async getInstances() {
     const settings = normalizeSettings(await settingsItem.getValue());

@@ -8,9 +8,9 @@ import {
 } from "./settings.ts";
 
 describe("normalizeSettings", () => {
-  // Re-validated on every read, not just on write: storage can hold whatever an
-  // older version of this extension put there.
-  it("clamps a threshold into its own range", () => {
+  // 書き込み時だけでなく読み出しのたびに検査し直す＝保管庫には、この拡張機能の
+  // 古い版が置いたものも入りうる。
+  it("しきい値を自分の範囲へ収める", () => {
     expect(
       normalizeSettings({ misskeyMinReactions: "35" }).misskeyMinReactions,
     ).toBe(35);
@@ -19,17 +19,16 @@ describe("normalizeSettings", () => {
     ).toBe(0);
   });
 
-  it("falls back to the default for a value that is not a number at all", () => {
+  it("そもそも数でない値には既定値を使う", () => {
     expect(
       normalizeSettings({ misskeyRisingMinReactions: "not a number" })
         .misskeyRisingMinReactions,
     ).toBe(defaults.misskeyRisingMinReactions);
   });
 
-  // The same normalization utils/instances.ts applies: invalid and duplicate
-  // entries are dropped, and a missing or non-array value becomes an empty list
-  // rather than throwing.
-  it("drops the invalid and duplicate hosts out of the instance list", () => {
+  // utils/instances.ts が当てるのと同じ正規化＝正しくないものと重複は落とし、
+  // 無い値や配列でない値は例外ではなく空の一覧になる。
+  it("インスタンスの一覧から、正しくないホストと重複を落とす", () => {
     expect(
       normalizeSettings({
         misskeyInstances: ["misskey.io", "misskey.io", "http://bad", "x.com"],
@@ -37,7 +36,7 @@ describe("normalizeSettings", () => {
     ).toEqual(["misskey.io", "x.com"]);
   });
 
-  it("answers an empty instance list for anything unreadable", () => {
+  it("読めないものには空のインスタンス一覧を返す", () => {
     expect(normalizeSettings({}).misskeyInstances).toEqual([]);
     expect(
       normalizeSettings({ misskeyInstances: "not-an-array" }).misskeyInstances,
@@ -46,8 +45,8 @@ describe("normalizeSettings", () => {
   });
 });
 
-// The classification takes one pair of numbers, and which pair depends on the
-// service. Everything else it takes is shared by all of them.
+// 判定が取るのは2つ1組の数で、どちらの組かはサービスによる。判定が取る他の
+// ものは全サービスで共通。
 describe("thresholdsFor", () => {
   const stored = normalizeSettings({
     minLikes: 500,
@@ -58,7 +57,7 @@ describe("thresholdsFor", () => {
     hideReposts: true,
   });
 
-  it("fills the classification in from the like thresholds", () => {
+  it("いいねのしきい値から判定を埋める", () => {
     expect(thresholdsFor(stored, LIKE_THRESHOLDS)).toEqual({
       hideReposts: true,
       minLikes: 500,
@@ -68,7 +67,7 @@ describe("thresholdsFor", () => {
     });
   });
 
-  it("fills it in from Misskey's own pair, leaving the rest shared", () => {
+  it("Misskey 自身の組から埋め、残りは共通のままにする", () => {
     expect(thresholdsFor(stored, MISSKEY_REACTION_THRESHOLDS)).toEqual({
       hideReposts: true,
       minLikes: 20,

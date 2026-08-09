@@ -23,9 +23,8 @@ export function parseMetric(value: unknown): number {
   }
 
   const unit = match[2] ? match[2].toUpperCase() : "";
-  // The capturing group is mandatory in the pattern above, so it is always
-  // present whenever `match` itself is — the fallback only satisfies the
-  // indexed-access type, it never actually fires.
+  // 上の正規表現でこの捕獲は必須なので、`match` があれば必ずこちらもある＝
+  // 既定値は添字アクセスの型を満たすためだけのもので、実際には使われない。
   let numericText = match[1] ?? "";
 
   if (unit) {

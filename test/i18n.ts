@@ -1,11 +1,12 @@
-// browser.i18n.getMessage against the real English messages file, for every
-// test run. WXT's fake browser leaves i18n unimplemented — calling it throws —
-// and stubbing it with "return the key" would let a message name that exists
-// nowhere pass every test that renders it.
+// テストを走らせるたびに、本物の英語メッセージファイルに対して
+// browser.i18n.getMessage を動かすためのもの。WXT の偽ブラウザは i18n を
+// 実装しないまま置いていて＝呼ぶと例外になる、「キーをそのまま返す」で
+// 埋めてしまうと、どこにも存在しないメッセージ名が、それを描くテスト全部を
+// 素通りしてしまう。
 //
-// English, because that is the default locale: a browser with no Japanese is
-// what the fallback is for, and reading the file that has to be complete is
-// what makes a missing key fail here rather than in front of a reader.
+// 英語なのは、それが既定のロケールだから＝日本語を持たないブラウザのために
+// 落ちる先がそこであり、揃っていなければならない方のファイルを読むことが、
+// 欠けたキーを読み手の前ではなくここで落とすことになる。
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { beforeEach } from "vitest";
@@ -16,9 +17,9 @@ interface MessageEntry {
   placeholders?: Record<string, { content: string }>;
 }
 
-// Read through node rather than imported: Vitest serves modules over http, so
-// `import.meta.url` is not a file path here, and a JSON import would be a second
-// copy of the file inside the bundle.
+// import ではなく node で読む＝Vitest はモジュールを http で配るので
+// `import.meta.url` はここではファイルの経路にならないし、JSON の import は
+// バンドルの中にファイルの写しをもう1つ作ることになる。
 export function readMessages(locale: string): Record<string, MessageEntry> {
   return JSON.parse(
     readFileSync(
@@ -30,16 +31,18 @@ export function readMessages(locale: string): Record<string, MessageEntry> {
 
 const messages = readMessages("en");
 
-// What Chrome does with $NAME$: look the name up in `placeholders`, read the
-// positional argument its `content` points at ($1 is the first), and put that
-// in. Placeholder names are matched without regard to case.
+// Chrome が $NAME$ に対してすること＝その名前を `placeholders` から引き、
+// その `content` が指す位置の引数を読んで（$1 が最初）、そこへ入れる。
+// placeholder の名前は大文字小文字を区別せずに照合される。
 export function getMessage(
   key: string,
   substitutions?: string | string[],
 ): string {
   const entry = messages[key];
   if (entry === undefined) {
-    throw new Error(`no message named ${key} in public/_locales/en`);
+    throw new Error(
+      `public/_locales/en に ${key} という名前のメッセージが無い`,
+    );
   }
 
   const args =
@@ -57,8 +60,8 @@ export function getMessage(
   return text;
 }
 
-// fakeBrowser.reset() runs between tests and puts the unimplemented function
-// back, so this is reinstalled rather than assigned once.
+// fakeBrowser.reset() はテストとテストの間に走り、未実装の関数を戻してしまう
+// ので、これは一度きりの代入ではなく毎回入れ直す。
 beforeEach(() => {
   fakeBrowser.i18n.getMessage =
     getMessage as typeof fakeBrowser.i18n.getMessage;

@@ -7,13 +7,12 @@ import {
 
 const ERROR_LOG_DRAINED_SEQ_KEY = "siftErrorLogDrainedSeq";
 
-// How far the buffer has already been forwarded. Session rather than local: it
-// survives the worker being torn down and restarted, and is gone by the time a
-// new browser session starts over — which is when forwarding everything again
-// is the right answer.
+// バッファをどこまで送ったか。local ではなく session＝worker が壊されて立ち
+// 上がり直しても残り、ブラウザのセッションが始まり直す頃には消えている。そして
+// 消えている時こそ、全部を送り直すのが正しい答えになる。
 //
-// No fallback, so an unset mark reads as null and collectUndrainedEntries()
-// takes the whole buffer.
+// fallback を置いていないので、印が未設定なら null として読まれ、
+// collectUndrainedEntries() がバッファを丸ごと取る。
 const drainedSeqItem = storage.defineItem<number>(
   `session:${ERROR_LOG_DRAINED_SEQ_KEY}`,
 );
@@ -22,12 +21,11 @@ export interface DrainErrorLogDeps {
   post: (entries: ErrorLogEntry[]) => void | Promise<void>;
 }
 
-// Carries the error ring buffer out of local storage and into a file the
-// development server owns, which is the only form of it a diagnosis running
-// outside Chrome can read.
+// エラーの環状バッファを local ストレージから運び出し、開発サーバーが持つ
+// ファイルへ入れる＝Chrome の外で走る診断が読める形はそれだけ。
 //
-// A failed post leaves the mark untouched on purpose — the entries stay in the
-// buffer and go out on the next attempt.
+// 送信に失敗したら印には手を付けない＝これは意図的で、記録はバッファに残り、
+// 次の試行で出ていく。
 export async function drainErrorLog({
   post,
 }: DrainErrorLogDeps): Promise<{ forwarded: number }> {
