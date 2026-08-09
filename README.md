@@ -1,65 +1,63 @@
-<p align="center"><strong>English</strong> · <a href="README.ja.md">日本語</a></p>
-
 # Sift
 
-A Chrome extension that filters the posts loaded into the X, Bluesky and Misskey timelines, right in the browser.
+X・Bluesky・Misskeyの投稿画面に読み込まれた投稿をブラウザ内で絞り込むChrome拡張です。
 
 > [!WARNING]
-> **Not released yet.** Sift is not on the Chrome Web Store — to use it, build this repository yourself and load it as an unpacked extension. Breaking changes land without notice, and saved settings can reset to their defaults. When a supported service changes its page structure, filtering stops working until Sift is updated.
+> **まだリリース前です。** Chromeウェブストアでは配布しておらず、使うにはこのリポジトリを自分でビルドして読み込む必要があります。壊れる変更が予告なく入り、保存済みの設定値が初期値へ戻ることがあります。対応サービスの画面構造が変わると、更新するまで判定が効かなくなります。
 
-The defaults are below. Every value can be changed on the settings page, which the extension icon opens, or from the "Settings" button at the bottom right of the timeline — which shows only the thresholds the service on that screen uses. The extension icon itself carries the filter's on/off switch.
+初期設定は次のとおりです。値は設定画面（拡張機能のアイコンから開きます）、または投稿画面右下の「設定」から変更できます。投稿画面の「設定」には、その画面のサービスで使うしきい値だけが出ます。拡張機能のアイコン自体は、フィルターのON/OFFを持っています。
 
-- Normal: has an image or video, 500+ likes (Misskey: 20+ reactions)
-- Rising: has an image or video, posted within the last 6 hours, 100+ likes (Misskey: 5+ reactions)
-- Reposts excluded
+- 通常: 画像または動画があり、500いいね以上（Misskeyは20リアクション以上）
+- 上昇中: 画像または動画があり、投稿後6時間以内、100いいね以上（Misskeyは5リアクション以上）
+- リポストを除外
 
-## Install
+## インストール
 
 ```powershell
 npm install
 npm run deploy
 ```
 
-Load `.output\chrome-mv3` as an unpacked extension from `chrome://extensions`, then open any screen on X or Bluesky where posts are listed. For Misskey, add your instance in the settings page first. The extraction status appears at the bottom right (blue line = normal, orange line = rising).
+`chrome://extensions` から `.output\chrome-mv3` をパッケージ化されていない拡張機能として読み込み、XまたはBlueskyで投稿が並ぶ画面を開きます。Misskeyは先に設定画面でインスタンスを追加します。右下に抽出状況が表示されます（青い線＝通常、橙色の線＝上昇中）。
 
-`.output\chrome-mv3` holds verified release builds only. Development builds never land there.
+`.output\chrome-mv3` は検証済みのrelease専用です。開発中のビルドはここへ出ません。
 
-## How it works, and limits
+## 仕組みと制約
 
-- Only the posts loaded into the screen you currently have open are evaluated. No auto-scrolling, no background collection, no unofficial API calls.
-- Post data is never stored or sent anywhere. Only your settings are saved, in Chrome sync storage.
-- Posts that never reach the open screen — private accounts, blocks, region locks — cannot be shown.
-- The interface is in English and Japanese, picked from the browser's own language setting. There is no language switch inside the extension; a browser set to anything else gets English.
+- 現在開いている画面に読み込まれた投稿だけを判定します。自動スクロール、バックグラウンド収集、非公式API呼び出しは行いません。
+- 投稿データは保存・送信しません。設定値だけをChromeの同期ストレージへ保存します。
+- 非公開投稿、ブロック、地域制限など、開いている画面自体に届かない投稿は表示できません。
+- 画面の言語は英語と日本語で、ブラウザ自身の言語設定から選ばれます。拡張側に言語の切り替えはありません＝どちらでもないブラウザには英語が出ます。
 
-### Supported services
+### 対応サービス
 
-Filter conditions are shared across services. Bluesky likes use the same thresholds as X likes. **Misskey reactions have thresholds of their own**: a reaction is one per reader just as a like is, but instance sizes differ from X's by orders of magnitude, and one shared number would leave either service permanently empty or permanently unfiltered.
+判定条件はサービス間で共有します。Blueskyのいいねにも Xと同じしきい値を使います。**Misskeyのリアクションだけは別のしきい値**です。1人1回である点は同じですが、インスタンスの規模がXやBlueskyと桁で違うため、同じ数値を当てるとどちらかが常に全滅か素通りになります。
 
 | | X | Bluesky | Misskey |
 | --- | --- | --- | --- |
-| Hosts | `x.com` / `twitter.com` | `bsky.app` | the instances you add |
-| Reaction count | Likes | Likes | Reactions (summed per emoji) |
-| Thresholds | Likes | Likes (shared with X) | Reactions (separate) |
-| Share exclusion | Reposts | Reposts | Renotes |
+| 対象ホスト | `x.com` / `twitter.com` | `bsky.app` | 利用者が追加したインスタンス |
+| 反応の数 | いいね | いいね | リアクション（絵文字ごとの合計） |
+| しきい値 | いいね数 | いいね数（Xと共有） | リアクション数（独立） |
+| 共有の除外 | リポスト | リポスト | リノート |
 
-Bluesky limitations:
+Blueskyの制約:
 
-- Covered: home, profiles, feeds, lists, and post detail pages. On the notifications screen only post rows are evaluated.
-- Search results are not covered — they alone are rendered differently from every other screen.
-- Post times are read from the post URL. When that fails, only the "rising" check is skipped; normal filtering still runs.
-- Reposts are detected by structure, not by the on-screen label. If Bluesky changes that structure, repost exclusion may stop working.
+- 対象はホーム、プロフィール、フィード、リスト、投稿詳細です。通知画面では投稿の行だけを判定します。
+- 検索結果は対象外です。検索結果の投稿だけは他の画面と違う作りで描かれるためです。
+- 投稿時刻は投稿のURLから読み取ります。読み取れない場合は「上昇中」の判定だけを止め、通常の判定は動かします。
+- リポストは画面上の文言でなく作りで判定します。Bluesky側でこの作りが変わると、除外が効かなくなる可能性があります。
 
-### Adding Misskey instances
+### Misskeyインスタンスの追加
 
-Because every Misskey user is on a different instance, Sift only accesses the instances you add. On the settings page, enter a host name (e.g. `misskey.io`); Chrome shows a permission dialog for that host only, and the content script is loaded only if you grant it. Removing an instance drops both the content-script registration and the host permission. A host that turns out not to be Misskey is left alone — the page has to say it is Misskey before Sift reads it as one.
+Misskeyは使うインスタンスが利用者ごとに違うため、追加したインスタンスだけへアクセスします。設定画面でホスト名（例: `misskey.io`）を追加すると、Chromeの権限ダイアログでそのホストだけへの許可を確認し、許可した場合にだけcontent scriptを読み込みます。削除すると、content scriptの登録とアクセス許可の両方を外します。追加したホストがMisskeyでなかった場合、Siftは何もしません。判定に入る前に、そのページがMisskeyであることを確かめます。
 
-Misskey limitations. **A Misskey page carries almost nothing to hold on to:** its class names are generated afresh in every build, so Sift reads notes by their shape. A fork or a version whose shape differs is a page Sift can misread.
+Misskeyの制約。**Misskeyの画面は、判定に使える目印をほとんど持ちません。** クラス名はビルドごとに作り直される名前なので、Sift側はノートの作りから読み取っています。作りの違うフォークやバージョンでは読み違えることがあります。
 
-- **Reaction counts are the sum of the per-emoji chips**, because no total is drawn (the total is a Misskey setting, off by default). **The chips stop at 16 emoji**, so a note reacted to with more kinds than that reads lower than it is — 1-3% of media-bearing notes, measured.
-- **Post times are read from the localized text on screen**, since Misskey writes no machine-readable time. Japanese and English pages read; for a language that does not, only the "rising" check is skipped and normal filtering still runs.
-- **Renotes are excluded, quote renotes are not** — a quote carries its author's own text and counts as their post.
-- **Media means images and videos**, once avatars, custom emoji and role badges are excluded. An attachment held behind a click (sensitive media, the data saver) counts as media.
+- **リアクション数は絵文字ごとのチップの合計です。** 総数が画面に出ないためです（総数表示はMisskey側の設定で、初期値は非表示）。**チップは16種類で打ち切られる**ので、それより多くの種類が付いたノートは実際より少なく出ます（実測でメディア付きノートの1〜3%）。
+- **投稿時刻は画面上のローカライズされた文字列から読み取ります。** Misskeyは機械可読な時刻を書き出しません。日本語・英語の表示では読めますが、読めない言語では「上昇中」の判定だけを止め、通常の判定は動かします。
+- **リノートは除外し、引用リノートは除外しません。** 引用は本文を伴うその人の投稿として扱います。
+- **メディアは、アバター・カスタム絵文字・ロールバッジを除いた画像と動画です。** 閲覧注意やデータセーバーで画面に出ていない添付も、メディアありとして扱います。
 
-## Development
+## 開発
 
-Dev environment, builds, and tests are documented in [docs/development.md](docs/development.md).
+開発環境の作り方・ビルド・テストは [docs/development.md](docs/development.md) を見てください。

@@ -5,8 +5,8 @@ on:
     branches: [main]
   pull_request:
 
-# A push that supersedes an earlier one on the same branch does not need the
-# earlier run to finish.
+# 同じブランチへの後続の push が前の push を追い越したなら、前の実行を
+# 最後まで走らせる必要はない。
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
@@ -17,11 +17,10 @@ permissions:
 jobs:
   verify:
     runs-on: ubuntu-latest
-    # The whole job takes about 25 seconds. The ceiling is set far above that on
-    # purpose — it is not a budget, only a stop for a step that has hung and
-    # would otherwise run to GitHub's six-hour default. vitejs/vite uses 20
-    # minutes and vitest-dev/vitest 10 for jobs an order of magnitude longer
-    # than this one.
+    # ジョブ全体で25秒ほど。上限をそこから大きく離してあるのは意図的で、
+    # これは予算ではなく、ハングしたステップが GitHub 既定の6時間まで走り
+    # 続けるのを止めるためだけのもの。vitejs/vite は20分、vitest-dev/vitest
+    # は10分を、これより一桁長いジョブに置いている。
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -30,25 +29,24 @@ jobs:
           node-version-file: .node-version
           cache: npm
 
-      # Pulls in the two install hooks: postinstall (`wxt prepare`, which
-      # generates the WXT config this build needs) and prepare
-      # (`scripts/setup.ts`, which only points git at .githooks and is written
-      # to never fail an install).
+      # インストール時のフックが2つ走る。postinstall（`wxt prepare`＝この
+      # ビルドが要る WXT の設定を生成する）と prepare（`scripts/setup.ts`＝
+      # git に .githooks を指させるだけで、インストールを失敗させないように
+      # 書いてある）。
       - run: npm ci
 
-      # `biome ci` — formatting, lint rules and import order, none of it
-      # rewritten. First because it is the fastest way for the run to fail.
+      # `biome ci`＝整形・lint 規則・import 順を、いずれも書き換えずに検査
+      # する。最初に置くのは、実行が落ちるなら一番速く落ちる経路だから。
       - run: npm run lint
 
       - run: npm test
 
-      # `wxt build` followed by verify:manifest — the generated release manifest
-      # has to carry what the sources declare, the content script included.
+      # `wxt build` のあとに verify:manifest＝生成された release の manifest
+      # が、ソースの宣言どおりのものを持っているか（content script を含む）。
       - run: npm run build
 
-      # The same build for Firefox, which is not a claim that Sift runs there —
-      # nothing has ever been tested against it. wxt.config.ts pins
-      # manifestVersion to 3 so that Firefox does not fall back to MV2, and this
-      # is the only thing that ever exercises that decision: without it, the
-      # config could drift into something Chrome-only and nothing would say so.
+      # Firefox 向けの同じビルド。Sift が Firefox で動くという主張ではない
+      # ＝一度も検証していない。wxt.config.ts が manifestVersion を 3 に固定
+      # しているのは Firefox を MV2 へ落とさないためで、その判断を実際に通す
+      # のはここだけ。無ければ設定が Chrome 専用へ流れても誰も言わない。
       - run: npm run build:firefox
