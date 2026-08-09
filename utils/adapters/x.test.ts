@@ -4,8 +4,8 @@ import { LIKE_THRESHOLDS } from "../settings.ts";
 import { LIKE_LABELS } from "./types.ts";
 import { xAdapter } from "./x.ts";
 
-// X wraps every post in a cell that also carries the separator and the padding
-// around it, and the post itself is the article inside that cell.
+// X は投稿を、区切り線と周囲の余白も持つセルで包んでいて、投稿そのものはその
+// セルの中の article。
 function renderTimeline(...posts: string[]): HTMLElement {
   return render(
     posts
@@ -20,13 +20,13 @@ function renderTimeline(...posts: string[]): HTMLElement {
 function renderPost(inner = ""): Element {
   const card = renderTimeline(inner).querySelector("article");
   if (!card) {
-    throw new Error("the rendered timeline has no post card");
+    throw new Error("描画したタイムラインに投稿カードが無い");
   }
   return card;
 }
 
-describe("finding posts", () => {
-  it("finds every post on the screen", () => {
+describe("投稿を見つける", () => {
+  it("画面にある投稿を全部見つける", () => {
     const timeline = renderTimeline(
       "<span>first</span>",
       "<span>second</span>",
@@ -36,7 +36,7 @@ describe("finding posts", () => {
     expect(xAdapter.hasPostCards(timeline)).toBe(true);
   });
 
-  it("finds none on a screen that lists no posts", () => {
+  it("投稿が並んでいない画面では1件も見つけない", () => {
     const page = render('<div data-testid="primaryColumn">settings</div>');
 
     expect(xAdapter.getPostCards(page)).toEqual([]);
@@ -44,34 +44,34 @@ describe("finding posts", () => {
   });
 });
 
-describe("the unit that gets hidden", () => {
-  it("is the cell around the post, so hiding leaves no gap behind", () => {
+describe("隠される単位", () => {
+  it("投稿を包むセル＝隠しても隙間が残らない", () => {
     const timeline = renderTimeline("");
     const cell = timeline.firstElementChild;
     const card = cell?.firstElementChild;
     if (!cell || !card) {
-      throw new Error("the rendered timeline has no cell");
+      throw new Error("描画したタイムラインにセルが無い");
     }
 
     expect(xAdapter.findPostCell(card)).toBe(cell);
   });
 
-  it("falls back to the post itself where there is no cell", () => {
+  it("セルが無ければ投稿そのものに落ちる", () => {
     const card = render(
       '<article data-testid="tweet"></article>',
     ).firstElementChild;
     if (!card) {
-      throw new Error("the rendered post has no card");
+      throw new Error("描画した投稿にカードが無い");
     }
 
     expect(xAdapter.findPostCell(card)).toBe(card);
   });
 });
 
-describe("reading the like count", () => {
-  // The visible text is rounded to "1.1万" and could never be compared against
-  // a threshold; the accessible label carries the exact number.
-  it("prefers the accessible label over the rounded text next to it", () => {
+describe("いいね数を読む", () => {
+  // 画面に出ている文字は「1.1万」に丸められていて、しきい値と比べようがない。
+  // 正確な数を持っているのは読み上げ用のラベルの方。
+  it("隣の丸めた文字より、読み上げ用ラベルを優先する", () => {
     const card = renderPost(
       '<button data-testid="like" aria-label="11788 件のいいね。いいねする"><span>1.1万</span></button>',
     );
@@ -79,15 +79,14 @@ describe("reading the like count", () => {
     expect(xAdapter.readReactionCount(card)).toBe(11788);
   });
 
-  it("falls back to the visible text when the button carries no label", () => {
+  it("ボタンにラベルが無ければ、画面の文字に落ちる", () => {
     const card = renderPost('<button data-testid="like"> 1,234 </button>');
 
     expect(xAdapter.readReactionCount(card)).toBe(1234);
   });
 
-  // A post the reader has already liked carries the other testid, and it is the
-  // same count.
-  it("reads a post the reader already liked", () => {
+  // 既にいいね済みの投稿はもう一方の testid を持つが、数え方は同じ。
+  it("いいね済みの投稿も読む", () => {
     const card = renderPost(
       '<button data-testid="unlike" aria-label="1,234 件のいいね。いいねを取り消す"></button>',
     );
@@ -95,13 +94,13 @@ describe("reading the like count", () => {
     expect(xAdapter.readReactionCount(card)).toBe(1234);
   });
 
-  it("answers 0 where there is no like button at all", () => {
+  it("いいねボタン自体が無ければ 0 を返す", () => {
     expect(xAdapter.readReactionCount(renderPost())).toBe(0);
   });
 });
 
-describe("reading the post time", () => {
-  it("reads the machine-readable time X writes", () => {
+describe("投稿時刻を読む", () => {
+  it("X が書き出す機械可読な時刻を読む", () => {
     const card = renderPost(
       '<a href="/example/status/1"><time datetime="2026-08-01T12:00:00.000Z">8月1日</time></a>',
     );
@@ -111,22 +110,22 @@ describe("reading the post time", () => {
     );
   });
 
-  // Neither reading available: the post still classifies, only "rising" drops.
-  it("answers NaN where there is no time", () => {
+  // どちらの読み方もできない場合＝投稿の判定自体は動き、「上昇中」だけが落ちる。
+  it("時刻が無ければ NaN を返す", () => {
     expect(xAdapter.readCreatedAt(renderPost())).toBeNaN();
   });
 
-  it("answers NaN for a time it cannot parse", () => {
+  it("解釈できない時刻には NaN を返す", () => {
     const card = renderPost('<time datetime="not a date">8月1日</time>');
 
     expect(xAdapter.readCreatedAt(card)).toBeNaN();
   });
 });
 
-// Image and video stay separate: folding them into one answer is the reader's
-// media setting, which is not this adapter's to apply.
-describe("reading the media", () => {
-  it("reads an attached photo", () => {
+// 画像と動画は分けたままにする＝1つの答えにまとめるのは利用者のメディア設定の
+// 仕事で、このアダプターが当てるものではない。
+describe("メディアを読む", () => {
+  it("添付された画像を読む", () => {
     const card = renderPost(
       '<div data-testid="tweetPhoto"><img src="/media/1.jpg"></div>',
     );
@@ -137,9 +136,9 @@ describe("reading the media", () => {
     });
   });
 
-  // A post whose photo is drawn as a link rather than as the testid'd container
-  // — the form the detail screen uses.
-  it("reads a photo behind its permalink", () => {
+  // 画像が testid 付きの入れ物ではなくリンクとして描かれている投稿＝投稿詳細の
+  // 画面が使っている形。
+  it("パーマリンクの内側にある画像も読む", () => {
     const card = renderPost(
       '<a href="/example/status/1/photo/1"><img src="/media/1.jpg"></a>',
     );
@@ -150,7 +149,7 @@ describe("reading the media", () => {
     });
   });
 
-  it("reads a video", () => {
+  it("動画を読む", () => {
     const card = renderPost(
       '<div data-testid="videoPlayer"><video></video></div>',
     );
@@ -161,7 +160,7 @@ describe("reading the media", () => {
     });
   });
 
-  it("reads a post with no media as having none", () => {
+  it("メディアの無い投稿は無しとして読む", () => {
     expect(xAdapter.readMedia(renderPost("<span>text only</span>"))).toEqual({
       hasImage: false,
       hasVideo: false,
@@ -169,8 +168,8 @@ describe("reading the media", () => {
   });
 });
 
-describe("reading a repost", () => {
-  it("reads the repost header X draws above the post", () => {
+describe("リポストを読む", () => {
+  it("X が投稿の上に描くリポストのヘッダを読む", () => {
     const card = renderPost(
       '<div data-testid="socialContext">さんがリポストしました</div>',
     );
@@ -178,8 +177,8 @@ describe("reading a repost", () => {
     expect(xAdapter.readIsRepost(card)).toBe(true);
   });
 
-  // The same header carries other words: being pinned is not being reposted.
-  it("does not read a pinned post as a repost", () => {
+  // 同じヘッダには別の文言も入る＝固定されていることはリポストではない。
+  it("固定された投稿をリポストとして読まない", () => {
     const card = renderPost(
       '<div data-testid="socialContext">固定されたポスト</div>',
     );
@@ -187,15 +186,15 @@ describe("reading a repost", () => {
     expect(xAdapter.readIsRepost(card)).toBe(false);
   });
 
-  it("answers false where there is no header", () => {
+  it("ヘッダが無ければ false を返す", () => {
     expect(xAdapter.readIsRepost(renderPost())).toBe(false);
   });
 });
 
-// The toolbar and its settings panel take these from the adapter rather than
-// naming X's reaction themselves.
-describe("what the thresholds count", () => {
-  it("is the like, under the messages that name a like", () => {
+// ツールバーとその設定パネルは、X の反応を自分で名指しせず、アダプターから
+// これを受け取る。
+describe("しきい値が数えるもの", () => {
+  it("いいね＝いいねを名指しするメッセージの下にある", () => {
     expect(xAdapter.reactionLabels).toBe(LIKE_LABELS);
     expect(xAdapter.thresholdKeys).toBe(LIKE_THRESHOLDS);
   });
