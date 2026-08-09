@@ -65,17 +65,19 @@ npm run deploy
 
 ## 文言
 
-読み手が見る文字列はすべて `public\_locales\<言語>\messages.json` にあり、`utils\i18n.ts` を通して読みます。既定ロケールは `en` なので、Siftが文言を持たない言語のブラウザには英語が出ます。拡張側に言語の切り替えはありません＝`browser.i18n` にそれを提供する手段が無く、WXTのi18nガイド自身も専用ライブラリではなく素のAPIを勧めています。
+読み手が見る文字列はすべて `locales\<言語>.yml` にあり、`@wxt-dev/i18n`（`wxt.config.ts` の `modules`）がビルド時にそこから `_locales\<言語>\messages.json` を焼きます。対象は `en` / `ja` / `ko` / `zh-TW` / `zh-CN` / `es` / `pt-BR` の7言語（hologram#222 の第1波と同じ）。既定ロケールは `en` なので、Siftが文言を持たない言語のブラウザには英語が出ます。拡張側に言語の切り替えはありません＝`browser.i18n` にそれを提供する手段が無く、WXTのi18nガイド自身も専用ライブラリではなく素のAPIを勧めています。
 
 文言への経路は3つ：
 
-- コード中の `t("name")`。メッセージ名は英語ファイルから型付けしてあります（`i18n.d.ts` がWXT自身の `browser.i18n` の型にマージするので、打ち間違いはコンパイルを通りません）
+- コード中の `t("name")`（`utils\i18n.ts` が `#i18n` の `i18n.t` をそのまま外へ出したもの）。メッセージ名は `locales\en.yml` から型付けしてあります（`wxt prepare` が `.wxt\i18n\structure.d.ts` を生成するので、打ち間違いはコンパイルを通りません）。件数のように複数形分岐（`1` / `n`）を持つメッセージは `t("name", 件数)` の形で呼びます
 - 静的な2ページ（`entrypoints\options\index.html` と `entrypoints\popup\index.html`）の `data-i18n` / `data-i18n-placeholder` / `data-i18n-aria-label`。`localizeDocument()` が埋めます＝静的HTMLはmanifestのように `__MSG_name__` を持てません
 - `wxt.config.ts` の `__MSG_name__`。これを解釈するのはmanifestの該当フィールドだけです
 
-どちらのマークアップにも英語の文言そのものが書いてあります（`main.ts` が走る前の一瞬のため）。`utils\i18n.test.ts` がそれをmessagesファイルと同じ言葉に固定し、2つのロケールが同じ名前を持つことと、どちらにも無い名前を使っていないことを確認します。manifestのdescriptionについては `verify-manifest.ts` が同じことをします。
+どちらのマークアップにも英語の文言そのものが書いてあります（`main.ts` が走る前の一瞬のため）。`utils\i18n.test.ts` がそれを `locales\en.yml` と同じ言葉に固定し、どちらにも無い名前を使っていないことを確認します。manifestのdescriptionについては `verify-manifest.ts` が同じことをします。
 
-テストは `test\i18n.ts` 経由で `public\_locales\en` を読みます＝これが `browser.i18n.getMessage` の代わりです（WXTのfake browserは未実装のまま）。
+7言語すべてが同じキー集合を持つかは `locales\locales.test.ts` が検査します＝1言語からキーを1つ落とす、または差し込みの数がずれると落ちます（複数形の言い回しそのものは言語ごとに違って当然なので比べません）。
+
+テストは `test\i18n.ts` 経由で `locales\en.yml` を読みます＝これが `browser.i18n.getMessage` の代わりです（WXTのfake browserは未実装のまま）。
 
 ## Lint
 

@@ -1,48 +1,53 @@
-// テストを走らせるたびに、本物の英語メッセージファイルに対して
-// browser.i18n.getMessage を動かすためのもの。WXT の偽ブラウザは i18n を
-// 実装しないまま置いていて＝呼ぶと例外になる、「キーをそのまま返す」で
-// 埋めてしまうと、どこにも存在しないメッセージ名が、それを描くテスト全部を
-// 素通りしてしまう。
+// テストを走らせるたびに、本物の英語メッセージに対して browser.i18n.getMessage
+// を動かすためのもの。WXT の偽ブラウザは i18n を実装しないまま置いていて＝
+// 呼ぶと例外になる、「キーをそのまま返す」で埋めてしまうと、どこにも存在しない
+// メッセージ名が、それを描くテスト全部を素通りしてしまう。
 //
-// 英語なのは、それが既定のロケールだから＝日本語を持たないブラウザのために
-// 落ちる先がそこであり、揃っていなければならない方のファイルを読むことが、
-// 欠けたキーを読み手の前ではなくここで落とすことになる。
-import { readFileSync } from "node:fs";
+// メッセージは locales/<言語>.yml から作る＝@wxt-dev/i18n がビルド時に
+// _locales/<言語>/messages.json へ焼くのと同じ変換（parseMessagesFile →
+// generateChromeMessages）をそのまま呼ぶので、複数形（0/1/n）が " | " で
+// 結合される形も含めて、実際に焼かれるものと1つも違わない。
+//
+// 既定ロケールが英語なのは、それが Sift がメッセージを持たない言語のブラウザに
+// 落ちる先だから＝揃っていなければならない方のファイルを読むことが、欠けた
+// キーを読み手の前ではなくここで落とすことになる。
 import { resolve } from "node:path";
+import {
+  type ChromeMessage,
+  generateChromeMessages,
+  parseMessagesFile,
+} from "@wxt-dev/i18n/build";
 import { beforeEach } from "vitest";
 import { fakeBrowser } from "wxt/testing/fake-browser";
 
-interface MessageEntry {
-  message: string;
-  placeholders?: Record<string, { content: string }>;
-}
-
-// import ではなく node で読む＝Vitest はモジュールを http で配るので
-// `import.meta.url` はここではファイルの経路にならないし、JSON の import は
-// バンドルの中にファイルの写しをもう1つ作ることになる。
-export function readMessages(locale: string): Record<string, MessageEntry> {
-  return JSON.parse(
-    readFileSync(
-      resolve(process.cwd(), `public/_locales/${locale}/messages.json`),
-      "utf8",
-    ),
+export async function readLocaleMessages(
+  locale: string,
+): Promise<Record<string, ChromeMessage>> {
+  return generateChromeMessages(
+    await parseMessagesFile(resolve(process.cwd(), `locales/${locale}.yml`)),
   );
 }
 
-const messages = readMessages("en");
+// Vitest のトップレベル await で1回だけ読む＝setupFiles はテストファイルより
+// 先に、かつ一度だけ評価される。
+const englishMessages = await readLocaleMessages("en");
 
-// Chrome が $NAME$ に対してすること＝その名前を `placeholders` から引き、
-// その `content` が指す位置の引数を読んで（$1 が最初）、そこへ入れる。
-// placeholder の名前は大文字小文字を区別せずに照合される。
+// Chrome が $1 〜 $9 に対してすること＝該当する差し込み引数（$1 が最初）を
+// そのまま文字列へ差し込む。`$$` は逃した `$` 1文字になる。名前付き
+// プレースホルダ（$NAME$）は使っていないので対応しない。
+function substitute(message: string, args: readonly string[]): string {
+  return message.replace(/\$(\$|[1-9])/g, (_match, token: string) =>
+    token === "$" ? "$" : (args[Number(token) - 1] ?? ""),
+  );
+}
+
 export function getMessage(
   key: string,
   substitutions?: string | string[],
 ): string {
-  const entry = messages[key];
+  const entry = englishMessages[key];
   if (entry === undefined) {
-    throw new Error(
-      `public/_locales/en に ${key} という名前のメッセージが無い`,
-    );
+    throw new Error(`locales/en.yml に ${key} という名前のメッセージが無い`);
   }
 
   const args =
@@ -52,12 +57,7 @@ export function getMessage(
         ? [substitutions]
         : substitutions;
 
-  let text = entry.message;
-  for (const [name, { content }] of Object.entries(entry.placeholders ?? {})) {
-    const position = Number(content.slice(1)) - 1;
-    text = text.replaceAll(`$${name.toUpperCase()}$`, args[position] ?? "");
-  }
-  return text;
+  return substitute(entry.message, args);
 }
 
 // fakeBrowser.reset() はテストとテストの間に走り、未実装の関数を戻してしまう

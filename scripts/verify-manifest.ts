@@ -74,8 +74,8 @@ assert.equal(generatedManifest.version, packageJson.version);
 // 説明文は文ではなくメッセージ名で、それを解決するのはブラウザの manifest の
 // 読み手＝しかも黙って解決するので、名前が違っていたりファイルがビルドへ入って
 // いなかったりすると、拡張機能は説明文を1つも持たないまま残る。それを言うものは
-// 他に無い＝`wxt build` は名前を読まないし、public/_locales が写されたかも
-// 確かめない。
+// 他に無い＝`wxt build` は名前を読まないし、locales/*.yml から生成された
+// _locales が届いたかも確かめない。
 assert.equal(generatedManifest.default_locale, declaredManifest.default_locale);
 const defaultMessages = JSON.parse(
   await readFile(
