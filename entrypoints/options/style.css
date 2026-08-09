@@ -7,6 +7,7 @@
   --control-background: #ffffff;
   --foreground: #1f2328;
   --muted: #656d76;
+  --subtle-background: #eef1f4;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -17,6 +18,7 @@
     --control-background: #292929;
     --foreground: #f3f3f3;
     --muted: #b7b7b7;
+    --subtle-background: #3a3a3a;
   }
 }
 
@@ -167,6 +169,16 @@ input[type="checkbox"]:focus-visible {
   font: inherit;
   font-size: 12px;
   padding: 3px 8px;
+}
+
+.instance-badge {
+  background: var(--subtle-background);
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 9px;
+  white-space: nowrap;
 }
 
 .instance-form {

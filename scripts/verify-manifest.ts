@@ -56,6 +56,13 @@ assert.equal(generatedManifest.description, declaredManifest.description);
 // これを失ったビルドは、別の拡張機能として入ることになる。
 assert.equal(generatedManifest.key, declaredManifest.key);
 assert.deepEqual(generatedManifest.permissions, declaredManifest.permissions);
+// misskey.io はビルド時に確定した既定ホスト（#41）＝ここが静的な
+// host_permissions と一致しなければ、インストール直後から追加操作なしに動く
+// という受け入れ条件を検査するものが無い。
+assert.deepEqual(
+  generatedManifest.host_permissions,
+  declaredManifest.host_permissions,
+);
 assert.deepEqual(
   generatedManifest.optional_host_permissions,
   declaredManifest.optional_host_permissions,
