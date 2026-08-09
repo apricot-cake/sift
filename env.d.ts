@@ -1,8 +1,8 @@
-// Folded to a boolean literal at build time by the `define` in wxt.config.ts,
-// keyed on Vite's command. Not something WXT generates on its own, since it is
-// this project's own build-time constant rather than one of WXT's.
+// ビルド時に、wxt.config.ts の `define` が Vite の command で分けて boolean の
+// リテラルへ畳むもの。WXT が自分で生成するものではない＝WXT のものではなく、
+// このプロジェクト自身のビルド時の定数だから。
 //
-// No import belongs in this file: one would turn it into a module, and a
-// `declare const` in a module is not a global. The message-name types, which do
-// need an import, are in i18n.d.ts for that reason.
+// このファイルに import を置いてはならない＝置くとこれがモジュールになり、
+// モジュールの中の `declare const` はグローバルではなくなる。import が要る
+// メッセージ名の型が i18n.d.ts にあるのはそのため。
 declare const __SIFT_DEV__: boolean;

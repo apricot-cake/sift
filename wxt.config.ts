@@ -5,134 +5,131 @@ import { defineConfig } from "wxt";
 import { devErrorLog } from "./plugins/dev-error-log.ts";
 import { DEV_SERVER_HOST, DEV_SERVER_PORT } from "./utils/dev-server.ts";
 
-// Where a DEVELOPMENT build lands. Deliberately outside the working tree and
-// identical for every tree: the dedicated development Chrome profile loads one
-// unpacked folder once, and re-pointing it every time work moves to another
-// worktree would be a click nobody remembers to make.
+// 開発ビルドの置き場所。作業ツリーの外にあり、どのツリーでも同じ場所なのは
+// 意図的＝開発専用の Chrome プロファイルは展開済みの置き場を一度だけ読み込む
+// ので、作業が別の worktree へ移るたびにそれを指し直すのは、誰も覚えていない
+// クリックになる。
 //
-// SIFT_DEV_OUTPUT is set by `npm run dev`, and by nothing else — a bare `wxt`
-// leaves it unset and writes into .output like a release does, which is the
-// right answer for a build nobody's profile has loaded.
+// SIFT_DEV_OUTPUT を設定するのは `npm run dev` だけ＝素の `wxt` はこれを未設定の
+// まま、リリースと同じく .output へ書く。それが、誰のプロファイルも読み込んで
+// いないビルドにとって正しい答え。
 const developmentOutput =
   process.env.SIFT_DEV_OUTPUT ||
   resolve(homedir(), ".sift-dev", "chrome-mv3-dev");
 
-// Whether the folder above currently holds a build. The development worker asks
-// before it reloads itself: starting the server wipes and rewrites that folder,
-// and reloading an unpacked extension into an empty one does not retry — Chrome
-// unloads the extension and puts up a dialog about a missing manifest (measured
-// 2026-08-02, #31). Both halves matter: the hook says a build finished in THIS
-// server's lifetime, the file check says it is still on disk.
+// 上の置き場に今ビルドが入っているかどうか。開発時の worker が自分を起動し直す
+// 前にこれを訊く＝サーバーの起動はその置き場を消して書き直すし、空になった所へ
+// 展開済み拡張機能を読み込み直すのは再試行にならない。Chrome は拡張機能を降ろし、
+// manifest が無いというダイアログを出す（2026-08-02 に確認・#31）。両方の条件に
+// 意味がある＝フックは「このサーバーの一生の中でビルドが終わった」ことを言い、
+// ファイルの検査は「それがまだディスクにある」ことを言う。
 let developmentBuildWritten = false;
 const developmentBuildIsReady = () =>
   developmentBuildWritten &&
   existsSync(resolve(developmentOutput, "manifest.json"));
 
 export default defineConfig({
-  // Firefox too. WXT would default Firefox to MV2, and one manifest version
-  // keeps one set of release checks.
+  // Firefox も対象。WXT は Firefox を既定で MV2 にするが、manifest の版を1つに
+  // 揃えておけばリリース時の確認も1組で済む。
   manifestVersion: 3,
-  // Two outputs that must never be confused for each other:
-  //   dev     → the fixed path above, read only by the development profile
-  //   release → .output/<browser>-mv3-release, which scripts/deploy-extension.ts
-  //             promotes into .output/chrome-mv3 — the folder the daily Chrome
-  //             has loaded. `wxt build` therefore CANNOT write to the daily
-  //             folder: only a promoted build gets there.
+  // 決して取り違えてはならない2つの出力先。
+  //   開発     → 上の固定の経路。読むのは開発用プロファイルだけ
+  //   リリース → .output/<ブラウザ>-mv3-release。scripts/deploy-extension.ts が
+  //              これを .output/chrome-mv3 へ引き上げる＝日常の Chrome が読み
+  //              込んでいる置き場。だから `wxt build` は日常の置き場へ書けない。
+  //              そこへ入れるのは引き上げられたビルドだけ。
   //
-  // Keyed on the env var rather than on dev-vs-build, because the config is read
-  // before either is known. `npm run dev` sets it; `wxt build` does not.
+  // 開発かビルドかではなく環境変数で分けているのは、この設定がそのどちらとも
+  // 決まる前に読まれるから。設定するのは `npm run dev` で、`wxt build` はしない。
   outDir: process.env.SIFT_DEV_OUTPUT
     ? dirname(developmentOutput)
     : resolve(import.meta.dirname, ".output"),
   outDirTemplate: process.env.SIFT_DEV_OUTPUT
     ? basename(developmentOutput)
     : "{{browser}}-mv{{manifestVersion}}-release{{modeSuffix}}",
-  // WXT must NOT launch a browser. Two independent reasons:
-  //   - anything opened through an automation stack carries the automation-flag
-  //     fingerprint, and X reads it as a bot and refuses sign-in. The development
-  //     profile is signed in to X; losing that is losing its reason to exist.
-  //   - `--load-extension` is ignored by Chrome 137+ (measured on Chrome 151), so
-  //     a managed launch would not even load the extension.
-  // The extension is loaded once, by hand, into the dedicated profile. Keeping
-  // the runner off also means `web-ext` — an optional peer dependency since WXT
-  // 0.21.2 — is never installed.
+  // WXT にブラウザを起動させてはならない。理由は独立に2つある。
+  //   - 自動化の仕組みを通して開いたものは自動化フラグの指紋を持ち、X はそれを
+  //     ボットと読んでサインインを拒む。開発用プロファイルは X にサインイン済み
+  //     で、それを失うことはこのプロファイルの存在理由を失うこと。
+  //   - `--load-extension` は Chrome 137 以降が無視する（Chrome 151 で確認）ので、
+  //     任せて起動しても拡張機能は読み込まれない。
+  // 拡張機能は専用のプロファイルへ、手で一度だけ読み込む。起動役を止めておくと、
+  // WXT 0.21.2 以降は任意の peer 依存になった `web-ext` も一度も入らない。
   webExt: {
     disabled: true,
   },
   dev: {
     server: {
-      // utils/dev-server.ts is the single source: the development worker posts
-      // its error buffer and its liveness probe to this same address.
+      // 正本は utils/dev-server.ts＝開発時の worker は、エラーのバッファも
+      // 生存確認もこの同じ住所へ送る。
       //
-      // The HOST is pinned for the same reason as the port. WXT's default is
-      // `localhost`, which resolved to ::1 here and bound there only, so the
-      // worker's posts to 127.0.0.1 were refused and every diagnostic the
-      // extension produced was lost in silence (#31). Naming the address makes
-      // the HMR socket, the CSP, the host permission and the worker's fetches
-      // agree on one host.
+      // ホストを固定する理由はポートと同じ。WXT の既定は `localhost` で、ここ
+      // ではそれが ::1 に解決されてそこにしか束縛されず、worker が 127.0.0.1 へ
+      // 送ったものは拒まれ、拡張機能が出した診断は全部が黙って失われた（#31）。
+      // 住所を名指しすることで、HMR ソケット・CSP・ホスト権限・worker の取得が
+      // 1つのホストで一致する。
       //
-      // `origin` is a SEPARATE option in WXT, and defaults to localhost on its
-      // own — setting only `host` moves what the server binds without moving
-      // what the extension is built to call, which is the same mismatch again.
+      // `origin` は WXT では別の設定項目で、自分では localhost を既定にする＝
+      // `host` だけを設定すると、サーバーが束縛する先は動くのに拡張機能が呼ぶ
+      // 先は動かない。それは同じ食い違いの繰り返し。
       host: DEV_SERVER_HOST,
       origin: DEV_SERVER_HOST,
       port: DEV_SERVER_PORT,
-      // Without this WXT quietly takes the next free port when 51732 is busy.
-      // The extension is built against one address it cannot renegotiate, so a
-      // server on another port is a server nothing will ever talk to — a failure
-      // that looks exactly like the extension being broken. Refusing to start is
-      // how the second dev server finds out it is the second one.
+      // これが無いと、51732 が塞がっているとき WXT は黙って次の空きポートを
+      // 取る。拡張機能は交渉し直せない1つの住所に対してビルドされているので、
+      // 別のポートのサーバーは誰も話しかけないサーバーになる＝それは拡張機能が
+      // 壊れているのと見分けの付かない失敗。起動を拒むことが、2つ目の開発
+      // サーバーが自分は2つ目だと知る手段。
       strictPort: true,
     },
   },
   manifest: {
-    // The fixed signing key, and therefore the fixed extension id
-    // (bohbpocokkfioejlabmeaimpkpmablkm). Without it the id is derived from the
-    // folder path, so moving the daily build to another folder would silently
-    // mint a new extension — and a new browser.storage.sync with it. Identical in
-    // development and release: the two live in separate Chrome profiles, so the
-    // same id cannot collide with itself.
+    // 固定の署名鍵＝したがって固定の拡張機能 id
+    // （bohbpocokkfioejlabmeaimpkpmablkm）。これが無いと id は置き場の経路から
+    // 導かれるので、日常のビルドを別の置き場へ移すと黙って新しい拡張機能が
+    // できる＝そして新しい browser.storage.sync も一緒に。開発とリリースで同じ
+    // 値にしてある＝両者は別々の Chrome プロファイルにいるので、同じ id が自分
+    // 自身とぶつかることはない。
     key: "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA7HRMGxpsFxVmyHkVNzHAtaSVuu6vJVFCC0gSSYBT9t31XfT68U7NYyn15N3rLuvZRhRAXYBgZiouzH619jVc2lbHGRzRUPYjm8o0XW70TW6NB+g7P510902pHXw1TmcrN9wqFfFsFhV50DObPKfY+GYfgNzWo+A4raQ4+sCQaCv9TNR78CU2HAi81oGJthhxPYRfdZdqLiZ7FWSnz+Nv9Ie0Q0RAn6W21ekSRpN6wfJf4AjgBe5sj3zRRTGH6CcUSvfUehjKjSbsS5KX5OhL4KWsio4GYRmUZa3SJxWexZN3kLSo4ugA+0AaT0rFjLTZhxOl/ULBeMvBvnnZ+xEqyQIDAQAB",
-    // Which messages file the browser falls back to when it has no locale of
-    // its own here. `en`, matching the README: the Japanese one is the pair,
-    // not the primary. public/_locales is where both live.
+    // ブラウザがここに自分のロケールを持たないとき、どのメッセージファイルへ
+    // 落ちるか。`en`。両方とも public/_locales にある。
     default_locale: "en",
-    // Left as a literal, unlike the description: the name is "Sift" in every
-    // language, and __MSG_extensionName__ would only add a level of indirection
-    // to say so.
+    // 説明文と違ってリテラルのまま＝名前はどの言語でも "Sift" で、
+    // __MSG_extensionName__ はそう言うために間接の層を1つ増やすだけ。
     name: "Sift",
     description: "__MSG_extensionDescription__",
-    // `scripting` is also what WXT's dev mode adds on its own to register
-    // content scripts — declaring it here is no longer dev-only, since a
-    // release build now registers Misskey instances the reader adds the same
-    // way (utils/instances.ts).
+    // `scripting` は、WXT の開発モードが content script を登録するために自分で
+    // 足すものでもある。ここで宣言することはもう開発時だけの話ではない＝リリース
+    // ビルドも、読み手が追加した Misskey インスタンスを同じやり方で登録する
+    // ようになったから（utils/instances.ts）。
     permissions: ["storage", "scripting"],
-    // The origin a reader can grant is never wider than the single host they
-    // add: browser.permissions.request() only ever asks for one origin at a
-    // time (utils/instances.ts), and Chrome's runtime dialog is scoped to
-    // that origin regardless of how wide this wildcard is. Declaring the
-    // wildcard here is what makes ANY host requestable at all — the
-    // alternative, host_permissions, is a set fixed at build time and cannot
-    // grow at runtime (see #2's issue comment, section 5).
+    // 読み手が許可するオリジンが、その人の追加したホスト1つより広くなることは
+    // ない＝browser.permissions.request() が一度に訊くオリジンは常に1つで
+    // （utils/instances.ts）、Chrome の実行時のダイアログは、ここのワイルド
+    // カードがどれだけ広くてもそのオリジンに限られる。ここでワイルドカードを
+    // 宣言することが、そもそも任意のホストを要求可能にしている＝もう一方の
+    // host_permissions は、ビルド時に固定された集合で、実行時には増やせない
+    // （#2 の Issue コメント第5節）。
     optional_host_permissions: ["https://*/*"],
     action: {
       default_title: "Sift",
     },
   },
   hooks: {
-    // Fires after every build the dev server writes, including the first one.
+    // 開発サーバーが書くビルドのたびに発火する。最初の1回も含む。
     "build:done": () => {
       developmentBuildWritten = true;
     },
   },
   vite: (env) => ({
-    // Answers the endpoint the development worker posts its error buffer to.
-    // The plugin applies to `serve` only, so a release build never carries it.
+    // 開発時の worker がエラーのバッファを送る先のエンドポイントに答える。
+    // このプラグインが当たるのは `serve` だけなので、リリースビルドは一度も
+    // これを持たない。
     plugins: [devErrorLog({ isBuilt: developmentBuildIsReady })],
     define: {
-      // Which build this bundle IS. Keyed on the COMMAND, deliberately:
-      // `import.meta.env.DEV` follows NODE_ENV, so a release built from a test
-      // runner would come out believing it was a development build.
+      // このバンドルがどちらのビルドであるか。command で分けているのは意図的で、
+      // `import.meta.env.DEV` は NODE_ENV に従うため、テストの実行環境から
+      // ビルドしたリリースが、自分は開発ビルドだと思ったまま出来上がる。
       __SIFT_DEV__: JSON.stringify(env.command === "serve"),
     },
   }),

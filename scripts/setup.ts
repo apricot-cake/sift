@@ -1,20 +1,21 @@
-// Run by `npm install` through the `prepare` script.
+// `prepare` スクリプト経由で `npm install` が走らせる。
 //
-// Points git at the repository's own hooks directory, which is how
-// .githooks/post-merge gets to run at all — git only looks in .git/hooks unless
-// core.hooksPath says otherwise, and .git/hooks is not under version control.
+// git をこのリポジトリ自身のフックのディレクトリへ向ける＝そもそも
+// .githooks/post-merge が走れるようになるのはこれのおかげ。core.hooksPath が
+// 別を言わない限り git は .git/hooks しか見ないし、.git/hooks はバージョン管理の
+// 外にある。
 //
-// Never fails the install: a tarball, a CI checkout without git, or a machine
-// with no git on PATH all reach here, and none of them need the hook.
+// 導入を失敗させることはない＝tarball も、git の無い CI のチェックアウトも、
+// PATH に git が無い機械も、どれもここへ来るし、どれもこのフックを必要としない。
 import { execFileSync } from "node:child_process";
 
 try {
   execFileSync("git", ["config", "core.hooksPath", ".githooks"], {
     stdio: "ignore",
   });
-  console.log("[sift] git hooks: .githooks");
+  console.log("[sift] git のフック: .githooks");
 } catch {
   console.log(
-    "[sift] skipped the git hooks setup (not a git checkout, or git is unavailable)",
+    "[sift] git のフックの設定を飛ばした（git の作業コピーでないか、git が使えない）",
   );
 }
