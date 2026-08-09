@@ -16,7 +16,7 @@
     "lint:fix": "biome check --write .",
     "test": "tsc --noEmit && vitest run",
     "verify:manifest": "node scripts/verify-manifest.ts",
-    "postinstall": "wxt prepare",
+    "postinstall": "node scripts/bootstrap-i18n-types.ts && wxt prepare",
     "prepare": "node scripts/setup.ts"
   },
   "dependencies": {
