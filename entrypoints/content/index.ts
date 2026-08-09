@@ -179,12 +179,11 @@ export function startContentRuntime(
 
     if (status) {
       status.textContent = settings.enabled
-        ? t(
-            "toolbarStatusCounts",
-            String(counts.hit),
-            String(counts.rising),
-            String(counts.hidden),
-          )
+        ? t("toolbarStatusCounts", [
+            t("toolbarHitCount", counts.hit),
+            t("toolbarRisingCount", counts.rising),
+            t("toolbarHiddenCount", counts.hidden),
+          ])
         : t("toolbarStatusStopped");
     }
     if (toggle) {

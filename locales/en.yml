@@ -1,0 +1,80 @@
+# 既定ロケール。@wxt-dev/i18n はここから型（GeneratedI18nStructure）を作るので、
+# 新しいキーはまずここへ足す。他の言語ファイルはこのキー集合と揃っているかを
+# locales/locales.test.ts が検査する。
+#
+# toolbarHitCount・toolbarRisingCount・toolbarHiddenCount の3つが複数形分岐
+# （1 / n）を持つのは、モジュールの複数形機構が1メッセージにつき1つの数しか
+# 取れないため＝もともと3つの数を1つの文へ詰めていた toolbarStatusCounts では
+# es / pt-BR の名詞・形容詞を数に一致させられない。3つへ分けたうえで、
+# toolbarStatusCounts はそれらを並べる側（$1 / $2 / $3）へ役目を変えている。
+
+extensionDescription: "Filters the post timelines on X, Bluesky and Misskey by media, reaction count and time since posting."
+
+popupEnabled: "Turn filtering on"
+popupOpenOptions: "Open settings"
+
+optionsTagline: "Filters the posts on screen by one shared set of rules"
+optionsSectionFilter: "Filter"
+optionsEnabled: "Turn filtering on"
+optionsSectionStandard: "Standard"
+optionsMinLikes: "Minimum likes"
+optionsMinReactions: "Minimum reactions (Misskey)"
+optionsSectionRising: "Rising"
+optionsRisingEnabled: "Show rising posts"
+optionsMaxAge: "Time since posting"
+optionsUnitHours: "hours"
+optionsThresholdNote: "Likes are read on X and Bluesky, reactions on Misskey. Instances differ in size by orders of magnitude, so the two carry separate thresholds."
+optionsSectionPost: "Post"
+optionsMedia: "Media"
+optionsMediaAny: "Images and video"
+optionsMediaImages: "Images only"
+optionsHideReposts: "Leave out reposts"
+optionsSectionInstances: "Misskey instances"
+optionsInstancePlaceholder: "e.g. misskey.io"
+optionsInstanceInputLabel: "Hostname of the Misskey instance to add"
+optionsInstanceAdd: "Add"
+optionsInstanceRemove: "Remove"
+optionsInstanceDefault: "Default"
+optionsInstanceDefaultHint: "misskey.io ships with Sift and can't be removed."
+optionsInstanceNote: "Adding one has Chrome ask you to allow access to that host and no other."
+optionsStatusLoading: "Loading…"
+optionsStatusSaved: "Saved"
+optionsAutosaveNote: "Settings save themselves and reach every supported timeline."
+optionsErrorLoadFailed: "The settings could not be read."
+optionsErrorSaveFailed: "The settings could not be saved."
+optionsErrorBadHost: "Check the hostname (misskey.io, for instance — no path, no query, no http)."
+optionsErrorPermissionDenied: "Nothing was added: the permission was not granted."
+optionsErrorAlreadyDefault: "misskey.io is already included by default."
+
+toolbarPanelLabel: "Sift settings"
+toolbarPanelTitle: "Filter settings"
+toolbarAutosave: "saved as you go"
+toolbarMinLikes: "Standard: minimum likes"
+toolbarMinReactions: "Standard: minimum reactions"
+toolbarRisingEnabled: "Show rising"
+toolbarRisingMinLikes: "Rising: minimum likes"
+toolbarRisingMinReactions: "Rising: minimum reactions"
+toolbarMaxAge: "Time since posting"
+toolbarUnitHours: "hours"
+toolbarMedia: "Media"
+toolbarMediaAny: "Images and video"
+toolbarMediaImages: "Images only"
+toolbarHideReposts: "Leave out reposts"
+toolbarHint: "A blue line marks a standard hit, an orange one a rising post."
+toolbarStatusChecking: "Checking…"
+toolbarHitCount:
+  1: "1 hit"
+  n: "$1 hits"
+toolbarRisingCount:
+  1: "1 rising"
+  n: "$1 rising"
+toolbarHiddenCount:
+  1: "1 hidden"
+  n: "$1 hidden"
+toolbarStatusCounts: "$1 · $2 · $3"
+toolbarStatusStopped: "Filtering off"
+toolbarFilterOn: "Filter ON"
+toolbarFilterOff: "Filter OFF"
+toolbarShowAll: "Show everything"
+toolbarShowFiltered: "Back to filtered"
+toolbarSettings: "Settings"
