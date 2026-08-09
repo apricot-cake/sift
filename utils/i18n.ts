@@ -1,41 +1,40 @@
-// Every string a reader sees comes through here. The strings themselves live in
-// public/_locales/<language>/messages.json, which the browser picks from on its
-// own — there is no language switch in the extension, because browser.i18n has
-// no way to offer one (WXT's own i18n guide says the same, and recommends the
-// bare API over a bundled library for exactly the reasons that matter here: the
-// manifest can be localized too, lookups are synchronous, and no copy of the
-// translations is bundled into each entrypoint).
+// 読み手が目にする文字は全部ここを通る。文字そのものは
+// public/_locales/<言語>/messages.json にあり、そこからどれを使うかはブラウザが
+// 自分で決める＝拡張機能の中に言語の切り替えは無い。browser.i18n がそれを
+// 差し出す手段を持たないから（WXT 自身の i18n ガイドも同じことを言っていて、
+// ここで効く理由そのものを挙げて、束ねたライブラリより素の API を勧めている＝
+// manifest も翻訳できる・引きが同期・翻訳の写しがエントリポイントごとに
+// バンドルへ入らない）。
 //
-// `en` is the default locale, so a browser set to anything Sift has no messages
-// for reads English.
+// 既定のロケールは `en` なので、Sift がメッセージを持たない言語に設定された
+// ブラウザは英語を読む。
 import { browser } from "wxt/browser";
 
-// The keys, taken from the English file — the one that is complete by
-// definition, since it is the fallback. Imported as a type alone, so nothing of
-// the JSON reaches a bundle. A typo in a key is a compile error, and a key
-// removed from the messages file breaks every call site that still wants it.
+// キーは英語のファイルから取る＝それが翻訳の落ちる先である以上、定義上そこは
+// 常に揃っている。型としてだけ読み込むので、JSON の中身はバンドルへ届かない。
+// キーの打ち間違いはコンパイルエラーになり、メッセージファイルから消えたキーは
+// それをまだ欲しがっている呼び出し側を全部壊す。
 type Messages = typeof import("../public/_locales/en/messages.json");
 export type MessageKey = keyof Messages;
 
-// Substitutions are positional ($1, $2, ...), named in the messages file under
-// `placeholders`. Only toolbarStatusCounts uses them.
+// 差し込みは位置指定（$1・$2 ...）で、名前はメッセージファイルの
+// `placeholders` に書く。使っているのは toolbarStatusCounts だけ。
 export function t(key: MessageKey, ...substitutions: string[]): string {
   return browser.i18n.getMessage(key, substitutions);
 }
 
-// Which attribute each suffixed form writes. `data-i18n` on its own replaces the
-// element's text; these write an attribute and leave the text alone. Exported so
-// a test can hold the markup to the same list this reads.
+// 接尾辞の付いた形が、それぞれどの属性へ書き込むか。`data-i18n` 単体は要素の
+// 文字を置き換えるが、こちらは属性へ書いて文字には触れない。エクスポートして
+// あるのは、マークアップがこれと同じ一覧に従っているかをテストが確かめるため。
 export const I18N_ATTRIBUTES = Object.freeze({
   "data-i18n-placeholder": "placeholder",
   "data-i18n-aria-label": "aria-label",
 });
 
-// Fills in the message names a document declares. Static HTML cannot carry
-// __MSG_name__ the way the manifest can — that substitution is the manifest
-// parser's, not the HTML parser's — so a document written once has to be
-// localized at load instead. Every entrypoint with static markup calls this
-// before it shows anything.
+// 文書が宣言したメッセージ名を埋める。静的な HTML は manifest のように
+// __MSG_name__ を書けない＝あの置換をするのは manifest の読み手であって HTML の
+// 読み手ではない。だから一度書かれた文書は、読み込み時に翻訳するしかない。
+// 静的なマークアップを持つエントリポイントは、何かを見せる前に必ずこれを呼ぶ。
 export function localizeDocument(root: ParentNode): void {
   for (const element of root.querySelectorAll<HTMLElement>("[data-i18n]")) {
     const key = element.dataset.i18n;

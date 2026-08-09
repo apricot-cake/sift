@@ -1,20 +1,20 @@
-// Misskey instance permission and dynamic content-script registration.
+// Misskey インスタンスの権限と、content script の動的な登録。
 //
-// Misskey is decided per-user rather than per-page: Sift never injects into a
-// Misskey host until the reader adds it, and the only host permission
-// requested is the one they typed (see #2's issue comment, section 5, for
-// why host_permissions and a hard-coded instance were both rejected).
+// Misskey はページ単位ではなく利用者単位で決まる＝読み手が追加するまで Sift は
+// Misskey のホストへ一切注入しないし、要求するホスト権限も読み手が打ち込んだ
+// ものだけ（host_permissions と決め打ちのインスタンスをどちらも退けた理由は
+// #2 の Issue コメント第5節）。
 //
-// Adding a host requests exactly its origin — browser.permissions.request()
-// against the wildcard declared in optional_host_permissions (wxt.config.ts)
-// — and, once granted, registers a content script through
-// browser.scripting.registerContentScripts() pointing at the same built files
-// WXT already produces for the static X/Bluesky entry (entrypoints/content).
-// There is no separate Misskey content script: #29 is what makes an adapter
-// exist for it to select.
+// ホストを追加すると、そのオリジンちょうどを要求する＝optional_host_permissions
+// （wxt.config.ts）で宣言したワイルドカードに対する
+// browser.permissions.request()。許可されたら
+// browser.scripting.registerContentScripts() で content script を登録し、指す先は
+// WXT が静的な X / Bluesky 用のエントリ（entrypoints/content）に対して既に
+// 作っているのと同じビルド済みファイル。Misskey 専用の content script は無い＝
+// そこで選ばれるアダプターを存在させたのが #29。
 //
-// Every function here takes the permissions/scripting/storage surfaces as
-// parameters, so tests can supply fakes instead of a real browser.
+// ここの関数はどれも permissions / scripting / storage を引数で受け取るので、
+// テストは本物のブラウザではなく偽物を渡せる。
 
 import type { Browser } from "wxt/browser";
 
@@ -35,8 +35,8 @@ export interface RegisteredContentScript {
   persistAcrossSessions: boolean;
 }
 
-// What reconcileInstances() and the permission listeners actually read back
-// off a registration — never more than its id.
+// reconcileInstances() と権限のリスナーが登録から実際に読み戻すもの＝id より
+// 先は一度も読まない。
 export interface RegisteredContentScriptRef {
   id: string;
 }
@@ -53,10 +53,10 @@ export interface InstanceScripting {
   getRegisteredContentScripts(): Promise<RegisteredContentScriptRef[]>;
 }
 
-// The host list, as the two operations this module performs on it. Narrower
-// than a storage area on purpose: where the list is actually kept is
-// utils/settings.ts's business (it is one field of the stored settings), and
-// nothing here needs to know.
+// ホストの一覧を、このモジュールがそれに対して行う2つの操作として表したもの。
+// 保管領域より狭くしてあるのは意図的＝一覧が実際にどこに置かれるかは
+// utils/settings.ts の担当（保管された設定の1フィールド）で、ここはそれを
+// 知る必要が無い。
 export interface InstanceStorage {
   getInstances(): Promise<string[]>;
   setInstances(hosts: string[]): Promise<void>;
@@ -76,11 +76,11 @@ export function originForHost(host: string): string {
   return `https://${host}/*`;
 }
 
-// The inverse of originForHost(), for permissions.onAdded — Chrome hands the
-// listener origin strings, not hosts. Re-validated through
-// normalizeInstanceHost() rather than trusted as-is, so an origin this module
-// did not mint (something a future feature grants, or Chrome re-adding a
-// static host_permissions entry) is ignored instead of registering garbage.
+// originForHost() の逆で、permissions.onAdded のためのもの＝Chrome がリスナーに
+// 渡すのはホストではなくオリジンの文字列。そのまま信じず
+// normalizeInstanceHost() を通し直すので、このモジュールが作ったのではない
+// オリジン（将来の機能が許可させたものや、Chrome が静的な host_permissions を
+// 足し直したもの）は、ゴミを登録する代わりに無視される。
 function hostForOrigin(origin: string): string | null {
   const match = /^https:\/\/([^/]+)\/\*$/.exec(origin);
   return match ? normalizeInstanceHost(match[1]) : null;
@@ -90,14 +90,14 @@ export function registrationIdForHost(host: string): string {
   return `${REGISTRATION_ID_PREFIX}${host}`;
 }
 
-// Accepts a bare hostname ("misskey.io") or a full https URL with nothing
-// past the host — no path, query, fragment, credentials, or port. Anything
-// else is what the acceptance criteria calls "not a URL, or one with a path
-// or query, or http": a non-URL string fails the URL parse; http fails the
-// protocol check; a path or query fails the pathname/search check. A port is
-// rejected too, even though nothing above asked for it — Chrome match
-// patterns cannot represent one, so keeping it would silently grant the
-// whole host on every port while the UI still shows just the host typed in.
+// 受け取るのは、裸のホスト名（"misskey.io"）か、ホストから先に何も付かない
+// 完全な https の URL＝経路もクエリも断片も資格情報もポートも無いもの。それ
+// 以外が、受け入れ条件の言う「URL でない・経路やクエリを持つ・http」に当たる＝
+// URL でない文字列は URL の解析で落ち、http はプロトコルの検査で落ち、経路と
+// クエリは pathname / search の検査で落ちる。ポートも拒む。上のどこもそれを
+// 求めていないが、Chrome の match パターンはポートを表せないので、残すと
+// 画面には打ち込まれたホストだけが出たまま、そのホストの全ポートを黙って
+// 許可することになる。
 export function normalizeInstanceHost(input: unknown): string | null {
   if (typeof input !== "string") {
     return null;
@@ -137,18 +137,18 @@ function contentScriptDefinition(host: string): RegisteredContentScript {
     js: [...MISSKEY_CONTENT_SCRIPT_FILES.js],
     css: [...MISSKEY_CONTENT_SCRIPT_FILES.css],
     runAt: RUN_AT,
-    // Chrome's default, named explicitly: the registration must survive a
-    // browser restart without this module re-registering it (reconcileInstances
-    // is the backstop for when that default is not enough on its own).
+    // Chrome の既定値を明示的に書いたもの＝登録は、このモジュールが登録し直さ
+    // なくてもブラウザの再起動を越えて残らなければならない（その既定値だけでは
+    // 足りない場合の受け皿が reconcileInstances）。
     persistAcrossSessions: true,
   };
 }
 
-// Requests the one origin the host needs and, only if the user grants it,
-// registers the content script and adds the host to storage. Must be called
-// from within a user gesture (a click handler) — browser.permissions.request()
-// rejects otherwise — so this cannot be relayed through a background message
-// without losing that gesture; the popup calls it directly.
+// そのホストが要るオリジン1つを要求し、利用者が許可した場合に限って content
+// script を登録し、ホストを保管庫へ足す。利用者の操作の中（クリックのハンドラ）
+// から呼ばなければならない＝そうでないと browser.permissions.request() が拒む。
+// だから background へメッセージで中継するとその操作が失われる＝popup が直接
+// 呼んでいる。
 export async function addInstance(
   host: string,
   { permissions, scripting, storage }: InstanceDeps,
@@ -160,9 +160,9 @@ export async function addInstance(
 
   const instances = await storage.getInstances();
   if (instances.includes(normalizedHost)) {
-    // Already added. Re-requesting would silently re-grant (Chrome does not
-    // re-prompt for an origin already held) and re-registering would throw on
-    // the now-duplicate id, so there is nothing left to do.
+    // 既に追加済み。要求し直しても黙って再許可されるだけだし（Chrome は既に
+    // 持っているオリジンを訊き直さない）、登録し直せば重複した id で例外に
+    // なるので、ここですることは何も残っていない。
     return { added: true };
   }
 
@@ -173,16 +173,15 @@ export async function addInstance(
     return { added: false, reason: "permission-denied" };
   }
 
-  // Chrome tears the popup down the instant the permission dialog appears
-  // (measured 2026-08-04, sift #28) — the grant itself still goes through on
-  // Chrome's side, but everything queued after this `await` can simply never
-  // run, silently, with nothing left to catch or log the interruption.
-  // handlePermissionsAdded, wired to browser.permissions.onAdded in the
-  // background entrypoint, is the backstop: it reacts to the grant Chrome
-  // actually made, independent of whether this popup survived to hear its
-  // own answer. That backstop can win the race and register this host before
-  // this line runs, so the check below is not an optimization — without it
-  // this call throws on the now-duplicate script id.
+  // Chrome は権限のダイアログが出た瞬間に popup を壊す（2026-08-04 に確認・
+  // sift #28）＝許可そのものは Chrome 側で通るが、この `await` より後ろに
+  // 並んだものは、捕まえる先もログに残す先も無いまま、黙って一度も走らないこと
+  // がありうる。background のエントリポイントで browser.permissions.onAdded に
+  // 繋いである handlePermissionsAdded が受け皿＝この popup が自分の答えを
+  // 聞くまで生き延びたかどうかとは無関係に、Chrome が実際に行った許可へ反応
+  // する。その受け皿がこの行より先にこのホストを登録しうるので、下の検査は
+  // 最適化ではない＝これが無いと、重複した script の id でこの呼び出しが例外に
+  // なる。
   const registrationId = registrationIdForHost(normalizedHost);
   const alreadyRegistered = (
     await scripting.getRegisteredContentScripts()
@@ -201,9 +200,9 @@ export async function addInstance(
   return { added: true };
 }
 
-// Drops the registration and the permission before dropping the host from
-// storage, so a failure partway through leaves the host still listed rather
-// than silently keeping access the UI no longer shows.
+// 保管庫からホストを落とす前に、登録と権限を先に落とす＝途中で失敗しても、
+// 画面がもう見せていない権限を黙って持ち続けるのではなく、ホストが一覧に
+// 残っている状態になる。
 export async function removeInstance(
   host: string,
   { permissions, scripting, storage }: InstanceDeps,
@@ -211,7 +210,7 @@ export async function removeInstance(
   await scripting
     .unregisterContentScripts({ ids: [registrationIdForHost(host)] })
     .catch(() => {
-      // Not registered — e.g. a previous removal died between these steps.
+      // 登録されていない＝例えば前回の削除がこの手順の途中で死んだ場合。
     });
   await permissions.remove({ origins: [originForHost(host)] });
 
@@ -219,15 +218,15 @@ export async function removeInstance(
   await storage.setInstances(instances.filter((existing) => existing !== host));
 }
 
-// Wired to browser.permissions.onAdded in the background entrypoint. This is
-// not the mirror of handlePermissionsRemoved below so much as the backstop
-// for addInstance() itself: Chrome fires this the moment a grant lands,
-// whether or not the popup that called permissions.request() is still alive
-// to act on its own answer (see the comment in addInstance()). Only fires
-// while the service worker is alive to hear it — a grant that lands while
-// Sift is not running is not a case that arises, since nothing but
-// addInstance() ever requests one of these origins, and that call cannot run
-// without the service worker already up to hold the popup's message port.
+// background のエントリポイントで browser.permissions.onAdded に繋いである。
+// これは下の handlePermissionsRemoved の鏡というより、addInstance() 自身の
+// 受け皿＝Chrome は許可が下りた瞬間にこれを発火させる。permissions.request()
+// を呼んだ popup が自分の答えに反応できるまで生きているかどうかとは無関係に
+// （addInstance() の中のコメントを参照）。発火するのは service worker が
+// それを聞けるだけ生きている間だけだが、Sift が動いていない間に許可が下りる
+// ことは起きない＝これらのオリジンを要求するのは addInstance() だけで、
+// その呼び出しは popup のメッセージポートを保つ service worker が既に立って
+// いなければ走れないから。
 export async function handlePermissionsAdded(
   addedPermissions: { origins?: string[] } | undefined,
   { scripting, storage }: Pick<InstanceDeps, "scripting" | "storage">,
@@ -260,11 +259,11 @@ export async function handlePermissionsAdded(
   }
 }
 
-// Wired to browser.permissions.onRemoved in the background entrypoint: a
-// reader can revoke a host from chrome://extensions directly, without going
-// through removeInstance, and the registration and stored host must not
-// outlive that. Only fires while the service worker is alive to hear it —
-// reconcileInstances() below covers the gap left when it was not.
+// background のエントリポイントで browser.permissions.onRemoved に繋いである＝
+// 読み手は removeInstance を通らずに chrome://extensions から直接ホストの権限を
+// 取り消せるので、登録と保管したホストがそれより長生きしてはならない。発火する
+// のは service worker がそれを聞けるだけ生きている間だけで、そうでなかった間に
+// 空いた穴は下の reconcileInstances() が埋める。
 export async function handlePermissionsRemoved(
   removedPermissions: { origins?: string[] } | undefined,
   { scripting, storage }: Pick<InstanceDeps, "scripting" | "storage">,
@@ -285,7 +284,7 @@ export async function handlePermissionsRemoved(
   await scripting
     .unregisterContentScripts({ ids: removedHosts.map(registrationIdForHost) })
     .catch(() => {
-      // Already unregistered.
+      // 既に登録が外れている。
     });
 
   await storage.setInstances(
@@ -293,12 +292,11 @@ export async function handlePermissionsRemoved(
   );
 }
 
-// Brings the registration set back in line with both storage and the
-// permissions Chrome actually still holds. Called once at startup to cover
-// three ways they can drift: a permission revoked from chrome://extensions
-// while Sift was not running to hear permissions.onRemoved, a registration
-// lost across an extension update, and a previous addInstance() that
-// granted the permission but died before it registered.
+// 登録の集合を、保管庫と、Chrome が実際にまだ持っている権限の両方へ合わせ直す。
+// 起動時に一度呼ばれ、ずれが生じる3つの経路を埋める＝Sift が
+// permissions.onRemoved を聞けるだけ動いていない間に chrome://extensions から
+// 取り消された権限、拡張機能の更新をまたいで失われた登録、そして権限は取れた
+// のに登録する前に死んだ前回の addInstance()。
 export async function reconcileInstances({
   permissions,
   scripting,
@@ -330,8 +328,8 @@ export async function reconcileInstances({
     }
   }
 
-  // A registration whose host is no longer in storage at all (e.g. a
-  // removeInstance() that saved storage but died before unregistering).
+  // ホストが保管庫にもう無い登録（例えば、保管庫は書けたのに登録を外す前に
+  // 死んだ removeInstance()）。
   const keptIds = new Set(kept.map(registrationIdForHost));
   for (const id of registeredIds) {
     if (

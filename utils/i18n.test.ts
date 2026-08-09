@@ -8,17 +8,17 @@ import { I18N_ATTRIBUTES, localizeDocument, t } from "./i18n.ts";
 const english = readMessages("en");
 const japanese = readMessages("ja");
 
-// Read through node rather than imported: `import.meta.url` is an http URL under
-// Vitest, and Vite's `?raw` import of an HTML entrypoint answers with what the
-// HTML pipeline made of it rather than the file as written.
+// import ではなく node で読む＝Vitest の下では `import.meta.url` が http の URL
+// になるし、HTML のエントリポイントを Vite の `?raw` で読むと、書いたままの
+// ファイルではなく HTML の処理を通った後のものが返る。
 function readFromRoot(path: string): string {
   return readFileSync(resolve(process.cwd(), path), "utf8");
 }
 
-// happy-dom resolves <link> and <script> while it parses, over http, from a
-// server no test is running — and reports the failure asynchronously, after the
-// test that caused it has already passed. Dropping the two tags leaves
-// everything this reads untouched.
+// happy-dom は解析しながら <link> と <script> を、どのテストも立てていない
+// サーバーへ http で取りに行く＝しかもその失敗を非同期に、原因のテストが通り
+// 終わった後で報告する。この2つのタグを落としても、ここが読むものは何も
+// 変わらない。
 function parseEntrypoint(path: string): Document {
   const html = readFromRoot(path)
     .replace(/<link\b[^>]*>/g, "")
@@ -26,23 +26,23 @@ function parseEntrypoint(path: string): Document {
   return new DOMParser().parseFromString(html, "text/html");
 }
 
-// Both surfaces with static markup. The toolbar's is built in code, where the
-// compiler already checks the names.
+// 静的なマークアップを持つ画面2つ。ツールバーのものはコードで組み立てられて
+// いて、名前はコンパイラが既に見ている。
 const STATIC_PAGES = [
   "entrypoints/options/index.html",
   "entrypoints/popup/index.html",
 ];
 
-// A locale file that is missing a name falls back to English silently, which
-// reads as a page half in the wrong language rather than as a failure.
-describe("the locale files", () => {
-  it("name the same messages", () => {
+// 名前が欠けたロケールファイルは黙って英語へ落ちる＝失敗としてではなく、
+// 半分だけ違う言語のページとして読み手に届く。
+describe("ロケールのファイル", () => {
+  it("同じメッセージを名指ししている", () => {
     expect(Object.keys(japanese).sort()).toEqual(Object.keys(english).sort());
   });
 
-  // A substitution written on one side alone leaves a literal $HIT$ on the page
-  // in that language, or drops the number entirely in the other.
-  it("agree on which messages take substitutions", () => {
+  // 片方にしか書かれていない差し込みは、その言語のページに $HIT$ をそのまま
+  // 残すか、もう片方で数を丸ごと落とす。
+  it("どのメッセージが差し込みを取るかで一致している", () => {
     for (const [key, entry] of Object.entries(english)) {
       expect({
         key,
@@ -54,7 +54,7 @@ describe("the locale files", () => {
     }
   });
 
-  it("leave no message empty", () => {
+  it("空のメッセージを残さない", () => {
     for (const [key, entry] of Object.entries({ ...english, ...japanese })) {
       expect({ key, empty: entry.message.trim() === "" }).toEqual({
         key,
@@ -64,16 +64,15 @@ describe("the locale files", () => {
   });
 });
 
-// The names in the markup are strings as far as the compiler is concerned —
-// nothing type-checks an attribute value — so this is what catches a rename.
-// index.html also carries the English text itself, for the moment before main.ts
-// runs and for anything that reads the markup without running it at all; holding
-// the two to each other is what keeps that copy from drifting into a second,
-// older set of words.
+// マークアップの中の名前は、コンパイラから見ればただの文字＝属性の値を型で
+// 見るものは何も無いので、名前の変更を捕まえるのはこれ。index.html は英語の
+// 文そのものも持っている＝main.ts が走る前の一瞬のためと、走らせずに
+// マークアップだけを読むもののため。両者を突き合わせておくことが、その写しが
+// 2つ目の・古い言い回しへずれていくのを止めている。
 describe.each(STATIC_PAGES)("%s", (path) => {
   const page = parseEntrypoint(path);
 
-  it("names only messages that exist, and writes what they say", () => {
+  it("存在するメッセージだけを名指しし、その中身を書いている", () => {
     const elements = page.querySelectorAll("[data-i18n]");
     expect(elements.length).toBeGreaterThan(0);
 
@@ -86,7 +85,7 @@ describe.each(STATIC_PAGES)("%s", (path) => {
     }
   });
 
-  it("does the same for the attributes it uses", () => {
+  it("使っている属性についても同じ", () => {
     for (const [attribute, target] of Object.entries(I18N_ATTRIBUTES)) {
       for (const element of page.querySelectorAll(`[${attribute}]`)) {
         const name = element.getAttribute(attribute);
@@ -99,9 +98,9 @@ describe.each(STATIC_PAGES)("%s", (path) => {
   });
 });
 
-// Between them the two pages have to exercise every attribute form, or a broken
-// one could sit unnoticed in whichever page stopped using it.
-it("every localized attribute appears in one of the pages", () => {
+// 2つのページで属性の形を全部使い切っていないと、壊れたものが、それを使わなく
+// なった方のページで気付かれないまま残りうる。
+it("翻訳される属性はどれか一方のページに出ている", () => {
   const pages = STATIC_PAGES.map(parseEntrypoint);
   for (const attribute of Object.keys(I18N_ATTRIBUTES)) {
     const found = pages.some(
@@ -112,11 +111,11 @@ it("every localized attribute appears in one of the pages", () => {
 });
 
 describe("t()", () => {
-  it("answers with the message", () => {
+  it("メッセージを返す", () => {
     expect(t("optionsInstanceAdd")).toBe(english.optionsInstanceAdd?.message);
   });
 
-  it("puts the substitutions in, in the order the message names them", () => {
+  it("メッセージが名指しした順で差し込みを入れる", () => {
     expect(t("toolbarStatusCounts", "3", "2", "1")).toBe(
       "3 hits · 2 rising · 1 hidden",
     );
@@ -124,7 +123,7 @@ describe("t()", () => {
 });
 
 describe("localizeDocument()", () => {
-  it("fills in text, placeholders and aria-labels", () => {
+  it("文字・placeholder・aria-label を埋める", () => {
     const root = render(`
       <p data-i18n="optionsTagline"></p>
       <input
@@ -146,9 +145,9 @@ describe("localizeDocument()", () => {
     );
   });
 
-  // The attribute forms write an attribute and nothing else: an <input> has no
-  // text of its own, and a button that took both would lose its label.
-  it("leaves the text alone where only an attribute was asked for", () => {
+  // 属性の形は属性だけを書き、他には何もしない＝<input> は自分の文字を持たない
+  // し、両方を受けるボタンは自分のラベルを失う。
+  it("属性だけを求められた所では文字に触れない", () => {
     const root = render(
       '<input data-i18n-placeholder="optionsInstancePlaceholder" value="kept">',
     );

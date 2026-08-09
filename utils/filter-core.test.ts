@@ -12,7 +12,7 @@ const settings = {
 const now = Date.parse("2026-08-01T12:00:00Z");
 
 describe("parseMetric", () => {
-  it("reads the shapes a reaction count is written in", () => {
+  it("反応の数が書かれうる形を読む", () => {
     expect(parseMetric("1,234")).toBe(1234);
     expect(parseMetric("1.2K")).toBe(1200);
     expect(parseMetric("1.2万 件のいいね")).toBe(12000);
@@ -20,13 +20,13 @@ describe("parseMetric", () => {
     expect(parseMetric("11788 件のいいね。いいねする")).toBe(11788);
   });
 
-  it("answers 0 for nothing readable", () => {
+  it("読めるものが無ければ 0 を返す", () => {
     expect(parseMetric("")).toBe(0);
   });
 });
 
 describe("classifyPost", () => {
-  it("keeps a post that reaches the minimum reaction count", () => {
+  it("最低の反応数に届いた投稿は残す", () => {
     expect(
       classifyPost(
         {
@@ -41,7 +41,7 @@ describe("classifyPost", () => {
     ).toEqual({ state: "hit", reason: "minimum-likes" });
   });
 
-  it("keeps a young post that reaches the lower rising count", () => {
+  it("新しい投稿は、低い方の上昇中の数に届けば残す", () => {
     expect(
       classifyPost(
         {
@@ -56,7 +56,7 @@ describe("classifyPost", () => {
     ).toEqual({ state: "rising", reason: "rising" });
   });
 
-  it("hides the same post once it is past the rising window", () => {
+  it("同じ投稿でも、上昇中の窓を過ぎたら隠す", () => {
     expect(
       classifyPost(
         {
@@ -71,7 +71,7 @@ describe("classifyPost", () => {
     ).toEqual({ state: "hidden", reason: "below-threshold" });
   });
 
-  it("hides a post with no media whatever it scored", () => {
+  it("メディアの無い投稿は、数がいくつでも隠す", () => {
     expect(
       classifyPost(
         { hasMedia: false, likeCount: 1000, createdAtMs: now, isRepost: false },
@@ -81,7 +81,7 @@ describe("classifyPost", () => {
     ).toEqual({ state: "hidden", reason: "no-media" });
   });
 
-  it("hides a repost while the setting is on", () => {
+  it("設定が入っている間、リポストは隠す", () => {
     expect(
       classifyPost(
         { hasMedia: true, likeCount: 1000, createdAtMs: now, isRepost: true },
