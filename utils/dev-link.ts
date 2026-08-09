@@ -1,49 +1,46 @@
-// Keeping the development worker attached to the development server.
+// 開発時の worker を開発サーバーへ繋いだままにするためのもの。
 //
-// WHY THIS EXISTS: in dev mode WXT does NOT put the content script in the
-// manifest. It builds the file, leaves `content_scripts` out, and registers the
-// script at runtime — but only in answer to the service worker opening a
-// WebSocket to the dev server and announcing itself. Nothing else ever performs
-// that registration, so a worker that is not attached means a content script
-// that does not exist, and pages load with no extension on them at all (#31).
+// なぜこれが要るか＝開発モードでは、WXT は content script を manifest へ入れない。
+// ファイルはビルドするが `content_scripts` は書かず、スクリプトは実行時に登録
+// する。しかもそれは、service worker が開発サーバーへ WebSocket を開いて名乗り
+// 出たことへの応答としてしか行われない。その登録を行うものは他に無いので、
+// 繋がっていない worker はそのまま「content script が存在しない」ことを意味し、
+// ページは拡張機能が1つも載らないまま読み込まれる（#31）。
 //
-// The worker's socket is opened once, when the worker starts, and is never
-// retried. Two ordinary things therefore break the link for good:
+// worker のソケットは worker の起動時に一度だけ開かれ、二度と試されない。だから
+// ありふれた2つのことが、この繋がりを恒久的に壊す。
 //
-//   - the browser was open before `npm run dev` was — the socket was refused,
-//     the worker stays alive (WXT pings an API every 5s to keep it that way) and
-//     never tries again
-//   - the dev server was restarted — the socket closed, and again nothing
-//     reconnects it
+//   - `npm run dev` より前にブラウザが開いていた＝ソケットは拒まれ、worker は
+//     生きたまま（WXT が 5 秒ごとに API を叩いてそう保つ）二度と試さない
+//   - 開発サーバーを起動し直した＝ソケットは閉じ、やはりそれを繋ぎ直すものが
+//     無い
 //
-// The one thing that reliably re-establishes it is starting the worker over,
-// which `browser.runtime.reload()` does. So the worker watches for those two
-// states and reloads itself out of them. The server's boot id is what makes them
-// visible: "the id I saw when I started" versus "the id up now".
+// 確実に繋ぎ直せる唯一の手段が worker を起動し直すことで、それをするのが
+// `browser.runtime.reload()`。だから worker はその2つの状態を見張り、そこから
+// 自分を起動し直して抜ける。それを見えるようにしているのがサーバーの boot id＝
+// 「自分が起動したときに見た id」と「今立っている id」の対比。
 //
-// Only the development build carries any of this — see entrypoints/background.ts
-// for how it is compiled out of a release.
+// これを持っているのは開発ビルドだけ＝リリースからどう落とされるかは
+// entrypoints/background.ts を参照。
 
-// Which server generation this worker has already reloaded for. In session
-// storage rather than memory because a reload IS the loss of memory: without it
-// the worker would come back, see the same state and reload again forever.
+// この worker が、どの世代のサーバーのために既に起動し直したか。記憶ではなく
+// session ストレージなのは、起動し直すこと自体が記憶の消失だから＝これが無いと
+// worker は戻ってきて同じ状態を見て、永久に起動し直し続ける。
 export const DEV_LINK_RELOAD_KEY = "siftDevLinkReloadedBoot";
 
-// A content script announcing that it ran. It is the only evidence from outside
-// Chrome that the registration took effect, and it doubles as the event that
-// wakes a sleeping worker when a matching page loads.
+// content script が「自分は走った」と名乗るためのもの。登録が効いたことを
+// Chrome の外から示す唯一の証拠であり、同時に、対象のページが読み込まれたときに
+// 眠っている worker を起こすイベントも兼ねる。
 export const DEV_CONTENT_STARTED = "sift:dev-content-started";
 
-// The first filter pass a content script completes on a page. "The script
-// loaded" and "the script did its job" are different claims, and only the second
-// one answers whether the extension works — so the counts and whether the
-// toolbar mounted go out too. Once per runtime: the pass runs on every frame
-// that changes the timeline.
+// content script がページ上で最初に完了させたフィルタの一巡。「スクリプトが
+// 読み込まれた」と「スクリプトが仕事をした」は別の主張で、拡張機能が動いて
+// いるかに答えるのは後者だけ＝だから数と、ツールバーが載ったかどうかも一緒に
+// 出す。実行環境につき1回＝一巡自体はタイムラインを変える描画のたびに走る。
 export const DEV_FILTER_PASS = "sift:dev-filter-pass";
 
-// The two messages the content script sends the background worker over
-// browser.runtime.sendMessage — the only traffic on that channel in a
-// development build.
+// content script が browser.runtime.sendMessage で background の worker へ送る
+// 2つのメッセージ＝開発ビルドでその経路を通るのはこれだけ。
 export interface DevContentStartedMessage {
   type: typeof DEV_CONTENT_STARTED;
   page: string;
@@ -56,17 +53,17 @@ export interface DevFilterPassMessage {
 export type DevLinkMessage = DevContentStartedMessage | DevFilterPassMessage;
 
 export interface DevLinkProbe {
-  // server generation, null when it is down
+  // サーバーの世代。落ちていれば null
   boot: string | null;
-  // has a build been written to disk
+  // ビルドがディスクへ書かれたか
   ready: boolean;
-  // is this the worker's first probe
+  // これが worker の最初の問い合わせか
   isFirstProbe: boolean;
-  // generation adopted when the worker started
+  // worker の起動時に引き受けた世代
   bootAtStart?: string;
-  // content scripts registered right now
+  // 今この時点で登録されている content script
   registeredCount: number;
-  // generation already reloaded for
+  // 既にそのために起動し直した世代
   reloadedForBoot?: string;
 }
 
@@ -78,10 +75,9 @@ export type DevLinkAction =
   | "reload"
   | "waiting";
 
-// Split out from the worker because every interesting case is a combination of
-// "is the server up", "is it the same server" and "have I already tried" — which
-// is exactly the shape that is miserable to reproduce in a browser and trivial
-// to state in a test.
+// worker から切り出してあるのは、意味のある場合分けがどれも「サーバーは立って
+// いるか」「同じサーバーか」「もう試したか」の組み合わせだから＝ブラウザで
+// 再現するのが最悪に面倒で、テストで書くのは何でもない形。
 export function decideDevLinkAction({
   boot,
   ready,
@@ -94,15 +90,15 @@ export function decideDevLinkAction({
     return "server-down";
   }
 
-  // The server answers before it has written the build. Reloading an unpacked
-  // extension whose folder is momentarily empty is not a retry — Chrome unloads
-  // the extension and tells the person so in a dialog. Nothing to do but wait.
+  // サーバーはビルドを書き終える前に応答する。中身が一瞬空の展開済み拡張機能を
+  // 再読み込みするのは再試行ではない＝Chrome は拡張機能を降ろし、そのことを
+  // ダイアログで人に伝える。待つ以外にすることは無い。
   if (!ready) {
     return "building";
   }
 
-  // The worker's socket was opened moments ago against this same server, so it
-  // is attached — or will be within the second it takes to answer.
+  // worker のソケットはついさっき、この同じサーバーに対して開かれた＝だから
+  // 繋がっているか、応答にかかる1秒のうちに繋がる。
   if (isFirstProbe) {
     return "adopt";
   }
@@ -111,8 +107,8 @@ export function decideDevLinkAction({
     return "linked";
   }
 
-  // One reload per server generation. If coming back did not fix it, something
-  // else is wrong and a loop would only hide it.
+  // サーバーの世代ごとに起動し直しは1回。戻ってきても直っていないなら別の何かが
+  // おかしいのであって、繰り返してもそれを隠すだけ。
   if (reloadedForBoot === boot) {
     return "waiting";
   }

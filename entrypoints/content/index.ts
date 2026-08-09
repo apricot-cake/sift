@@ -26,24 +26,24 @@ import { settingsItem } from "../../utils/settings-storage.ts";
 import { SITE_MATCHES } from "../../utils/site-matches.ts";
 import "./style.css";
 
-// The custom element WXT hosts the shadow root on. Kebab-case is required.
-// Everything below this line is inside that shadow root, TOOLBAR_CSS included —
-// which is where the host's own placement is written, since a rule out in
-// entrypoints/content/style.css loses to what WXT puts in here.
+// WXT が shadow root を載せるカスタム要素。ケバブケースであることが要る。
+// この行から下は全部その shadow root の中で、TOOLBAR_CSS もそこに含まれる＝
+// ホスト自身の置き場所がそこに書いてあるのは、entrypoints/content/style.css の
+// 外側の規則が、WXT がここへ入れるものに負けるから。
 const TOOLBAR_TAG = "sift-toolbar";
 
-// The toolbar's own styles, isolated by the shadow root. Passed to WXT rather
-// than written into the markup so the two stay separable, and kept out of
-// entrypoints/content/style.css because that stylesheet is injected into the
-// page itself, where none of this should reach.
+// ツールバー自身のスタイル。shadow root で隔ててある。マークアップへ書き込まず
+// WXT へ渡しているのは両者を切り離せるようにするためで、
+// entrypoints/content/style.css へ入れていないのは、あのスタイルシートがページ
+// そのものへ注入されるから＝ここのどれもそこへ届いてはならない。
 //
-// WHERE THE TOOLBAR SITS IS IN HERE, not in that stylesheet, and `all: initial`
-// is written out by hand rather than left to WXT. Left to itself WXT prepends
-// `:host{all:initial !important}` to this — and !important beats every
-// declaration below it, so the host lands back at `position: static` in the
-// page's flow, halfway down the timeline (measured 2026-08-08 on x.com/home).
-// `inheritStyles: true` is what turns that off. The reset is still wanted, and
-// still first: what it must not be is unbeatable by the rules right after it.
+// ツールバーの置き場所はここにある。あのスタイルシートではない。そして
+// `all: initial` は WXT に任せず手で書いてある。任せると WXT はこれの先頭へ
+// `:host{all:initial !important}` を足す＝!important はその下の宣言全部に勝つ
+// ので、ホストはページの流れの中の `position: static` へ戻り、タイムラインの
+// 途中に落ちる（2026-08-08 に x.com/home で確認）。それを止めるのが
+// `inheritStyles: true`。打ち消し自体は今も欲しいし、今も先頭に置く。あっては
+// ならないのは、その直後の規則から勝てないことの方。
 const TOOLBAR_CSS = `
   :host {
     all: initial;
@@ -97,24 +97,24 @@ export function startContentRuntime(
   ctx: ContentScriptContext,
   maybeAdapter: ServiceAdapter | null,
 ) {
-  // Nothing to read here. The runtime still answers dispose() so the caller
-  // does not have to know whether it started.
+  // ここには読むものが無い。それでも実行環境が dispose() に答えるのは、呼び出し
+  // 側が「始まったかどうか」を知らずに済むように。
   if (!maybeAdapter) {
     return { dispose() {} };
   }
-  // Reassigned into a fresh, never-reassigned const so the functions declared
-  // below keep the non-null narrowing — TS does not carry a parameter's
-  // narrowing into hoisted function declarations on its own.
+  // 一度も代入し直されない新しい const へ入れ直してあるのは、下で宣言する関数が
+  // null でないという絞り込みを保てるように＝TS は引数の絞り込みを、巻き上げ
+  // られた関数宣言の中まで自分では運ばない。
   const adapter = maybeAdapter;
 
-  // Tied to the runtime's life rather than the world's: the injection that
-  // replaces this script disposes the previous runtime first, so there is no
-  // window in which both are subscribed.
+  // 世界の寿命ではなく、この実行環境の寿命に結び付けてある＝このスクリプトを
+  // 差し替える注入は先に前の実行環境を片付けるので、両方が購読している時間は
+  // 存在しない。
   const stopUncaughtReporting = startUncaughtReporting({
     target: window,
     source: "content",
-    // X's own exceptions reach this same window, and recording them would be
-    // a false report. Only frames naming the extension's origin are Sift's.
+    // X 自身の例外もこの同じ window に届き、それを記録すれば誤報になる。Sift の
+    // ものは、拡張機能のオリジンを名乗るフレームだけ。
     filterToOwnCode: true,
   });
 
@@ -123,24 +123,23 @@ export function startContentRuntime(
   let routeTimer: number | null = null;
   let filterFrame: number | null = null;
   let showAllTemporarily = false;
-  // WXT builds the host element, the shadow root and the container inside it.
-  // `toolbar` is that UI once it exists — it is built asynchronously, so the
-  // first filter passes can run before there is anything to mount.
+  // ホストの要素・shadow root・その中の入れ物を作るのは WXT。`toolbar` は
+  // それができた後のその UI＝作られるのは非同期なので、載せる先ができる前に
+  // 最初のフィルタの一巡が走りうる。
   let toolbar: ShadowRootContentScriptUi<void> | null = null;
   let toolbarMounted = false;
   let disposed = false;
   let reportedFilterPass = false;
 
-  // Where the toolbar's own elements are, while it is on screen. Everything
-  // that reads or writes them goes through here rather than holding on to a
-  // container across a mount: WXT empties it on remove and fills a fresh one
-  // on the next mount.
+  // ツールバーが画面に出ている間、その要素がどこにあるか。それを読み書きする
+  // ものは全部ここを通す＝載せ替えをまたいで入れ物を持ち続けない。WXT は外す
+  // ときにそれを空にし、次に載せるときは新しいものを埋める。
   function toolbarRoot(): ParentNode | null {
     return toolbarMounted && toolbar ? toolbar.uiContainer : null;
   }
 
-  // Which of image and video counts as media is the reader's setting, so the
-  // two arrive separately from the adapter and are folded together here.
+  // 画像と動画のどちらをメディアと数えるかは読み手の設定なので、2つは
+  // アダプターから別々に届き、ここで畳み合わされる。
   function hasMedia(postCard: Element): boolean {
     const { hasImage, hasVideo } = adapter.readMedia(postCard);
     return settings.mediaMode === "images" ? hasImage : hasImage || hasVideo;
@@ -219,8 +218,8 @@ export function startContentRuntime(
     const counts = { hit: 0, rising: 0, hidden: 0 };
 
     for (const postCard of postCards) {
-      // Posts on a live page are always HTMLElements; the adapter contract
-      // only promises Element, since that is all it reads.
+      // 生きたページ上の投稿は必ず HTMLElement。アダプターの約束が Element
+      // までなのは、そこまでしか読まないから。
       const cell = adapter.findPostCell(postCard) as HTMLElement;
 
       if (!settings.enabled) {
@@ -235,8 +234,8 @@ export function startContentRuntime(
           createdAtMs: adapter.readCreatedAt(postCard),
           isRepost: adapter.readIsRepost(postCard),
         },
-        // Which numbers those counts are compared against is the service's,
-        // not this loop's: Misskey's reactions have their own pair.
+        // その数をどの数と比べるかはサービスの話で、この繰り返しの話では
+        // ない＝Misskey のリアクションは専用の組を持つ。
         thresholdsFor(settings, adapter.thresholdKeys),
       );
 
@@ -246,8 +245,8 @@ export function startContentRuntime(
 
     updateToolbarCounts(counts);
 
-    // Once per runtime, tell the development worker what the first pass did.
-    // See utils/dev-link.ts — compiled out of a release with the guard.
+    // 実行環境につき1回、最初の一巡が何をしたかを開発時の worker へ伝える。
+    // utils/dev-link.ts を参照＝門と一緒にリリースから落とされる。
     if (__SIFT_DEV__ && !reportedFilterPass) {
       reportedFilterPass = true;
       browser.runtime
@@ -279,15 +278,15 @@ export function startContentRuntime(
   function saveSettings(partialSettings: Partial<Settings>): void {
     const nextSettings = normalizeSettings({ ...settings, ...partialSettings });
     void settingsItem.setValue(nextSettings).catch(() => {
-      // Nowhere to report it from a content script, and the toolbar already
-      // shows the value the reader chose. The watch below re-reads whatever
-      // storage actually holds if the write did land after all.
+      // content script からはこれを報告する先が無いし、ツールバーは既に読み手が
+      // 選んだ値を出している。書き込みが結局届いていたなら、下の watch が保管庫の
+      // 実際の中身を読み直す。
     });
   }
 
-  // How far one press of a threshold input's arrow moves it. Derived from
-  // that threshold's own default so it stays proportional to the service's
-  // scale: X counts likes in the hundreds, Misskey reactions in the tens.
+  // しきい値の入力の矢印を1回押したときに動く幅。そのしきい値自身の既定値から
+  // 導いてあるので、サービスの規模に釣り合ったままになる＝X のいいねは百の桁、
+  // Misskey のリアクションは十の桁。
   function thresholdStep(key: ThresholdKey): number {
     return Math.max(1, Math.round(defaults[key] / 10));
   }
@@ -405,8 +404,8 @@ export function startContentRuntime(
     }
   }
 
-  // The whole settings value, since it is stored as one — nothing to merge
-  // back into what this runtime already had.
+  // 設定は1つの値として保管されているので、丸ごと来る＝この実行環境が既に
+  // 持っていたものへ差分を戻す作業は無い。
   function handleSettingsChange(storedSettings: Settings | null): void {
     if (disposed) {
       return;
@@ -438,7 +437,7 @@ export function startContentRuntime(
     try {
       unwatchSettings();
     } catch {
-      // The extension context may already be invalidated.
+      // 拡張機能のコンテキストが既に無効になっているかもしれない。
     }
     unmountToolbar();
   }
@@ -467,28 +466,27 @@ export function startContentRuntime(
       routeTimer = window.setInterval(handleRoute, 750);
     })
     .catch(() => {
-      // The extension context may already be invalidated — this runtime is
-      // being replaced, or the extension was reloaded under the page. The
-      // defaults it started with stay in place and nothing else runs.
+      // 拡張機能のコンテキストが既に無効になっているかもしれない＝この実行環境が
+      // 差し替えられている最中か、ページの足元で拡張機能が再読み込みされたか。
+      // 起動時の既定値がそのまま残り、他には何も走らない。
     });
 
-  // Built once, mounted and removed as the page gains and loses posts. The
-  // API is async — WXT fetches the stylesheet over the network when a content
-  // script hands its CSS over that way, which this one does not — so the first
-  // filter passes can run before there is a toolbar to show, and ask again
-  // here once there is.
+  // 作るのは一度きりで、ページが投稿を得たり失ったりするのに合わせて載せたり
+  // 外したりする。この API は非同期＝content script が CSS をそのやり方で渡した
+  // 場合、WXT はスタイルシートをネットワーク越しに取りに行く（これはそうして
+  // いない）。だから見せるツールバーができる前に最初のフィルタの一巡が走りうる
+  // ので、できた時点でここからもう一度頼む。
   void createShadowRootUi<void>(ctx, {
     name: TOOLBAR_TAG,
-    // "inline" leaves WXT out of where this sits; TOOLBAR_CSS places it. The
-    // other two positions ("overlay", "modal") write inline styles onto the
-    // host and stretch a container across the viewport, which is a different
-    // thing from a box in one corner.
+    // "inline" は、これがどこに座るかから WXT を外す＝置くのは TOOLBAR_CSS。
+    // 他の2つ（"overlay"・"modal"）はホストへインラインのスタイルを書き、
+    // 入れ物を画面いっぱいに広げる＝隅の箱1つとは別のもの。
     position: "inline",
     anchor: "body",
     css: TOOLBAR_CSS,
-    // Stops WXT prepending `:host{all:initial !important}` — see TOOLBAR_CSS,
-    // which does the reset itself, without the !important that made every rule
-    // after it unreachable.
+    // WXT が `:host{all:initial !important}` を先頭へ足すのを止める＝打ち消しは
+    // TOOLBAR_CSS が自分でやっている。その後ろの規則を全部届かなくしていた
+    // !important 抜きで。
     inheritStyles: true,
     onMount(container) {
       container.innerHTML = toolbarMarkup();
@@ -506,8 +504,8 @@ export function startContentRuntime(
       scheduleFilter();
     })
     .catch(() => {
-      // Filtering runs without it; what is lost is the way to change the
-      // settings from the page itself.
+      // フィルタはこれが無くても動く。失われるのは、ページ自身から設定を変える
+      // 手段の方。
     });
 
   const unwatchSettings = settingsItem.watch(handleSettingsChange);
@@ -520,14 +518,14 @@ export default defineContentScript({
   matches: SITE_MATCHES,
   runAt: "document_idle",
   main(ctx) {
-    // A re-injection — WXT's dev mode injecting a fresh copy into a tab the
-    // previous generation still holds — runs this file again in a realm that may
-    // still carry the old listeners and DOM. The owner symbol is how the incoming
-    // generation finds the outgoing one and takes it down first; without it the
-    // two draw the same toolbar twice and both filter the same posts.
+    // 注入し直し＝WXT の開発モードが、前の世代がまだ握っているタブへ新しい写しを
+    // 注入すること。これはこのファイルを、古いリスナーと DOM をまだ抱えている
+    // かもしれない領域でもう一度走らせる。入ってくる世代が出ていく世代を見つけ、
+    // 先にそれを降ろすための手掛かりが、持ち主を示すシンボル。これが無いと2つが
+    // 同じツールバーを二重に描き、両方が同じ投稿をフィルタする。
     //
-    // globalThis has no index signature for an arbitrary symbol — cast once at
-    // this one access point rather than widening globalThis's type project-wide.
+    // globalThis は任意のシンボルに対する添字の型を持たない＝globalThis の型を
+    // プロジェクト全体で広げるのではなく、この1箇所でだけ変換する。
     const runtimeSymbol = Symbol.for(CONTENT_RUNTIME_KEY);
     const runtimeGlobal = globalThis as unknown as Record<
       symbol,
@@ -535,20 +533,20 @@ export default defineContentScript({
     >;
     runtimeGlobal[runtimeSymbol]?.dispose();
     runtimeGlobal[runtimeSymbol] = startContentRuntime(
-      // Everything WXT hangs off this injection: the toolbar's shadow root is
-      // built against it, so it comes down with the script that made it.
+      // WXT がこの注入にぶら下げるもの全部＝ツールバーの shadow root はこれに
+      // 対して作られるので、それを作ったスクリプトと一緒に降りる。
       ctx,
-      // The page itself, not only its host: a host Sift was not built for is
-      // one the reader added as a Misskey instance, and the page is what
-      // confirms it (utils/adapters/index.ts).
+      // ホストだけでなくページ自身も渡す＝Sift 向けに作られていないホストは、
+      // 読み手が Misskey のインスタンスとして追加したものであり、それを確かめる
+      // のはページの方（utils/adapters/index.ts）。
       selectAdapter(location.hostname, document),
     );
 
-    // Tell the development worker this page got the script. It is the one piece
-    // of evidence for "the extension is actually on the page" that can be read
-    // without a person looking at the browser, and in dev mode that question has
-    // a real answer either way (#31). Compiled out of a release with the guard.
-    // The path only — a log file has no business holding query strings.
+    // このページがスクリプトを受け取ったことを開発時の worker へ伝える。
+    // 「拡張機能が実際にページに載っている」ことの証拠のうち、人がブラウザを
+    // 見なくても読める唯一のもので、開発モードではこの問いにどちらの答えも
+    // 現実にありうる（#31）。門と一緒にリリースから落とされる。経路だけを送る＝
+    // ログファイルがクエリ文字列を抱える理由は無い。
     if (__SIFT_DEV__) {
       browser.runtime
         .sendMessage({
@@ -556,7 +554,8 @@ export default defineContentScript({
           page: `${location.origin}${location.pathname}`,
         })
         .catch(() => {
-          // No worker awake to hear it, and starting one is the point.
+          // それを聞ける worker が起きていない＝そしてそれを起こすことがこの
+          // メッセージの目的。
         });
     }
   },

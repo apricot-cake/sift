@@ -1,22 +1,21 @@
-// The development server's address, in one place because three parties have to
-// agree on it: wxt.config.ts (which starts the server), the development service
-// worker (which posts to it), and the Vite plugin that answers the endpoints.
+// 開発サーバーの住所。1箇所にまとめてあるのは、3者がこれで一致していなければ
+// ならないから＝wxt.config.ts（サーバーを起動する）・開発時の service worker
+// （そこへ送る）・エンドポイントに答える Vite のプラグイン。
 //
-// Fixed rather than negotiated. The extension is built against this address, and
-// only one dev server can be up at a time — taking the port is how a second one
-// finds out.
+// 交渉せず固定してある。拡張機能はこの住所に対してビルドされるし、開発サーバーは
+// 同時に1つしか立てられない＝2つ目がそれを知る手段がポートの奪い合い。
 //
-// THE HOST IS PART OF THAT AGREEMENT and has to be spelled the same way on both
-// sides. WXT defaults the dev server host to `localhost`, which on this machine
-// resolves to ::1 and binds there ONLY: everything the worker posted to
-// 127.0.0.1 was refused, so nothing the extension recorded ever reached the log
-// file (measured 2026-08-02, #31). Pinning the host makes the worker's origin,
-// the manifest's host permission, the page CSP and the HMR socket name one
-// address.
+// ホストもその一致の一部で、両側で同じ綴りでなければならない。WXT の既定の
+// 開発サーバーのホストは `localhost` で、この機械ではそれが ::1 に解決され、
+// そこにしか束縛されない＝worker が 127.0.0.1 へ送ったものは全部拒まれ、
+// 拡張機能が記録したものは1つもログファイルへ届かなかった（2026-08-02 に
+// 確認・#31）。ホストを固定することで、worker のオリジン・manifest のホスト
+// 権限・ページの CSP・HMR ソケットの名前が1つの住所になる。
 export const DEV_SERVER_HOST = "127.0.0.1";
 export const DEV_SERVER_PORT = 51732;
 export const DEV_SERVER_ORIGIN = `http://${DEV_SERVER_HOST}:${DEV_SERVER_PORT}`;
 export const ERROR_LOG_ENDPOINT = "/__sift_error_log";
-// Answers which server process is up, so the worker can tell "the server I am
-// connected to" from "a server that started after I did". See utils/dev-link.ts.
+// どのサーバーのプロセスが立っているかを答える＝worker が「自分が繋がっている
+// サーバー」と「自分より後に起動したサーバー」を見分けられるように。
+// utils/dev-link.ts を参照。
 export const DEV_PING_ENDPOINT = "/__sift_dev_ping";

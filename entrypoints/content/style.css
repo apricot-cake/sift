@@ -7,11 +7,10 @@ body.sift-show-all [data-sift-filter-state="hidden"] {
   opacity: 0.35 !important;
 }
 
-/* The line is drawn on the element that carries the state — the cell the
-   adapter's findPostCell() returns — and not on a post card inside it. Naming a
-   service's post card here would draw the line on that service only, and would
-   put page structure back into the CSS that the adapters were split out to
-   hold. */
+/* 線を引く相手は状態を持つ要素＝アダプターの findPostCell() が返すセルであって、
+   その中の投稿カードではない。ここでどれかのサービスの投稿カードを名指しすると、
+   線はそのサービスにだけ引かれることになるし、画面の作りを抱えさせるために
+   アダプターを切り出したのに、それを CSS へ戻すことになる。 */
 [data-sift-filter-state="hit"] {
   box-shadow: inset 3px 0 0 rgb(37, 99, 235);
 }

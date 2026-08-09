@@ -23,49 +23,48 @@ import {
 } from "../utils/instances.ts";
 import { instanceStorage } from "../utils/settings-storage.ts";
 
-// Three jobs share this file. Keeping Misskey instance registrations correct
-// runs in every build; forwarding the development error log and tracking the
-// dev-link both run only in development builds, because Chrome shows that
-// information to a person looking at a screen and to nobody else:
+// このファイルは3つの仕事を持っている。Misskey インスタンスの登録を正しく
+// 保つ仕事はどのビルドでも走る。開発時のエラーログの送り出しと dev-link の
+// 追跡は開発ビルドでしか走らない＝Chrome がその情報を見せる相手は、画面を
+// 見ている人だけで、他の誰でもないから。
 //
-//   - browser.permissions can be revoked outside the extension (a reader
-//     clearing it from chrome://extensions, or Chrome revoking it itself), so
-//     every build reconciles Misskey instance registrations against granted
-//     permissions at startup and keeps listening for permissions.onRemoved
-//     while running (see the code below, outside the __SIFT_DEV__ guard).
-//     It also listens for permissions.onAdded, which is not the mirror image
-//     it looks like: it is the backstop for addInstance() losing its own
-//     popup mid-flight (see utils/instances.ts).
-//   - uncaught exceptions reach only the error box of chrome://extensions, which
-//     nothing outside Chrome can read. Every surface writes them to a ring
-//     buffer in browser.storage.local (utils/error-log.ts); this worker carries
-//     that buffer out to ~/.sift/extension-errors.log through the development
-//     server's endpoint.
-//   - in dev mode the content script only exists while this worker is attached
-//     to the development server (utils/dev-link.ts). Whether it is attached, and
-//     whether a page actually got the script, go to the same file.
+//   - browser.permissions は拡張機能の外から取り消されうる（読み手が
+//     chrome://extensions で消す、Chrome 自身が取り消す）ので、どのビルドも
+//     起動時に Misskey インスタンスの登録を実際の許可へ合わせ直し、動いている
+//     間は permissions.onRemoved を聞き続ける（下の、__SIFT_DEV__ の外側の
+//     コード）。permissions.onAdded も聞くが、これは見た目ほど鏡像ではない＝
+//     addInstance() が途中で自分の popup を失った場合の受け皿
+//     （utils/instances.ts）。
+//   - 捕まえ損ねた例外が届く先は chrome://extensions のエラー欄だけで、そこは
+//     Chrome の外からは誰にも読めない。どの画面もそれを
+//     browser.storage.local の環状バッファへ書き（utils/error-log.ts）、この
+//     worker がそのバッファを開発サーバーのエンドポイント経由で
+//     ~/.sift/extension-errors.log へ運び出す。
+//   - 開発モードでは、content script はこの worker が開発サーバーへ繋がって
+//     いる間しか存在しない（utils/dev-link.ts）。繋がっているかどうかも、
+//     ページが実際にスクリプトを受け取ったかどうかも、同じファイルへ行く。
 //
-// WHY THE RELEASE BUILD STILL CARRIES THIS FILE: `__SIFT_DEV__` is folded to a
-// constant at build time (wxt.config.ts, keyed on Vite's command), so in a
-// release build everything below the guard is dead code and drops out. What
-// ships is the Misskey instance reconciliation and its permissions.onRemoved
-// listener — real listeners Chrome has a reason to start the worker for —
-// plus an otherwise empty worker for the dev-only half. The capture half of
-// error reporting stays active in every build regardless: the buffer keeps
-// filling in the daily browser, it simply has nobody to forward it until a
-// development build reads it.
+// なぜリリースビルドもこのファイルを持っているか＝`__SIFT_DEV__` はビルド時に
+// 定数へ畳まれるので（wxt.config.ts が Vite の command で決める）、リリース
+// ビルドではこの門より下は全部が到達不能になって落ちる。出荷されるのは
+// Misskey インスタンスの合わせ直しと、その permissions.onRemoved のリスナー＝
+// Chrome が worker を起こす理由になる本物のリスナー。加えて、開発専用の半分に
+// ついては中身の無い worker。エラー報告の「集める側」はそれとは無関係に
+// どのビルドでも生きている＝日常のブラウザでもバッファは埋まり続け、ただ開発
+// ビルドがそれを読むまで送る相手がいないだけ。
 //
-// Re-injecting content scripts into open tabs, which this file used to do, is
-// now WXT's dev mode doing it.
+// かつてこのファイルがやっていた、開いているタブへの content script の注入
+// し直しは、今は WXT の開発モードがやっている。
 
-// How often to ask the development server whether it is up and which generation
-// it is. Matches the interval WXT already uses to keep this worker alive, so it
-// adds no wake-ups of its own.
+// 開発サーバーへ、立っているかとどの世代かを訊く間隔。WXT がこの worker を
+// 生かしておくために既に使っている間隔に合わせてあるので、これ自身が起床を
+// 増やすことはない。
 const DEV_LINK_INTERVAL_MS = 5000;
 
-// Which server generation this worker already reloaded itself for. Session
-// storage, so it outlives the reload it records and is gone by the next browser
-// session — one reload per generation, and a clean slate after a restart.
+// この worker が、どの世代のサーバーのために既に自分を起動し直したか。session
+// ストレージなので、それが記録する起動し直しより長生きし、次のブラウザの
+// セッションの頃には消えている＝世代ごとに起動し直しは1回で、再起動の後は
+// まっさら。
 const devLinkReloadItem = storage.defineItem<string>(
   `session:${DEV_LINK_RELOAD_KEY}`,
 );
@@ -77,25 +76,25 @@ export default defineBackground(() => {
     storage: instanceStorage,
   };
 
-  // Repairs drift between settings and what Chrome actually still grants —
-  // see utils/instances.ts for the three ways that happens. Best-effort: a
-  // failure here gets another chance at the next startup.
+  // 設定と、Chrome が実際にまだ許可しているものとのずれを直す＝それが起きる
+  // 3つの経路は utils/instances.ts を参照。best-effort であり、ここで失敗
+  // しても次の起動でもう一度機会がある。
   reconcileInstances(instanceDeps).catch(() => {});
 
-  // A reader can revoke a Misskey origin from chrome://extensions directly,
-  // bypassing removeInstance() entirely. This is the one build-independent
-  // way Sift hears about it while running; reconcileInstances() above covers
-  // the case where it was not running to hear it.
+  // 読み手は removeInstance() を丸ごと迂回して、chrome://extensions から直接
+  // Misskey のオリジンを取り消せる。動いている間にそれを Sift が聞く、ビルドに
+  // 依らない唯一の経路がこれ。聞けるだけ動いていなかった場合は、上の
+  // reconcileInstances() が埋める。
   browser.permissions.onRemoved.addListener((removed) => {
     handlePermissionsRemoved(removed, instanceDeps).catch(() => {});
   });
 
-  // The backstop for addInstance(): Chrome tears the popup down the instant
-  // its permission dialog appears, which can silently abort addInstance()
-  // before it registers the content script or saves the host (measured
-  // 2026-08-04, #28) even though the grant itself already went through. This
-  // listener reacts to the grant Chrome actually made, not to the popup
-  // call surviving long enough to hear its own answer.
+  // addInstance() の受け皿＝Chrome は権限のダイアログが出た瞬間に popup を
+  // 壊すので、許可そのものは既に通っているのに、content script を登録する前
+  // やホストを保管する前に addInstance() が黙って中断されることがある
+  // （2026-08-04 に確認・#28）。このリスナーが反応するのは Chrome が実際に
+  // 行った許可であって、popup の呼び出しが自分の答えを聞くまで生き延びたか
+  // どうかではない。
   browser.permissions.onAdded.addListener((added) => {
     handlePermissionsAdded(added, instanceDeps).catch(() => {});
   });
@@ -114,28 +113,28 @@ export default defineBackground(() => {
   const postEntries = async (entries: unknown) => {
     const response = await fetch(errorLogUrl, {
       method: "POST",
-      // text/plain keeps this a simple request, so the post never depends on a
-      // preflight being answered.
+      // text/plain にしておけばこれは単純リクエストのままなので、この送信が
+      // プリフライトの応答に依存することはない。
       headers: { "content-type": "text/plain;charset=UTF-8" },
       body: JSON.stringify(entries),
     });
     if (!response.ok) {
       throw new Error(
-        `The development error log returned HTTP ${response.status}.`,
+        `開発時のエラーログが HTTP ${response.status} を返した。`,
       );
     }
   };
 
   const requestErrorLogDrain = () => {
     void drainErrorLog({ post: postEntries }).catch(() => {
-      // The development server may be down. The entries stay in the buffer.
+      // 開発サーバーが落ちているかもしれない。記録はバッファに残る。
     });
   };
 
-  // Development notes go to the same file as the exceptions, so one `tail` shows
-  // both what the extension is doing and what went wrong doing it. They are not
-  // buffered: a note nobody was listening for is a note about a server that was
-  // down, and the next note will say so anyway.
+  // 開発時の覚え書きは例外と同じファイルへ行くので、`tail` 1つで、拡張機能が
+  // 何をしているかと、それをする中で何が壊れたかの両方が見える。これは
+  // バッファに溜めない＝誰も聞いていなかった覚え書きは、落ちていたサーバーに
+  // ついての覚え書きであり、どのみち次の覚え書きがそう言う。
   const note = (message: string) => {
     void postEntries([
       {
@@ -147,36 +146,36 @@ export default defineBackground(() => {
     ]).catch(() => {});
   };
 
-  // Anything written to the buffer, from any surface, is a reason to forward it.
+  // どの画面からであれ、バッファに何かが書かれたことが送り出す理由になる。
   errorLogItem.watch(() => {
     requestErrorLogDrain();
   });
   requestErrorLogDrain();
 
-  // A content script announcing itself. Worth a line in the log — it is the only
-  // evidence from outside the browser that the runtime registration took effect
-  // — and worth a listener: Chrome starts a sleeping worker to deliver this, so
-  // opening a matching page is one of the things that can bring the link back.
+  // content script が名乗り出たところ。ログの1行に値する＝実行時の登録が効いた
+  // ことをブラウザの外から示す唯一の証拠だから。そしてリスナーにも値する＝
+  // Chrome はこれを届けるために眠っている worker を起こすので、対象のページを
+  // 開くことが、繋がりを取り戻せる手段の1つになる。
   browser.runtime.onMessage.addListener(
     (message: DevLinkMessage | undefined) => {
       if (message?.type === DEV_CONTENT_STARTED) {
-        note(`content script started on ${message.page}`);
+        note(`content script が ${message.page} で起動した`);
       }
       if (message?.type === DEV_FILTER_PASS) {
         const { hit, rising, hidden } = message.counts;
         note(
-          `filter pass: ${hit} hit, ${rising} rising, ${hidden} hidden, toolbar ${
-            message.toolbar ? "mounted" : "absent"
+          `フィルタ一巡: 表示 ${hit}・上昇中 ${rising}・非表示 ${hidden}、ツールバーは${
+            message.toolbar ? "あり" : "なし"
           }`,
         );
       }
     },
   );
 
-  // Chrome only starts a worker to deliver an event it is listening for. Without
-  // this one, a development build has nothing to wake it at browser start, and a
-  // worker that never runs never attaches — which is how a whole profile ends up
-  // with no content script on any page (#31).
+  // Chrome が worker を起こすのは、自分が聞いているイベントを届けるときだけ。
+  // これが無いと、開発ビルドにはブラウザの起動時に worker を起こすものが無く、
+  // 一度も走らない worker は一度も繋がらない＝そうしてプロファイル全体が、
+  // どのページにも content script が無い状態になる（#31）。
   browser.runtime.onStartup.addListener(() => {});
 
   let bootAtStart: string | undefined;
@@ -194,7 +193,7 @@ export default defineBackground(() => {
       const { boot, ready } = await response.json();
       return typeof boot === "string" ? { boot, ready: ready === true } : null;
     } catch {
-      // Down, or not answering. Either way there is nothing to attach to.
+      // 落ちているか、答えないか。どちらにせよ繋ぐ先が無い。
       return null;
     }
   };
@@ -217,26 +216,26 @@ export default defineBackground(() => {
       registeredCount: registered.length,
       reloadedForBoot: reloadedForBoot ?? undefined,
     });
-    // A server that has not written its build yet tells us nothing about
-    // whether this worker is attached, so the first probe stays unspent.
+    // まだビルドを書いていないサーバーは、この worker が繋がっているかについて
+    // 何も教えてくれないので、最初の1回は使わないままにしておく。
     if (action !== "building") {
       isFirstProbe = false;
     }
 
     if (action === "adopt") {
-      // decideDevLinkAction() only returns "adopt" once boot is confirmed
-      // non-null (it returns "server-down" first otherwise) — the fallback
-      // here only satisfies the type.
+      // decideDevLinkAction() が "adopt" を返すのは boot が null でないと
+      // 確かめた後だけ（そうでなければ先に "server-down" を返す）＝ここの
+      // 既定値は型を満たすためだけのもの。
       bootAtStart = boot ?? undefined;
     }
     if (action !== lastAction) {
       lastAction = action;
-      note(`development link: ${action} (${registered.length} registered)`);
+      note(`開発時の繋がり: ${action}（登録 ${registered.length} 件）`);
     }
     if (action === "reload") {
-      // decideDevLinkAction() answers "server-down" before it ever answers
-      // "reload" while boot is null, so this check satisfies the type rather
-      // than a case that arises.
+      // boot が null の間、decideDevLinkAction() は "reload" を返す前に必ず
+      // "server-down" を返すので、この検査は起きうる場合ではなく型を満たす
+      // ためのもの。
       if (boot !== null) {
         await devLinkReloadItem.setValue(boot);
       }
@@ -246,7 +245,7 @@ export default defineBackground(() => {
 
   const runDevLinkCheck = () => {
     void checkDevLink().catch(() => {
-      // Reloading the extension rejects everything in flight. Nothing to do.
+      // 拡張機能を起動し直すと、進行中のものは全部拒まれる。することは無い。
     });
   };
 
