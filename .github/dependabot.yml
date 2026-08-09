@@ -1,11 +1,19 @@
-# Dependency updates an Issue has taken over: add an `ignore` entry here with
-# a comment naming the Issue when the Issue is filed, remove the entry when
-# the Issue closes. `ignore` only stops version-update PRs — security-update
-# PRs still open regardless (GitHub Docs, "Dependabot options reference").
+# Issue が引き取った依存更新は、その Issue を名指しするコメントを添えて
+# `ignore` に足し、Issue が閉じたら外す。`ignore` が止めるのは version-update
+# の PR だけで、security-update の PR は関係なく開く（GitHub Docs
+# "Dependabot options reference"）。
+#
+# `labels` を明示しているのは、既定のラベル（`dependencies` と ecosystem 名）を
+# 置き換えるため。既定のラベルは Dependabot が必要に応じて自分で作り直すので、
+# リポジトリ側で改名しただけでは英語のものが復活する。**ここに書いたラベルは
+# Dependabot が作らない＝リポジトリに無ければ黙って無視される**ので、先に
+# ラベルを用意してから名前を書くこと（GitHub Docs 同上）。
 version: 2
 updates:
   - package-ecosystem: "npm"
     directory: "/"
+    labels:
+      - "依存更新"
     schedule:
       interval: "weekly"
     groups:
@@ -21,6 +29,8 @@ updates:
   # コメントの両方を書き換える。
   - package-ecosystem: "github-actions"
     directory: "/"
+    labels:
+      - "依存更新"
     schedule:
       interval: "weekly"
     groups:
