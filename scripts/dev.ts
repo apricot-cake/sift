@@ -1,27 +1,26 @@
-// `npm run dev` — WXT's dev server, writing the development build to a fixed
-// path OUTSIDE the working tree.
+// `npm run dev`＝WXT の開発サーバー。開発ビルドを、作業ツリーの外の固定の経路へ
+// 書く。
 //
-// Outside, and identical for every tree, on purpose: the dedicated development
-// Chrome profile loads one unpacked folder once, and re-pointing it every time
-// work moves to another worktree would be a click nobody remembers to make.
-// Because the folder never moves, nothing has to arbitrate which worktree is
-// "the" source of the development build.
+// 外であること、どのツリーでも同じ場所であることは意図的＝開発専用の Chrome
+// プロファイルは展開済みの置き場を一度だけ読み込むので、作業が別の worktree へ
+// 移るたびにそれを指し直すのは、誰も覚えていないクリックになる。置き場が動かない
+// おかげで、どの worktree が開発ビルドの「本家」かを裁く必要も無い。
 //
-// This shells out to the `wxt` CLI rather than calling WXT's JS API, which is
-// what the first version did. `createServer().start()` resolves as soon as the
-// server is listening and leaves nothing holding the event loop, so the process
-// exited straight away and no file change was ever rebuilt. The CLI is also what
-// WXT's own documentation describes, so `npm run dev` behaves the way that
-// documentation says — Ctrl+C, the key bindings, all of it.
+// ここが `wxt` の CLI を呼び出しているのは、最初の版がやっていた WXT の JS API を
+// 呼ぶやり方が駄目だったから。`createServer().start()` はサーバーが待ち受けを
+// 始めた時点で解決し、イベントループを掴むものを何も残さないので、プロセスは
+// すぐ終わり、ファイルを変えても一度もビルドし直されなかった。CLI は WXT 自身の
+// 文書が説明しているものでもあるので、`npm run dev` はその文書の言うとおりに
+// 振る舞う＝Ctrl+C も、キー割り当ても、全部。
 //
-// FIRST TIME on a machine, in the development profile only:
+// 機械ごとに最初の1回だけ、開発用プロファイルで行うこと。
 //   1. npm run dev:browser
-//   2. chrome://extensions → developer mode → load unpacked → the folder below
-//   3. sign in to X
+//   2. chrome://extensions → デベロッパーモード → パッケージ化されていない拡張
+//      機能を読み込む → 下の置き場
+//   3. X にサインインする
 //
-// The extension id is the same as the release build's (the signing key is
-// fixed), so do not load both into the SAME profile — that is what the separate
-// profile is for.
+// 拡張機能の id はリリースビルドと同じなので（署名鍵が固定されている）、両方を
+// 同じプロファイルへ読み込まないこと＝プロファイルを分けてあるのはそのため。
 import { execFileSync, spawn } from "node:child_process";
 import net from "node:net";
 import { homedir } from "node:os";
@@ -34,14 +33,14 @@ const output =
   process.env.SIFT_DEV_OUTPUT ||
   path.join(homedir(), ".sift-dev", "chrome-mv3-dev");
 
-// Is one already up? A TCP connect is enough — this only needs to know whether
-// something owns the port.
+// もう立っているか。TCP で繋がるかどうかで足りる＝ここが知りたいのは、そのポートを
+// 誰かが持っているかどうかだけ。
 //
-// The host comes from utils/dev-server.ts rather than being spelled here, for the
-// reason that file gives: `localhost` resolves to ::1 on this machine, so a probe
-// that hardcodes 127.0.0.1 against a server bound the other way reports a running
-// server as down. The sibling project had exactly that, and its "the dev server is
-// not responding" warning was wrong every time it fired (2026-08-04).
+// ホストをここに書かず utils/dev-server.ts から取っているのは、あのファイルが
+// 挙げている理由から＝この機械では `localhost` が ::1 に解決されるので、
+// 127.0.0.1 を埋め込んだ問い合わせは、もう一方に束縛されたサーバーに対して、
+// 動いているサーバーを落ちていると報告する。隣のプロジェクトがまさにそれで、
+// 「開発サーバーが応答しない」という警告は、出るたびに間違っていた（2026-08-04）。
 function devServerAlive(): Promise<boolean> {
   return new Promise((resolve) => {
     const socket = net.createConnection({
@@ -60,43 +59,42 @@ function devServerAlive(): Promise<boolean> {
   });
 }
 
-// Already up? Then this call is done, whoever made it. One server serves every
-// worktree (the output folder and the port are both fixed), so a second start is
-// never what the caller wanted: it dies on the port, or opens a window that dies
-// while the caller believes it started something.
+// もう立っているなら、誰が呼んだのであれこの呼び出しはそこで終わり。1つの
+// サーバーがどの worktree にも仕えるので（出力先もポートも固定）、2つ目の起動が
+// 呼び手の望みだったことは一度も無い＝ポートで死ぬか、呼び手が何かを起動できたと
+// 信じている間に死ぬ窓を開くか。
 //
-// In the command rather than in a procedure to remember: the taskbar answers "is
-// it running" for a person, but an agent cannot see the taskbar, and a step
-// written in a checklist only works while it is being read.
+// 覚えておく手順ではなくコマンドの中に置いてあるのは、人に対しては「動いて
+// いるか」にタスクバーが答えるが、エージェントはタスクバーを見られないし、
+// チェックリストに書いた手順は読まれている間しか働かないから。
 if (await devServerAlive()) {
   console.log(
-    `[sift] the dev server is already up on ${DEV_SERVER_HOST}:${DEV_SERVER_PORT} — leaving it alone.`,
+    `[sift] 開発サーバーは ${DEV_SERVER_HOST}:${DEV_SERVER_PORT} で既に立っている＝手を出さない。`,
   );
   console.log(
-    "[sift] one server serves every worktree. To stop it, close its console window.",
+    "[sift] 1つのサーバーがどの worktree にも仕える。止めるにはそのコンソール窓を閉じる。",
   );
   process.exit(0);
 }
 
-console.log(`[sift] development build folder: ${output}`);
+console.log(`[sift] 開発ビルドの置き場: ${output}`);
 console.log(
-  "[sift] load THAT folder as an unpacked extension in the development Chrome profile (once).",
+  "[sift] その置き場を、開発用の Chrome プロファイルへパッケージ化されていない拡張機能として読み込む（一度だけ）。",
 );
 
-// Started WITHOUT a terminal — an agent session, a task runner — hand the server
-// to a console window of its own and return. The window is then the status light:
-// it is on the taskbar for exactly as long as the server is up, under Node's icon
-// (the window's owner is this script, not a cmd wrapper), so "is the dev server
-// running" is answered by looking. Without it the output goes to whatever scratch
-// file the caller picked, and a server nobody can see gets started twice and
-// outlives the session that started it — this one had been running unattended for
-// four hours when it was found (2026-08-04).
+// 端末なしで起動されたとき＝エージェントのセッション、タスクの実行役。その場合は
+// サーバーを専用のコンソール窓へ渡して戻る。そうすると窓が状態表示灯になる＝
+// サーバーが立っている間ちょうどタスクバーに、Node のアイコンで出る（窓の持ち主は
+// cmd の包みではなくこのスクリプト）ので、「開発サーバーは動いているか」に見れば
+// 答えられる。これが無いと、出力は呼び手が選んだ一時ファイルへ行き、誰にも見えない
+// サーバーが二重に起動され、それを起こしたセッションより長生きする＝見つかった
+// ときには4時間、誰にも見られず動き続けていた（2026-08-04）。
 //
-// A person who typed `npm run dev` gets nothing detached: the server runs in front
-// of them, where Ctrl+C and WXT's key bindings work.
+// 自分で `npm run dev` と打った人には切り離しは起きない＝サーバーはその人の目の前
+// で動き、そこでは Ctrl+C も WXT のキー割り当ても効く。
 //
-// The window-opening rules (one command string, no `cmd /k`, the pause below) are
-// Windows-wide, not sift's: skill `windows-scripting`.
+// 窓を開くときの決まり（コマンドは1つの文字列・`cmd /k` を使わない・下の pause）は
+// sift のものではなく Windows 全体のもの＝スキル `windows-scripting`。
 if (
   process.platform === "win32" &&
   !process.stdout.isTTY &&
@@ -111,28 +109,28 @@ if (
     env: { ...process.env, SIFT_DEV_WINDOW: "1" },
   }).unref();
   console.log(
-    "[sift] opened a console window — the server runs THERE, under Node on the taskbar.",
+    "[sift] コンソール窓を開いた＝サーバーはそちらで動く。タスクバーの Node のところ。",
   );
   console.log(
-    "[sift] the window is up only while the server is: close it to stop, and it closing means it stopped.",
+    "[sift] 窓が出ているのはサーバーが立っている間だけ＝閉じれば止まるし、閉じたなら止まっている。",
   );
   process.exit(0);
 }
 
-// WXT's CLI reads stdin for its key bindings, and a CLOSED stdin ends the
-// server: started from anything without a terminal — an agent, a task runner,
-// CI — it printed its first build and exited, and no save was ever rebuilt
-// (measured 2026-08-02). A pipe is an stdin that stays open and delivers
-// nothing, which is exactly what those callers want.
+// WXT の CLI はキー割り当てのために stdin を読み、閉じた stdin はサーバーを
+// 終わらせる＝端末を持たないもの（エージェント・タスクの実行役・CI）から起動
+// すると、最初のビルドを表示して終了し、保存しても一度もビルドし直されなかった
+// （2026-08-02 に確認）。パイプは、開いたまま何も届けない stdin であり、それが
+// まさにそういう呼び手の欲しいもの。
 //
-// A real terminal still gets `inherit`, because that is what makes the key
-// bindings work for a person who typed `npm run dev` themselves. The detached
-// window above counts as one: it has a console, so its key bindings work too.
+// 本物の端末には今も `inherit` を渡す＝自分で `npm run dev` と打った人にとって
+// キー割り当てが効くのはそれのおかげだから。上の切り離した窓もそこに入る＝
+// コンソールを持っているので、そちらでもキー割り当ては効く。
 const stdin = process.stdin.isTTY ? "inherit" : "pipe";
 
-// One string, no argument array: on Windows `npx` is a .cmd, which Node will not
-// spawn without a shell and refuses to spawn through execFileSync with one — and
-// passing an argument array alongside `shell: true` prints DEP0190.
+// 引数の配列ではなく1つの文字列で渡す＝Windows では `npx` が .cmd で、Node は
+// シェル無しではこれを起動しないし、シェル付きの execFileSync 経由でも起動を
+// 拒む。そして `shell: true` と一緒に引数の配列を渡すと DEP0190 が出る。
 const child = spawn("npx wxt", {
   cwd: ROOT,
   shell: true,
@@ -140,20 +138,21 @@ const child = spawn("npx wxt", {
   env: { ...process.env, SIFT_DEV_OUTPUT: output },
 });
 
-// Ctrl+C has to reach the server rather than orphan it behind a dead parent.
+// Ctrl+C は、死んだ親の後ろにサーバーを取り残すのではなく、サーバーまで届かな
+// ければならない。
 const forwardedSignals: NodeJS.Signals[] = ["SIGINT", "SIGTERM"];
 for (const signal of forwardedSignals) {
   process.on(signal, () => child.kill(signal));
 }
 
 child.on("exit", (code, signal) => {
-  // In a status window, a non-zero exit would take its reason with it: the port
-  // collision, the build error, the missing install all print and vanish as the
-  // window closes. Hold it until read — but ONLY on failure, so a server stopped
-  // on purpose still clears itself off the taskbar.
+  // 状態表示の窓では、0 以外の終了はその理由を道連れにする＝ポートの衝突も、
+  // ビルドの失敗も、入れ忘れも、表示された端から窓が閉じて消える。だから読まれる
+  // まで留める。ただし失敗したときだけ＝意図して止めたサーバーは、今までどおり
+  // タスクバーから自分を消す。
   //
-  // Ctrl+C is not a failure: Windows reports it as its own exit status, and
-  // stopping the server by hand should close the window the way closing it does.
+  // Ctrl+C は失敗ではない＝Windows はそれを専用の終了状態として報告するし、
+  // 手で止めたときは、窓を閉じたときと同じように窓が閉じるべき。
   const CONTROL_C_EXIT = 3221225786; // 0xC000013A
   if (
     process.env.SIFT_DEV_WINDOW &&
@@ -162,12 +161,12 @@ child.on("exit", (code, signal) => {
     code !== CONTROL_C_EXIT
   ) {
     console.error(
-      "\n[sift] the dev server exited. The window stays open so the reason above can be read.",
+      "\n[sift] 開発サーバーが終了した。上の理由を読めるように窓は開いたままにする。",
     );
     try {
       execFileSync("cmd", ["/c", "pause"], { stdio: "inherit" });
     } catch {
-      // pause needs a console; without one there is nothing to hold open anyway.
+      // pause はコンソールを要る。無いのなら、そもそも開いたままにするものが無い。
     }
   }
   process.exit(signal ? 1 : (code ?? 0));

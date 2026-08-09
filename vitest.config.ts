@@ -2,29 +2,27 @@ import { defineConfig } from "vitest/config";
 import { WxtVitest } from "wxt/testing/vitest-plugin";
 
 export default defineConfig({
-  // WXT's own Vitest plugin, which is what makes a test see the same project the
-  // build does: it reads wxt.config.ts, so the Vite config, the aliases and the
-  // build-time constants (`__SIFT_DEV__`) are the extension's own rather than a
-  // second set maintained here.
+  // WXT 自身の Vitest プラグイン。テストがビルドと同じプロジェクトを見るように
+  // しているのがこれ＝wxt.config.ts を読むので、Vite の設定も別名も、ビルド時の
+  // 定数（`__SIFT_DEV__`）も、ここで抱える2つ目の組ではなく拡張機能自身のものに
+  // なる。
   plugins: [WxtVitest()],
   define: {
-    // wxt.config.ts keys this on Vite's command, and a test run is neither of
-    // the two commands it knows about — so the constant would be missing and
-    // the content script would throw on reaching it. Tests get the release
-    // build's answer: the development-only halves talk to a server no test
-    // starts.
+    // wxt.config.ts はこれを Vite の command で分けるが、テストの実行は、あちらが
+    // 知っている2つの command のどちらでもない＝だから定数が欠け、content script
+    // はそこへ届いた時点で例外になる。テストにはリリースビルドの答えを渡す＝
+    // 開発時だけの半分が話しかける相手のサーバーを、どのテストも立てないから。
     __SIFT_DEV__: "false",
   },
   test: {
-    // Every adapter is a set of selectors run against a page, so the page has to
-    // be a real one. happy-dom is what makes `querySelector`, `closest`,
-    // `firstElementChild` and attribute matching mean what they mean in a
-    // browser — a hand-written stub answers whatever the test told it to answer,
-    // which is a test of the test.
+    // どのアダプターもページに対して走らせるセレクタの集まりなので、ページは
+    // 本物でなければならない。`querySelector`・`closest`・`firstElementChild`・
+    // 属性の照合が、ブラウザでの意味どおりになるのは happy-dom のおかげ＝手書きの
+    // 代役はテストが答えろと言ったとおりに答えるだけで、それはテストのテスト。
     environment: "happy-dom",
-    // Fills in browser.i18n.getMessage from public/_locales/en, which WXT's
-    // fake browser leaves unimplemented. Every surface that shows a string goes
-    // through it, so without this they all throw.
+    // WXT の偽ブラウザが実装しないまま置いている browser.i18n.getMessage を、
+    // public/_locales/en から埋める。文字を見せる画面はどれもこれを通るので、
+    // これが無いと全部が例外になる。
     setupFiles: ["./test/i18n.ts"],
   },
 });
