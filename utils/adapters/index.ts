@@ -1,6 +1,6 @@
-// The services Sift knows how to read. One adapter per service; the content
-// script picks exactly one of them for the page it woke up on and then runs the
-// same loop regardless of which it got.
+// Sift が読み方を知っているサービス。1サービスにつき1アダプターで、content
+// script は起動したページに対してそのうち1つだけを選び、あとはどれを選んだかに
+// 関わらず同じループを回す。
 import { blueskyAdapter } from "./bluesky.ts";
 import { isMisskeyPage, misskeyAdapter } from "./misskey.ts";
 import type { ServiceAdapter } from "./types.ts";
@@ -12,8 +12,8 @@ export const ADAPTERS: readonly ServiceAdapter[] = Object.freeze([
   misskeyAdapter,
 ]);
 
-// Chrome's match-pattern host: "*" for any, "*.example.com" for a domain and
-// its subdomains, or a literal host.
+// Chrome の match パターンのホスト部＝"*" なら任意、"*.example.com" ならその
+// ドメインとサブドメイン、それ以外はホスト名そのもの。
 export function hostMatchesPattern(pattern: string, hostname: string): boolean {
   const afterScheme = pattern.slice(pattern.indexOf("://") + 3);
   const host = afterScheme.slice(0, afterScheme.indexOf("/"));
@@ -28,16 +28,16 @@ export function hostMatchesPattern(pattern: string, hostname: string): boolean {
   return hostname === host;
 }
 
-// null on a page no adapter claims. The content script's own registration keeps
-// it off those pages already; this is what makes that true a second time, for
-// the injection paths that do not go through the manifest.
+// どのアダプターも名乗り出ないページでは null。content script 自身の登録が
+// 既にそういうページから遠ざけているので、これは同じことを二度目に成り立たせる
+// ためのもの＝manifest を通らない注入経路のために要る。
 //
-// The host alone decides for a service whose hosts are known at build time.
-// Misskey's are not — the reader adds them one at a time, and the only reason
-// Sift is running on such a page at all is a registration it made for that host
-// (utils/instances.ts). The page still has to say it is Misskey before it is
-// read as one, so a host added by mistake does nothing rather than being read
-// through selectors that were never meant for it.
+// ホストがビルド時に分かっているサービスは、ホストだけで決まる。Misskey は
+// そうではなく、利用者が1つずつ追加し、そもそも Sift がそのページで動いている
+// 理由がそのホスト向けに行った登録そのもの（utils/instances.ts）。それでも
+// ページ側が Misskey だと名乗るまで Misskey として読まない＝間違って追加された
+// ホストは、そのために書かれたのではないセレクタで読まれるのではなく、何も
+// 起きないで済む。
 export function selectAdapter(
   hostname: string,
   page: ParentNode,

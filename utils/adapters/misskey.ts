@@ -1,76 +1,75 @@
-// Misskey. Everything in this file is Misskey's page structure — which element
-// is a note, and where each classification input is written. The classification
-// itself lives in filter-core.ts and is shared by every service.
+// Misskey。このファイルにあるのは全部 Misskey の画面の作り＝どの要素がノート
+// で、判定の入力がそれぞれどこに書かれているか。判定そのものは filter-core.ts
+// にあり、全サービスで共有している。
 //
-// Misskey gives a reader almost nothing to hold on to. Class names are per-build
-// hashes (CSS Modules) and the data-cy-* attributes older versions carried are
-// gone, so the only stable handles are element names, the global utility class
-// `_button`, the avatar's `_noSelect`, and the icon-font classes `ti ti-*`
-// (see #2's issue comment, section 3). Every selector below is one of those.
+// Misskey は読み手に掴めるものをほとんど残さない。クラス名はビルドごとの
+// ハッシュ（CSS Modules）で、古い版が持っていた data-cy-* 属性も無くなった。
+// 安定して掴めるのは要素名・グローバルなユーティリティクラス `_button`・
+// アバターの `_noSelect`・アイコンフォントのクラス `ti ti-*` だけ（#2 の
+// Issue コメント第3節）。以下のセレクタは全部そのどれか。
 //
-// Verified on 2026-08-05 against two live instances at opposite ends of the
-// range Sift has to survive: misskey.io (2025.4.1-io, a fork) and misskey.design
-// (2026.7.0, close to upstream). Reaction totals, note times and media presence
-// were read off the DOM and compared against each instance's own API answer for
-// the same notes.
+// 2026-08-05 に、Sift が耐えるべき幅の両端にある2つの実インスタンスで確認した
+// ＝misskey.io（2025.4.1-io・フォーク）と misskey.design（2026.7.0・upstream に
+// 近い）。リアクション総数・ノートの時刻・メディアの有無を DOM から読み、同じ
+// ノートに対する各インスタンス自身の API の答えと突き合わせた。
 import { parseMetric } from "../filter-core.ts";
 import { MISSKEY_REACTION_THRESHOLDS } from "../settings.ts";
 import { REACTION_LABELS, type ServiceAdapter } from "./types.ts";
 
-// Misskey's page structure in one place, so a change on an instance's side is
-// one edit here. Not exported: what a test supplies is markup, and what it reads
-// is the answer this file gives for it (utils/adapters/misskey.test.ts).
+// Misskey の画面の作りを1箇所に集めてあるので、インスタンス側の変更はここ1箇所
+// の修正で済む。エクスポートしないのは、テストが与えるのはマークアップで、
+// 読み取るのはこのファイルがそれに対して返す答えだから
+// （utils/adapters/misskey.test.ts）。
 const MISSKEY_SELECTORS = Object.freeze({
-  // A note renders as <div>(root) > <article>. Nothing else in the client uses
-  // <article>, but an instance's own additions might, so a card also has to
-  // carry a note's timestamp to count as one.
+  // ノートは <div>（root）> <article> として描かれる。クライアント内で <article>
+  // を使うのはここだけだが、インスタンス独自の追加が使う可能性はあるので、
+  // カードと数えるにはノートの時刻も持っていることを条件にする。
   postCard: "article",
   createdAt: "time[title]",
-  // Reaction chips and the footer's reply/renote/react buttons are all
-  // `button._button`; readReactionCount() below is what tells them apart.
+  // リアクションのチップも、フッターの返信・リノート・リアクションのボタンも、
+  // どれも `button._button`。見分けているのは下の readReactionCount()。
   reactionButton: "button._button",
   icon: 'i[class*="ti-"]',
-  // The renote header's icon. It also appears on the footer's renote button,
-  // which is why readIsRepost() looks only above the article.
+  // リノートのヘッダのアイコン。フッターのリノートボタンにも出るので、
+  // readIsRepost() は article より上だけを見る。
   repost: "i.ti-repeat",
-  // The avatar and its decorations. `_noSelect` is a global utility class, not
-  // a hashed one.
+  // アバターとその装飾。`_noSelect` はハッシュ化されないグローバルな
+  // ユーティリティクラス。
   avatar: "._noSelect",
-  // An unplayed video is a <video> on some builds and a thumbnail <img> under a
-  // play icon on others; a video the reader has to click to reveal is neither.
+  // 再生前の動画は、ビルドによって <video> だったり、再生アイコンの下の
+  // サムネイル <img> だったりする。クリックして初めて出る動画はそのどちらでもない。
   video: "video, i.ti-player-play, i.ti-movie",
-  // What a hidden image leaves behind: the placeholder for a sensitive file
-  // (which says nothing about its type) or for one the data saver held back.
+  // 隠された画像が残すもの＝閲覧注意のファイル（種類までは分からない）か、
+  // データセーバーが止めたファイルのプレースホルダ。
   hiddenMedia: "i.ti-photo, i.ti-eye-exclamation",
-  // Written into the page the server sends, before any of the client runs.
+  // クライアントが動く前の、サーバー応答のページに書き込まれている。
   application: 'meta[name="application-name"][content="Misskey"]',
 });
 
-// Whether this page is a Misskey instance. Asked of hosts Sift was not built
-// for — the ones a reader added — because a host being in that list is the
-// reader's claim, and this is the page's own answer. Every instance checked on
-// 2026-08-05 carries the tag, forks included (misskey.io, misskey.design,
-// submarin.online, nijimiss.moe, misskey.systems, mi.yumechi.jp): it comes from
-// the server's HTML template rather than from the client build.
+// このページが Misskey のインスタンスかどうか。Sift がそのために作られていない
+// ホスト＝利用者が追加したホストに対して尋ねる。一覧に載っていることは利用者の
+// 主張でしかなく、これはページ自身の答えだから。2026-08-05 に確認したインスタンス
+// はフォークも含めて全部このタグを持っていた（misskey.io・misskey.design・
+// submarin.online・nijimiss.moe・misskey.systems・mi.yumechi.jp）＝クライアントの
+// ビルドではなくサーバーの HTML テンプレート由来のもの。
 export function isMisskeyPage(page: ParentNode): boolean {
   return Boolean(page.querySelector(MISSKEY_SELECTORS.application));
 }
 
-// A custom emoji's alt text, local (":party:") or remote (":party@example:").
+// カスタム絵文字の alt。ローカル（":party:"）とリモート（":party@example:"）。
 const EMOJI_SHORTCODE = /^:.+:$/;
-// Emoji drawn as characters rather than as an image: what a native-emoji
-// reaction leaves in a chip's text, and what MkEmoji puts in an img's alt.
-// Digits are deliberately not stripped — \p{Emoji_Component} would take them.
+// 画像ではなく文字として描かれる絵文字＝ネイティブ絵文字のリアクションがチップ
+// の文字に残すものと、MkEmoji が img の alt に入れるもの。数字は意図的に落として
+// いない（\p{Emoji_Component} だと数字まで持っていかれる）。
 //
-// \uFE0F (variation selector-16) and \u200D (zero-width joiner) are what holds a
-// multi-codepoint emoji together, and this takes them one codepoint at a time on
-// purpose: the point is to leave nothing of the emoji behind, not to match it as
-// one grapheme. An alternation rather than one character class, because a
-// combining mark inside a class matches on its own there anyway and reads as if
-// it were part of the character before it.
+// \uFE0F（異体字セレクタ16）と \u200D（ゼロ幅接合子）は複数コードポイントの
+// 絵文字を1つに繋ぎ止めているもので、ここでは意図的にコードポイント単位で外す＝
+// 目的は絵文字を1つの書記素として一致させることではなく、絵文字の痕跡を残さない
+// こと。1つの文字クラスにせず選択にしているのは、文字クラスの中の結合文字は
+// どのみち単独で一致するうえ、直前の文字の一部であるかのように読めてしまうから。
 const EMOJI_TEXT =
   /\p{Extended_Pictographic}|\p{Regional_Indicator}|\uFE0F|\u200D|\s/gu;
-// A reaction chip's text is its count and nothing else, once the emoji is out.
+// 絵文字を外したあとのリアクションチップの文字は、その数だけになる。
 const COUNT_ONLY = /^\d[\d,]*$/;
 
 function noteCards(root: ParentNode): Element[] {
@@ -79,41 +78,39 @@ function noteCards(root: ParentNode): Element[] {
   );
 }
 
-// True for an image that is part of the note's media, rather than an avatar, an
-// avatar decoration, a role badge or an emoji. Misskey marks none of these, so
-// the reading is what they leave in `alt`: media carries the file's comment or
-// name, and nothing else carries readable text.
+// アバター・アバターの装飾・ロールバッジ・絵文字ではなく、ノートのメディアの
+// 一部である画像なら true。Misskey はこれらに印を付けないので、`alt` に何を残す
+// かで読む＝メディアはファイルのコメントか名前を持ち、それ以外は読める文字を
+// 持たない。
 function isNoteImage(image: Element): boolean {
   if (image.closest(MISSKEY_SELECTORS.avatar)) {
     return false;
   }
 
-  // A video's poster frame is an <img> as well, and it carries the file's own
-  // comment as alt — readable text, like a picture's. What tells them apart is
-  // the play control drawn over it, in the same wrapper.
+  // 動画のポスターフレームも <img> で、alt にファイル自身のコメントを持つ＝
+  // 画像と同じく読める文字が入る。見分けているのは、同じ入れ物の中でその上に
+  // 描かれる再生の操作子。
   if (image.parentElement?.querySelector(MISSKEY_SELECTORS.video)) {
     return false;
   }
 
   const alt = (image.getAttribute("alt") ?? "").trim();
-  // Empty or absent: an avatar decoration, a role badge, a video's thumbnail.
+  // 空か無い＝アバターの装飾・ロールバッジ・動画のサムネイル。
   if (alt === "" || EMOJI_SHORTCODE.test(alt)) {
     return false;
   }
   return alt.replace(EMOJI_TEXT, "") !== "";
 }
 
-// `satisfies` rather than a `:` annotation — see x.ts for why.
+// `:` の注釈ではなく `satisfies`。理由は x.ts を参照。
 export const misskeyAdapter = Object.freeze({
   id: "misskey",
-  // Empty, and not an oversight: Misskey hosts are added by the reader one at a
-  // time and registered at runtime (utils/instances.ts), so there is nothing
-  // for the manifest to declare at build time. selectAdapter() is what routes a
-  // page to this adapter instead.
+  // 空なのは書き忘れではない＝Misskey のホストは利用者が1つずつ追加し実行時に
+  // 登録される（utils/instances.ts）ので、manifest がビルド時に宣言するものが
+  // 無い。代わりにページをこのアダプターへ振り分けるのは selectAdapter()。
   matches: Object.freeze([]),
-  // Misskey's reaction is one per reader like a like is, but instance sizes
-  // differ from X's by orders of magnitude, so it counts against its own
-  // thresholds (see #2's issue comment, section 4).
+  // Misskey のリアクションは、いいねと同じく1人1回。ただしインスタンスの規模が
+  // X とは桁で違うので、専用のしきい値と比べる（#2 の Issue コメント第4節）。
   reactionLabels: REACTION_LABELS,
   thresholdKeys: MISSKEY_REACTION_THRESHOLDS,
 
@@ -125,27 +122,24 @@ export const misskeyAdapter = Object.freeze({
     return noteCards(root).length > 0;
   },
 
-  // The unit that gets hidden is the note's root, not the article: the renote
-  // header and the note being replied to are drawn outside the article, and
-  // hiding the article alone would leave them behind.
+  // 隠される単位は article ではなくノートの root＝リノートのヘッダと返信先の
+  // ノートは article の外に描かれるので、article だけを隠すとそれらが残る。
   findPostCell(postCard: Element) {
     return postCard.parentElement ?? postCard;
   },
 
-  // Misskey does not put a reaction total in the page. The footer can show one,
-  // but only for a reader who turned that setting on (`showReactionsCount`,
-  // off by default), so what is always there is one chip per emoji, each with
-  // its own count — this adds them up.
+  // Misskey はリアクションの総数をページに出さない。フッターに出せはするが、
+  // それは設定を入れた利用者にだけ（`showReactionsCount`・既定は off）なので、
+  // 常にあるのは絵文字ごとに1つずつのチップとその個別の数＝これを足し合わせる。
   //
-  // The chips are told apart from the footer's buttons, which share the same
-  // `_button` class, by what they contain: every footer button leads with a
-  // `ti-*` icon, and a chip's text is its count alone (the emoji is an image,
-  // or a character this strips). A "show more" button inside a long note is a
-  // `_button` too, and its text is words rather than a number.
+  // 同じ `_button` クラスを持つフッターのボタンとの見分けは、中身で行う＝
+  // フッターのボタンは必ず `ti-*` のアイコンから始まり、チップの文字は数だけ
+  // （絵文字は画像か、ここで落とす文字）。長いノートの中の「もっと見る」も
+  // `_button` だが、その文字は数ではなく言葉になる。
   //
-  // The chips stop at 16 emoji, which is Misskey's own limit and not a reading
-  // Sift can widen: a note reacted to with more kinds than that reads low here
-  // by the tail it never draws.
+  // チップは16種類で打ち切られる。これは Misskey 側の制限で、Sift が広げられる
+  // 読み方ではない＝それより多くの種類が付いたノートは、描かれない尾の分だけ
+  // ここでは少なく出る。
   readReactionCount(postCard: Element) {
     let total = 0;
 
@@ -165,15 +159,15 @@ export const misskeyAdapter = Object.freeze({
     return total;
   },
 
-  // Misskey writes no <time datetime>. What it has is the absolute time in the
-  // element's title, formatted for whatever locale the reader's browser asks
-  // for, so Date.parse understands some readers' pages and not others'. When it
-  // does not, the post still classifies and only "rising" drops.
+  // Misskey は <time datetime> を書き出さない。あるのは要素の title に入った
+  // 絶対時刻で、利用者のブラウザが要求するロケール向けに整形されている＝
+  // Date.parse が理解できる利用者のページとそうでないページがある。理解できない
+  // 場合も投稿の判定自体は動き、「上昇中」だけが落ちる。
   //
-  // A day-first format ("5.8.2026, 17:44:21") is the one case that neither
-  // reads nor fails: Date.parse takes it month-first and answers a date months
-  // away. That answer only ever falls outside the rising window, so it costs
-  // the same "rising" and nothing more.
+  // 日が先に来る形式（"5.8.2026, 17:44:21"）だけは、読めも落ちもしない唯一の
+  // ケース＝Date.parse が月を先と解釈して何ヶ月も離れた日付を返す。その答えは
+  // 常に上昇中の窓の外に落ちるので、代償は同じ「上昇中」だけで、それ以上には
+  // ならない。
   readCreatedAt(postCard: Element) {
     const title = postCard
       .querySelector(MISSKEY_SELECTORS.createdAt)
@@ -182,11 +176,10 @@ export const misskeyAdapter = Object.freeze({
     return Number.isFinite(timestamp) ? timestamp : Number.NaN;
   },
 
-  // Image and video are reported separately: which of them counts as media is
-  // the reader's setting, not this service's structure. A file the client is
-  // holding back behind a click counts as an image — the placeholder says a
-  // file is there but not what it is, and a note read as having no media at all
-  // would be hidden outright.
+  // 画像と動画は別々に返す＝どちらをメディアと数えるかは利用者の設定であって、
+  // このサービスの作りの話ではない。クライアントがクリックの向こうに隠している
+  // ファイルは画像として数える＝プレースホルダはファイルがあることは言うが種類は
+  // 言わないし、メディアが無いと読んだノートはそのまま隠されてしまう。
   readMedia(postCard: Element) {
     const images = Array.from(postCard.querySelectorAll("img")).some(
       isNoteImage,
@@ -199,13 +192,13 @@ export const misskeyAdapter = Object.freeze({
     };
   },
 
-  // A renote is drawn as a header above the article, inside the same root. The
-  // header's text is localized ("◯◯がリノート") and carries no marker of its
-  // own, so the icon is the reading — but the footer's renote button uses that
-  // same icon, which is why only the elements before the article are looked at.
+  // リノートは、同じ root の中で article の上のヘッダとして描かれる。ヘッダの
+  // 文字はローカライズされていて（「◯◯がリノート」）、それ自身の目印を持たない
+  // ので、読むのはアイコンの方＝ただしフッターのリノートボタンが同じアイコンを
+  // 使うため、article より前の要素だけを見る。
   //
-  // A quote renote is not a renote here: it carries its author's own text and
-  // renders as an ordinary note, which is what keeps it out of hideReposts.
+  // 引用リノートはここではリノートではない＝投稿者自身の本文を伴い、通常の
+  // ノートとして描かれる。それが hideReposts の対象から外れる理由。
   readIsRepost(postCard: Element) {
     const root = postCard.parentElement;
     if (!root) {

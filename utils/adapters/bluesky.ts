@@ -1,57 +1,55 @@
-// Bluesky (bsky.app). Everything in this file is Bluesky's page structure —
-// which element is a post, and where each classification input is written. The
-// classification itself lives in filter-core.ts and is shared by every service.
+// Bluesky（bsky.app）。このファイルにあるのは全部 Bluesky の画面の作り＝どの
+// 要素が投稿で、判定の入力がそれぞれどこに書かれているか。判定そのものは
+// filter-core.ts にあり、全サービスで共有している。
 import { parseMetric } from "../filter-core.ts";
 import { LIKE_THRESHOLDS } from "../settings.ts";
 import { LIKE_LABELS, type ServiceAdapter } from "./types.ts";
 
-// Bluesky's page structure in one place, so a redraw on Bluesky's side is one
-// edit here. Not exported: what a test supplies is markup, and what it reads is
-// the answer this file gives for it (utils/adapters/bluesky.test.ts).
+// Bluesky の画面の作りを1箇所に集めてあるので、Bluesky 側の描き直しはここ1箇所
+// の修正で済む。エクスポートしないのは、テストが与えるのはマークアップで、
+// 読み取るのはこのファイルがそれに対して返す答えだから
+// （utils/adapters/bluesky.test.ts）。
 const BLUESKY_SELECTORS = Object.freeze({
-  // The testid carries the author's handle ("feedItem-by-bsky.app"), so these
-  // are prefix matches. Feeds, profiles and notifications use the first form;
-  // the post detail screen uses the second.
+  // testid には作者のハンドルが入る（"feedItem-by-bsky.app"）ので、前方一致で
+  // 拾う。フィード・プロフィール・通知は前者、投稿詳細の画面は後者。
   postCard:
     '[data-testid^="feedItem-by-"], [data-testid^="postThreadItem-by-"]',
   reactionButton: '[data-testid="likeBtn"]',
   postLink: 'a[href*="/post/"]',
-  // Under a button, which is what separates a post's own image from the
-  // thumbnail of an external link card — that one sits under an <a>.
+  // button の下にあること＝これが、投稿自身の画像と、外部リンクカードの
+  // サムネイル（そちらは <a> の下にある）を分けている。
   image: 'button img[src*="/img/feed_thumbnail/"]',
-  // An unplayed video has no <video> element at all: the thumbnail is drawn as
-  // a CSS background image. A <video> only appears once playback starts.
+  // 再生前の動画には <video> 要素が無い＝サムネイルは CSS の背景画像として
+  // 描かれている。<video> が現れるのは再生を始めてから。
   video: '[style*="video.bsky.app"]',
-  // GIFs come through as an external embed rather than as Bluesky media.
+  // GIF は Bluesky のメディアではなく外部埋め込みとして届く。
   animatedImage: 'video[src*="t.gifs.bsky.app"]',
   profileLink: 'a[href^="/profile/"]',
 });
 
-// AT Protocol record keys are TIDs: 13 characters of base32-sortable holding a
-// 64-bit value whose top 53 bits are a microsecond timestamp and whose bottom
-// 10 are a clock id.
+// AT Protocol の record key は TID＝base32-sortable 13文字で 64bit の値を持ち、
+// 上位53bit がマイクロ秒のタイムスタンプ、下位10bit が clock id。
 const TID_ALPHABET = "234567abcdefghijklmnopqrstuvwxyz";
 const TID_LENGTH = 13;
 const TID_CLOCK_ID_BITS = 10n;
-// The record key is the segment after /post/, not the last one: on the post
-// detail screen the only links carrying it are the ones to that post's own
-// sub-pages ("/reposted-by", "/quotes", "/liked-by").
+// record key は /post/ の次の区間であって末尾の区間ではない＝投稿詳細の画面で
+// それを持つリンクは、その投稿自身の下位ページ（"/reposted-by"・"/quotes"・
+// "/liked-by"）へのものだけになる。
 const RECORD_KEY_IN_PATH = /\/post\/([^/?#]+)/;
-// Nothing on Bluesky predates the network itself, and nothing was posted after
-// now. A record key that is not a TID but happens to be spelled with these
-// characters decodes to a value outside that window, which is what makes it
-// detectable at all — the lower bound alone does not catch it ("aaaaaaaaaaaaa"
-// decodes to the year 2190).
+// Bluesky にネットワーク自体より古い投稿は無いし、今より後の投稿も無い。TID
+// ではないのにたまたまこの文字だけで綴られた record key は、この窓の外の値へ
+// 復号される＝それが唯一の見分け方になる。下限だけでは捕まらない
+// （"aaaaaaaaaaaaa" は西暦2190年へ復号される）。
 const EARLIEST_PLAUSIBLE_MS = Date.parse("2022-01-01T00:00:00.000Z");
-// Enough for a clock that disagrees with the server's, and no more. The same
-// allowance classifyPost makes for a post that reads as slightly in the future.
+// サーバーと食い違う時計のための余裕で、それ以上ではない。少し未来に見える
+// 投稿に対して classifyPost が置いているのと同じ許容。
 const FUTURE_TOLERANCE_MS = 6 * 60 * 1000;
 
-// The fallback for a post whose displayed timestamp cannot be read. Exported so
-// the decoding is tested on its own rather than only through a fake post.
+// 画面に出ている時刻が読めない投稿のための代替経路。復号だけを単体で試験できる
+// ようにエクスポートしてある（偽の投稿を通してしか試せない状態にしない）。
 //
-// Being a TID is a convention of the official client, not a guarantee of the
-// protocol, so this stays the fallback and never the primary reading.
+// TID であることは公式クライアントの慣習であってプロトコルの保証ではないので、
+// これは常に代替であって主たる読み方にはしない。
 export function timestampFromRecordKey(
   href: unknown,
   nowMs = Date.now(),
@@ -78,21 +76,21 @@ export function timestampFromRecordKey(
   return plausible ? milliseconds : Number.NaN;
 }
 
-// Notifications reuse the post card's testid for rows that are not posts — a
-// like, a follow. Those rows carry no like button, which is the one part of a
-// post every post has and no notification row does.
+// 通知画面は、投稿ではない行（いいね・フォロー）にも投稿カードの testid を
+// 使い回す。そういう行はいいねボタンを持たない＝これが、投稿なら必ず持ち通知の
+// 行は持たない唯一の部分。
 function readablePostCards(root: ParentNode): Element[] {
   return Array.from(root.querySelectorAll(BLUESKY_SELECTORS.postCard)).filter(
     (postCard) => postCard.querySelector(BLUESKY_SELECTORS.reactionButton),
   );
 }
 
-// `satisfies` rather than a `:` annotation — see x.ts for why.
+// `:` の注釈ではなく `satisfies`。理由は x.ts を参照。
 export const blueskyAdapter = Object.freeze({
   id: "bluesky",
   matches: Object.freeze(["https://bsky.app/*"]),
-  // What this service calls the reaction the thresholds count. Same reaction as
-  // X's, so the two share the thresholds as well.
+  // しきい値が数える反応を、このサービスでは何と呼ぶか。X と同じ反応なので、
+  // しきい値も共有する。
   reactionLabels: LIKE_LABELS,
   thresholdKeys: LIKE_THRESHOLDS,
 
@@ -104,8 +102,8 @@ export const blueskyAdapter = Object.freeze({
     return readablePostCards(root).length > 0;
   },
 
-  // The unit that gets hidden. Unlike X, Bluesky keeps the separator and the
-  // padding inside the card, so there is no outer cell to reach for.
+  // 隠される単位。X と違い Bluesky は区切り線と余白をカードの内側に持つので、
+  // 外側のセルを探しに行く必要が無い。
   findPostCell(postCard: Element) {
     return postCard;
   },
@@ -116,19 +114,19 @@ export const blueskyAdapter = Object.freeze({
       return 0;
     }
 
-    // The accessible label holds the exact count; the visible text next to the
-    // button is rounded ("6万"), which no threshold can be compared against.
+    // 正確な数を持っているのは読み上げ用のラベル。ボタンの隣に出ている文字は
+    // 丸められていて（「6万」）、どのしきい値とも比べようがない。
     return parseMetric(button.getAttribute("aria-label") || "");
   },
 
-  // Bluesky writes no <time datetime>. What it has is a localized absolute time
-  // on the permalink, which Date.parse accepts for some locales and not others,
-  // and the record key, which is machine-readable but only a convention.
+  // Bluesky は <time datetime> を書き出さない。あるのは、パーマリンクに付いた
+  // ローカライズ済みの絶対時刻（Date.parse が受け付けるロケールとそうでない
+  // ロケールがある）と、機械可読ではあるが慣習でしかない record key の2つ。
   //
-  // The first readable link wins rather than the first link: a post in a feed
-  // leads with its own permalink, but the post a detail screen is *about* has
-  // no permalink at all — being where the link would point — and leads with the
-  // links to its own sub-pages instead.
+  // 最初のリンクではなく、最初に読めたリンクを採る＝フィードの投稿は自分の
+  // パーマリンクから始まるが、詳細画面が*対象にしている*投稿はパーマリンクを
+  // 持たない（リンクの行き先がその投稿自身だから）ので、代わりに自分の下位
+  // ページへのリンクから始まる。
   readCreatedAt(postCard: Element) {
     for (const link of postCard.querySelectorAll(BLUESKY_SELECTORS.postLink)) {
       const label = link.getAttribute("aria-label");
@@ -146,8 +144,8 @@ export const blueskyAdapter = Object.freeze({
     return Number.NaN;
   },
 
-  // Image and video are reported separately: which of them counts as media is
-  // the reader's setting, not this service's structure.
+  // 画像と動画は別々に返す＝どちらをメディアと数えるかは利用者の設定であって、
+  // このサービスの作りの話ではない。
   readMedia(postCard: Element) {
     return {
       hasImage: Boolean(postCard.querySelector(BLUESKY_SELECTORS.image)),
@@ -158,10 +156,10 @@ export const blueskyAdapter = Object.freeze({
     };
   },
 
-  // Neither a testid nor a stable word marks a repost: the header reads
-  // "◯◯がリポスト" in whatever language the reader has. What does hold across
-  // languages is the shape — the repost header's profile link wraps an icon,
-  // where an author's profile link wraps an avatar image.
+  // リポストには testid も安定した文言も付かない＝ヘッダは読者の言語で
+  // 「◯◯がリポスト」と出る。言語をまたいで変わらないのは作りの方で、リポストの
+  // ヘッダのプロフィールリンクはアイコンを包み、作者のプロフィールリンクは
+  // アバター画像を包む。
   readIsRepost(postCard: Element) {
     const profileLink = postCard.querySelector(BLUESKY_SELECTORS.profileLink);
     if (!profileLink || profileLink.querySelector("img")) {

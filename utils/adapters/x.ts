@@ -1,13 +1,13 @@
-// X (x.com / twitter.com). Everything in this file is X's page structure —
-// which element is a post, and where each classification input is written. The
-// classification itself lives in filter-core.ts and is shared by every service.
+// X（x.com / twitter.com）。このファイルにあるのは全部 X の画面の作り＝どの
+// 要素が投稿で、判定の入力がそれぞれどこに書かれているか。判定そのものは
+// filter-core.ts にあり、全サービスで共有している。
 import { parseMetric } from "../filter-core.ts";
 import { LIKE_THRESHOLDS } from "../settings.ts";
 import { LIKE_LABELS, type ServiceAdapter } from "./types.ts";
 
-// X's page structure in one place, so a redraw on X's side is one edit here.
-// Not exported: what a test supplies is markup, and what it reads is the answer
-// this file gives for it (utils/adapters/x.test.ts).
+// X の画面の作りを1箇所に集めてあるので、X 側の描き直しはここ1箇所の修正で
+// 済む。エクスポートしないのは、テストが与えるのはマークアップで、読み取るのは
+// このファイルがそれに対して返す答えだから（utils/adapters/x.test.ts）。
 const X_SELECTORS = Object.freeze({
   postCard: 'article[data-testid="tweet"]',
   postCell: '[data-testid="cellInnerDiv"]',
@@ -19,13 +19,13 @@ const X_SELECTORS = Object.freeze({
   socialContext: '[data-testid="socialContext"]',
 });
 
-// `satisfies` rather than a `:` annotation, so the literal types Object.freeze
-// preserves (`id`, each entry of `matches`) stay literal instead of being
-// widened to the interface's `string`/`readonly string[]`.
+// `:` の注釈ではなく `satisfies` を使うのは、Object.freeze が保つリテラル型
+// （`id` と `matches` の各要素）をリテラルのまま残すため＝注釈にすると
+// インターフェース側の `string` / `readonly string[]` へ広がってしまう。
 export const xAdapter = Object.freeze({
   id: "x",
   matches: Object.freeze(["https://x.com/*", "https://twitter.com/*"]),
-  // What this service calls the reaction the thresholds count.
+  // しきい値が数える反応を、このサービスでは何と呼ぶか。
   reactionLabels: LIKE_LABELS,
   thresholdKeys: LIKE_THRESHOLDS,
 
@@ -37,9 +37,8 @@ export const xAdapter = Object.freeze({
     return Boolean(root.querySelector(X_SELECTORS.postCard));
   },
 
-  // The unit that gets hidden. X wraps every post in a cell that also carries
-  // the separator and the surrounding padding, so hiding the card alone would
-  // leave a gap behind.
+  // 隠される単位。X は投稿を、区切り線と周囲の余白も持つセルで包んでいるので、
+  // カードだけを隠すと隙間が残る。
   findPostCell(postCard: Element) {
     return postCard.closest(X_SELECTORS.postCell) || postCard;
   },
@@ -63,8 +62,8 @@ export const xAdapter = Object.freeze({
     return Number.isFinite(timestamp) ? timestamp : Number.NaN;
   },
 
-  // Image and video are reported separately: which of them counts as media is
-  // the reader's setting, not this service's structure.
+  // 画像と動画は別々に返す＝どちらをメディアと数えるかは利用者の設定であって、
+  // このサービスの作りの話ではない。
   readMedia(postCard: Element) {
     return {
       hasImage: Boolean(postCard.querySelector(X_SELECTORS.image)),
