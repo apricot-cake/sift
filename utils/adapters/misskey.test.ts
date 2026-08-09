@@ -5,10 +5,10 @@ import { misskeyAdapter } from "./misskey.ts";
 import { REACTION_LABELS } from "./types.ts";
 import { xAdapter } from "./x.ts";
 
-// Nothing in a Misskey note is marked: the class names are per-build hashes and
-// the data-cy-* attributes older versions carried are gone, so every reading is
-// a shape. A note renders as <div>(root) > <article>, with the renote header and
-// the note being replied to drawn inside the root and outside the article.
+// Misskey のノートには目印が何も無い＝クラス名はビルドごとのハッシュで、
+// 古い版が持っていた data-cy-* も今は無い。だから読み取りは全部が形の話。
+// ノートは <div>（根） > <article> として描かれ、リノートのヘッダと返信先の
+// ノートは根の内側・article の外側に置かれる。
 const noteTime = "2026/8/5 17:44:21";
 
 function renderNoteRoot({
@@ -30,13 +30,13 @@ function renderNoteRoot({
 function renderNote(options?: Parameters<typeof renderNoteRoot>[0]): Element {
   const note = renderNoteRoot(options).querySelector("article");
   if (!note) {
-    throw new Error("the rendered note has no article");
+    throw new Error("描画したノートに article が無い");
   }
   return note;
 }
 
-describe("finding notes", () => {
-  it("finds the notes on a timeline", () => {
+describe("ノートを見つける", () => {
+  it("タイムラインにあるノートを見つける", () => {
     const timeline = render(
       `${renderNoteRoot().innerHTML}${renderNoteRoot().innerHTML}`,
     );
@@ -45,10 +45,10 @@ describe("finding notes", () => {
     expect(misskeyAdapter.hasPostCards(timeline)).toBe(true);
   });
 
-  // An instance can put an <article> on the page that is not a note at all
-  // (misskey.io draws its ads that way). A note always carries its own
-  // timestamp, and that is what tells the two apart.
-  it("leaves out an article that carries no note time", () => {
+  // インスタンスは、ノートではない <article> を画面に置くことがある
+  // （misskey.io の広告がこの形）。ノートは必ず自分の時刻を持っていて、
+  // 見分けが付くのはそこ。
+  it("ノートの時刻を持たない article は外す", () => {
     const timeline = render(
       `${renderNoteRoot().innerHTML}${renderNoteRoot({ time: null }).innerHTML}`,
     );
@@ -56,7 +56,7 @@ describe("finding notes", () => {
     expect(misskeyAdapter.getPostCards(timeline)).toHaveLength(1);
   });
 
-  it("finds none where every article is something else", () => {
+  it("article が全部それ以外の画面では1件も見つけない", () => {
     const page = render(renderNoteRoot({ time: null }).innerHTML);
 
     expect(misskeyAdapter.getPostCards(page)).toEqual([]);
@@ -64,23 +64,23 @@ describe("finding notes", () => {
   });
 });
 
-describe("the unit that gets hidden", () => {
-  // The renote header and the note being replied to are drawn outside the
-  // article, so hiding the article alone would leave them behind.
-  it("is the note's root, not the article", () => {
+describe("隠される単位", () => {
+  // リノートのヘッダと返信先のノートは article の外側に描かれるので、
+  // article だけを隠すとそれらが残ってしまう。
+  it("article ではなく、ノートの根", () => {
     const root = renderNoteRoot();
     const note = root.querySelector("article");
     if (!note) {
-      throw new Error("the rendered note has no article");
+      throw new Error("描画したノートに article が無い");
     }
 
     expect(misskeyAdapter.findPostCell(note)).toBe(root.firstElementChild);
   });
 
-  it("falls back to the card where it has no root of its own", () => {
+  it("自分の根が無ければカードそのものに落ちる", () => {
     const orphan = render("<article></article>").firstElementChild;
     if (!orphan) {
-      throw new Error("the rendered article is missing");
+      throw new Error("描画した article が無い");
     }
     orphan.remove();
 
@@ -88,12 +88,12 @@ describe("the unit that gets hidden", () => {
   });
 });
 
-// No reaction total exists in the page — the footer's is off by default — so the
-// per-emoji chips are added up. Everything else wearing `_button` has to stay
-// out: the footer's buttons (each led by a `ti-*` icon) and a long note's "show
-// more" (words rather than a number).
-describe("reading the reaction count", () => {
-  it("adds up the per-emoji chips and leaves everything else out", () => {
+// リアクションの合計は画面のどこにも無い＝フッターのものは既定で出ないので、
+// 絵文字ごとのチップを足し合わせる。`_button` を着ている他のものは全部外す
+// 必要がある＝フッターのボタン（どれも `ti-*` のアイコンが先頭に付く）と、
+// 長いノートの「もっと見る」（数ではなく言葉）。
+describe("リアクション数を読む", () => {
+  it("絵文字ごとのチップだけを足し、他は全部外す", () => {
     const note = renderNote({
       body: `
         <div>
@@ -112,36 +112,36 @@ describe("reading the reaction count", () => {
     expect(misskeyAdapter.readReactionCount(note)).toBe(20);
   });
 
-  it("answers 0 for a note nobody reacted to", () => {
+  it("誰もリアクションしていないノートには 0 を返す", () => {
     expect(misskeyAdapter.readReactionCount(renderNote())).toBe(0);
   });
 });
 
-// The timestamp is localized text in a title attribute, so it reads for some
-// readers and not others. When it does not, only "rising" drops.
-describe("reading the note time", () => {
-  it("reads a time Date.parse understands", () => {
+// 時刻は title 属性に入った現地語の文字なので、読者によって読めたり読めなかったり
+// する。読めなかった場合に落ちるのは「上昇中」だけ。
+describe("ノートの時刻を読む", () => {
+  it("Date.parse が解釈できる時刻を読む", () => {
     expect(misskeyAdapter.readCreatedAt(renderNote())).toBe(
       Date.parse(noteTime),
     );
   });
 
-  it("answers NaN for a locale Date.parse refuses", () => {
-    // A Korean reader's page.
+  it("Date.parse が拒む言語には NaN を返す", () => {
+    // 韓国語の読者の画面。
     const note = renderNote({ time: "2026. 8. 5. 오후 5:44:21" });
 
     expect(misskeyAdapter.readCreatedAt(note)).toBeNaN();
   });
 
-  it("answers NaN where there is no time at all", () => {
+  it("時刻がそもそも無ければ NaN を返す", () => {
     expect(misskeyAdapter.readCreatedAt(renderNote({ time: null }))).toBeNaN();
   });
 });
 
-// Media is told from an avatar, a role badge and an emoji by what the image
-// leaves in `alt`: the file's name or comment, and nothing else readable.
-describe("reading the media", () => {
-  it("reads an attached image by the text its alt carries", () => {
+// メディアとアバター・ロールのバッジ・絵文字を見分けるのは、画像が `alt` に
+// 残しているもの＝ファイルの名前かコメントで、それ以外に読めるものは無い。
+describe("メディアを読む", () => {
+  it("添付された画像を、alt が運ぶ文字から読む", () => {
     const note = renderNote({
       body: '<img alt="IMG_8802.png" src="/files/1.png">',
     });
@@ -152,7 +152,7 @@ describe("reading the media", () => {
     });
   });
 
-  it("reads the avatar, the badges and the emoji as no media at all", () => {
+  it("アバター・バッジ・絵文字はメディア無しとして読む", () => {
     const note = renderNote({
       body: `
         <div class="_noSelect"><img alt="" src="/avatar.png"></div>
@@ -168,11 +168,10 @@ describe("reading the media", () => {
     });
   });
 
-  // A video's poster frame is an <img> carrying the file's own comment, which
-  // reads exactly like a picture's alt. The play control drawn over it, in the
-  // same wrapper, is the difference — and without it a video would also count as
-  // an image, which the "images only" setting would then let through.
-  it("does not read a video's poster frame as an image", () => {
+  // 動画のサムネイルはファイル自身のコメントを持つ <img> で、画像の alt と
+  // 見分けが付かない。同じ入れ物の中に重ねて描かれる再生ボタンが違いで、
+  // これが無いと動画も画像として数えられ、「画像のみ」の設定を通り抜けてしまう。
+  it("動画のサムネイルを画像として読まない", () => {
     const note = renderNote({
       body: `
         <div>
@@ -188,7 +187,7 @@ describe("reading the media", () => {
     });
   });
 
-  it("reads a video the build draws as a video element", () => {
+  it("ビルドが video 要素として描く動画も読む", () => {
     const note = renderNote({ body: '<video src="/files/1.mp4"></video>' });
 
     expect(misskeyAdapter.readMedia(note)).toEqual({
@@ -197,9 +196,9 @@ describe("reading the media", () => {
     });
   });
 
-  // A file the client is holding back behind a click says a file is there but
-  // not what it is; reading it as no media at all would hide the note outright.
-  it("reads a file held back behind a click as an image", () => {
+  // クリックするまで見せない扱いのファイルは、ファイルがあることは伝えるが
+  // それが何かは伝えない。メディア無しとして読むとノートごと隠れてしまう。
+  it("クリックまで伏せられたファイルは画像として読む", () => {
     const note = renderNote({ body: '<i class="ti ti-eye-exclamation"></i>' });
 
     expect(misskeyAdapter.readMedia(note)).toEqual({
@@ -208,7 +207,7 @@ describe("reading the media", () => {
     });
   });
 
-  it("reads a note with no files as having none", () => {
+  it("ファイルの無いノートは無しとして読む", () => {
     expect(
       misskeyAdapter.readMedia(renderNote({ body: "<p>text only</p>" })),
     ).toEqual({
@@ -218,11 +217,11 @@ describe("reading the media", () => {
   });
 });
 
-// The renote header sits above the article, inside the same root. The footer's
-// renote button wears the same icon, which is why only what precedes the article
-// counts — otherwise every note would read as a renote.
-describe("reading a renote", () => {
-  it("reads the header drawn above the note", () => {
+// リノートのヘッダは article の上、同じ根の内側に座っている。フッターの
+// リノートボタンも同じアイコンを着ているので、数えるのは article より前に
+// あるものだけ＝そうしないと全部のノートがリノートとして読まれる。
+describe("リノートを読む", () => {
+  it("ノートの上に描かれるヘッダを読む", () => {
     const note = renderNote({
       header:
         '<div><i class="ti ti-repeat"></i><span>さんがリノート</span></div>',
@@ -231,7 +230,7 @@ describe("reading a renote", () => {
     expect(misskeyAdapter.readIsRepost(note)).toBe(true);
   });
 
-  it("does not read the reply header above a note as one", () => {
+  it("ノートの上の返信ヘッダはリノートとして読まない", () => {
     const note = renderNote({
       header: '<div><i class="ti ti-arrow-back-up"></i></div>',
     });
@@ -239,7 +238,7 @@ describe("reading a renote", () => {
     expect(misskeyAdapter.readIsRepost(note)).toBe(false);
   });
 
-  it("does not read the footer's own renote button as one", () => {
+  it("フッター自身のリノートボタンもリノートとして読まない", () => {
     const note = renderNote({
       body: '<footer><button class="_button"><i class="ti ti-repeat"></i></button></footer>',
     });
@@ -247,10 +246,10 @@ describe("reading a renote", () => {
     expect(misskeyAdapter.readIsRepost(note)).toBe(false);
   });
 
-  it("answers false for a card with no root", () => {
+  it("根の無いカードには false を返す", () => {
     const orphan = render("<article></article>").firstElementChild;
     if (!orphan) {
-      throw new Error("the rendered article is missing");
+      throw new Error("描画した article が無い");
     }
     orphan.remove();
 
@@ -258,10 +257,10 @@ describe("reading a renote", () => {
   });
 });
 
-// A reaction is one per reader like a like is, but instance sizes differ from
-// X's by orders of magnitude, so it counts against its own pair of thresholds.
-describe("what the thresholds count", () => {
-  it("is the reaction, against Misskey's own pair of numbers", () => {
+// リアクションもいいねと同じく読者1人につき1つだが、インスタンスの規模は X と
+// 桁が違うので、しきい値は Misskey 自身の2つの数と比べる。
+describe("しきい値が数えるもの", () => {
+  it("リアクション＝Misskey 自身の2つの数と比べる", () => {
     expect(misskeyAdapter.reactionLabels).toBe(REACTION_LABELS);
     expect(misskeyAdapter.reactionLabels).not.toBe(xAdapter.reactionLabels);
     expect(misskeyAdapter.thresholdKeys).toBe(MISSKEY_REACTION_THRESHOLDS);

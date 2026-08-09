@@ -10,9 +10,8 @@ const recordKeyTime = Date.parse("2026-07-10T20:46:00.000Z");
 const likeButton =
   '<button data-testid="likeBtn" aria-label="いいねする（63,561件のいいね）"><span>6万</span></button>';
 
-// The testid carries the author's handle, so what the adapter matches on is its
-// prefix. Feeds, profiles and notifications draw the first form; the post detail
-// screen draws the second.
+// testid には投稿者のハンドルが入っているので、アダプターが当てるのはその前半。
+// フィード・プロフィール・通知は1つ目の形を、投稿詳細の画面は2つ目の形を描く。
 function renderFeed(...posts: string[]): HTMLElement {
   return render(
     posts
@@ -27,20 +26,20 @@ function renderFeed(...posts: string[]): HTMLElement {
 function renderPost(inner = ""): Element {
   const card = renderFeed(`${likeButton}${inner}`).firstElementChild;
   if (!card) {
-    throw new Error("the rendered feed has no post card");
+    throw new Error("描画したフィードに投稿カードが無い");
   }
   return card;
 }
 
-describe("finding posts", () => {
-  it("finds the posts in a feed", () => {
+describe("投稿を見つける", () => {
+  it("フィードにある投稿を見つける", () => {
     const feed = renderFeed(likeButton, likeButton);
 
     expect(blueskyAdapter.getPostCards(feed)).toHaveLength(2);
     expect(blueskyAdapter.hasPostCards(feed)).toBe(true);
   });
 
-  it("finds a post on the detail screen, which draws its own testid", () => {
+  it("詳細の画面が自分で描く testid の投稿も見つける", () => {
     const screen = render(
       `<div data-testid="postThreadItem-by-example.bsky.social">${likeButton}</div>`,
     );
@@ -48,16 +47,16 @@ describe("finding posts", () => {
     expect(blueskyAdapter.getPostCards(screen)).toHaveLength(1);
   });
 
-  // Notification rows reuse the post card's testid. What they do not have is a
-  // like button, and that is what keeps them out of the reading.
-  it("leaves out the notification rows that reuse the same testid", () => {
+  // 通知の行は投稿カードと同じ testid を使い回している。無いのはいいねボタンの
+  // 方で、読み取りから外れるのはそれが理由。
+  it("同じ testid を使い回す通知の行は外す", () => {
     const notifications = renderFeed("<span>liked your post</span>");
 
     expect(blueskyAdapter.getPostCards(notifications)).toEqual([]);
     expect(blueskyAdapter.hasPostCards(notifications)).toBe(false);
   });
 
-  it("finds none on a screen that lists no posts", () => {
+  it("投稿が並んでいない画面では1件も見つけない", () => {
     const page = render("<div>settings</div>");
 
     expect(blueskyAdapter.getPostCards(page)).toEqual([]);
@@ -65,37 +64,37 @@ describe("finding posts", () => {
   });
 });
 
-// Unlike X, Bluesky keeps the separator and the padding inside the card, so
-// there is no outer cell to reach for.
-describe("the unit that gets hidden", () => {
-  it("is the card itself", () => {
+// X と違い、Bluesky は区切り線と周囲の余白をカードの内側に持っているので、
+// 外側のセルを探しにいく必要が無い。
+describe("隠される単位", () => {
+  it("カードそのもの", () => {
     const card = renderPost();
 
     expect(blueskyAdapter.findPostCell(card)).toBe(card);
   });
 });
 
-describe("reading the like count", () => {
-  // The text next to the button is rounded to "6万", which no threshold can be
-  // compared against; the accessible label holds the exact count.
-  it("reads the exact count out of the accessible label", () => {
+describe("いいね数を読む", () => {
+  // ボタンの隣の文字は「6万」に丸められていて、しきい値と比べようがない。
+  // 正確な数を持っているのは読み上げ用のラベルの方。
+  it("読み上げ用ラベルから正確な数を読む", () => {
     expect(blueskyAdapter.readReactionCount(renderPost())).toBe(63561);
   });
 
-  it("answers 0 where there is no like button", () => {
+  it("いいねボタンが無ければ 0 を返す", () => {
     const row = renderFeed("<span>liked your post</span>").firstElementChild;
     if (!row) {
-      throw new Error("the rendered feed has no row");
+      throw new Error("描画したフィードに行が無い");
     }
 
     expect(blueskyAdapter.readReactionCount(row)).toBe(0);
   });
 });
 
-describe("reading the post time", () => {
-  // Bluesky writes no <time datetime>. What it has is a localized absolute time
-  // on the permalink, and the record key in that permalink's path.
-  it("reads a label Date.parse understands", () => {
+describe("投稿時刻を読む", () => {
+  // Bluesky は <time datetime> を書かない。あるのはパーマリンクに付いた
+  // 現地語の絶対時刻と、そのパーマリンクの経路に入っているレコードキー。
+  it("Date.parse が解釈できるラベルを読む", () => {
     const card = renderPost(
       `<a href="${postHref}" aria-label="2026-08-01T12:00:00.000Z">1時間前</a>`,
     );
@@ -105,9 +104,9 @@ describe("reading the post time", () => {
     );
   });
 
-  // The label Bluesky actually writes is a localized absolute time, which
-  // Date.parse rejects — so in practice the record key is what carries the time.
-  it("falls back to the record key for a label Date.parse refuses", () => {
+  // Bluesky が実際に書くラベルは現地語の絶対時刻で、Date.parse はこれを
+  // 受け付けない＝実際に時刻を運んでいるのはレコードキーの方。
+  it("Date.parse が拒むラベルではレコードキーに落ちる", () => {
     expect(Date.parse("2026年7月10日 20:46")).toBeNaN();
     const card = renderPost(
       `<a href="${postHref}" aria-label="2026年7月10日 20:46">1時間前</a>`,
@@ -116,11 +115,11 @@ describe("reading the post time", () => {
     expect(blueskyAdapter.readCreatedAt(card)).toBe(recordKeyTime);
   });
 
-  // The post a detail screen is about has no permalink — it is where the link
-  // would point. Its first links are to its own sub-pages, whose labels are
-  // actions rather than times, and the record key rides in the middle of the
-  // path. The first *readable* link wins, not the first link.
-  it("reads the sub-page links the detail screen leads with", () => {
+  // 詳細の画面が主題にしている投稿にはパーマリンクが無い＝そこがリンクの
+  // 行き先だから。最初に来るのは自分の下位ページへのリンクで、ラベルは時刻では
+  // なく動作、レコードキーは経路の途中に乗っている。勝つのは最初のリンクでは
+  // なく、最初の「読めた」リンク。
+  it("詳細の画面が先に置く下位ページのリンクから読む", () => {
     const card = renderPost(`
       <a href="${postHref}/reposted-by" aria-label="この投稿をリポストする"></a>
       <a href="${postHref}/liked-by" aria-label="この投稿をいいねする"></a>
@@ -129,8 +128,8 @@ describe("reading the post time", () => {
     expect(blueskyAdapter.readCreatedAt(card)).toBe(recordKeyTime);
   });
 
-  // A quoting post carries the quoted post's permalink too, after its own.
-  it("reads the quoting post's own time, not the quoted post's", () => {
+  // 引用した投稿は、自分のパーマリンクの後ろに引用元のパーマリンクも持つ。
+  it("引用元ではなく、引用した投稿自身の時刻を読む", () => {
     const card = renderPost(`
       <a href="${postHref}" aria-label="2026年7月10日 20:46"></a>
       <a href="/profile/quoted.bsky.social/post/3ms3mmsbt223e"></a>
@@ -139,8 +138,8 @@ describe("reading the post time", () => {
     expect(blueskyAdapter.readCreatedAt(card)).toBe(recordKeyTime);
   });
 
-  // Neither reading available: the post still classifies, only "rising" drops.
-  it("answers NaN for a link whose key is not a record key", () => {
+  // どちらの読み方もできない場合＝投稿の判定自体は動き、「上昇中」だけが落ちる。
+  it("キーがレコードキーでないリンクには NaN を返す", () => {
     const card = renderPost(
       '<a href="/profile/example.bsky.social/post/self"></a>',
     );
@@ -148,13 +147,13 @@ describe("reading the post time", () => {
     expect(blueskyAdapter.readCreatedAt(card)).toBeNaN();
   });
 
-  it("answers NaN where the post carries no link at all", () => {
+  it("リンクを1本も持たない投稿には NaN を返す", () => {
     expect(blueskyAdapter.readCreatedAt(renderPost())).toBeNaN();
   });
 });
 
 describe("timestampFromRecordKey", () => {
-  it("decodes the key out of a permalink", () => {
+  it("パーマリンクからキーを解く", () => {
     expect(timestampFromRecordKey(postHref)).toBe(recordKeyTime);
     expect(timestampFromRecordKey(`${postHref}?foo=1`)).toBe(recordKeyTime);
     expect(timestampFromRecordKey(`https://bsky.app${postHref}#anchor`)).toBe(
@@ -162,31 +161,30 @@ describe("timestampFromRecordKey", () => {
     );
   });
 
-  // The key is the segment after /post/, so a link to one of the post's own
-  // sub-pages carries it just as well as the permalink does.
-  it("decodes the key out of a sub-page link", () => {
+  // キーは /post/ の次の区画なので、その投稿自身の下位ページへのリンクも
+  // パーマリンクと同じようにキーを運んでいる。
+  it("下位ページのリンクからもキーを解く", () => {
     expect(timestampFromRecordKey(`${postHref}/reposted-by`)).toBe(
       recordKeyTime,
     );
   });
 
-  // A record key is only a TID by convention, so anything that does not decode
-  // to a plausible post time is refused: wrong length, a character outside the
-  // alphabet, or a time that cannot belong to a post.
-  it("refuses anything that is not a plausible post time", () => {
+  // レコードキーが TID なのは慣習でしかないので、投稿の時刻としてありえない
+  // ものは拒む＝長さ違い・字種の外・投稿のものになりえない時刻。
+  it("投稿の時刻としてありえないものは拒む", () => {
     expect(timestampFromRecordKey("/post/tooshort")).toBeNaN();
     expect(timestampFromRecordKey("/post/3111111111111")).toBeNaN();
     expect(timestampFromRecordKey("")).toBeNaN();
     expect(timestampFromRecordKey(null)).toBeNaN();
-    // "aaaaaaaaaaaaa" decodes to the year 2190 — the reason the upper bound
-    // exists at all.
+    // "aaaaaaaaaaaaa" は 2190 年に解ける＝上限がそもそも要る理由。
     expect(timestampFromRecordKey("/post/aaaaaaaaaaaaa")).toBeNaN();
-    // A time before the network existed.
+    // ネットワークが存在するより前の時刻。
     expect(timestampFromRecordKey("/post/3i5p64yyc222b")).toBeNaN();
   });
 
-  // And a post cannot predate the clock reading it by more than a small skew.
-  it("allows a clock that disagrees, and no more", () => {
+  // そして投稿は、それを読んでいる側の時計より先に立てない＝ずれの許容ぶんを
+  // 超えては。
+  it("時計のずれは許すが、それ以上は許さない", () => {
     expect(timestampFromRecordKey(postHref, recordKeyTime - 3600000)).toBeNaN();
     expect(timestampFromRecordKey(postHref, recordKeyTime - 60000)).toBe(
       recordKeyTime,
@@ -194,8 +192,8 @@ describe("timestampFromRecordKey", () => {
   });
 });
 
-describe("reading the media", () => {
-  it("reads a post's own image", () => {
+describe("メディアを読む", () => {
+  it("投稿自身の画像を読む", () => {
     const card = renderPost(
       '<button><img src="https://cdn.bsky.app/img/feed_thumbnail/plain/did/1@jpeg"></button>',
     );
@@ -206,9 +204,9 @@ describe("reading the media", () => {
     });
   });
 
-  // An external link card's thumbnail is served from the same path and is told
-  // apart only by what encloses it: a link, not a button.
-  it("does not read an external link card's thumbnail as media", () => {
+  // 外部リンクカードのサムネイルは同じ経路から配られていて、見分けが付くのは
+  // 何がそれを包んでいるかだけ＝ボタンではなくリンク。
+  it("外部リンクカードのサムネイルはメディアとして読まない", () => {
     const card = renderPost(
       '<a href="https://example.com"><img src="https://cdn.bsky.app/img/feed_thumbnail/plain/did/1@jpeg"></a>',
     );
@@ -219,8 +217,8 @@ describe("reading the media", () => {
     });
   });
 
-  // An unplayed video has no <video> at all: the thumbnail is a CSS background.
-  it("reads an unplayed video by the background it is drawn with", () => {
+  // 再生前の動画には <video> がそもそも無い＝サムネイルは CSS の背景。
+  it("再生前の動画は、描かれている背景から読む", () => {
     const card = renderPost(
       '<div style="background-image: url(https://video.bsky.app/watch/did/cid/thumbnail.jpg)"></div>',
     );
@@ -231,8 +229,8 @@ describe("reading the media", () => {
     });
   });
 
-  // GIFs come through as an external embed rather than as Bluesky media.
-  it("reads a GIF as a video", () => {
+  // GIF は Bluesky のメディアではなく、外部の埋め込みとして流れてくる。
+  it("GIF は動画として読む", () => {
     const card = renderPost(
       '<video src="https://t.gifs.bsky.app/gif/1.mp4"></video>',
     );
@@ -243,7 +241,7 @@ describe("reading the media", () => {
     });
   });
 
-  it("reads a post with no media as having none", () => {
+  it("メディアの無い投稿は無しとして読む", () => {
     expect(
       blueskyAdapter.readMedia(renderPost("<span>text only</span>")),
     ).toEqual({
@@ -253,12 +251,12 @@ describe("reading the media", () => {
   });
 });
 
-// Neither a testid nor a stable word marks a repost: the header reads "◯◯が
-// リポスト" in whatever language the reader has. What holds across languages is
-// the shape — the repost header's profile link wraps an icon, where an author's
-// profile link wraps an avatar image.
-describe("reading a repost", () => {
-  it("reads a profile link that wraps an icon as the repost header", () => {
+// リポストを示す testid も決まった語も無い＝ヘッダは読者の言語で「◯◯が
+// リポストしました」と出る。言語をまたいで変わらないのは形の方＝リポストの
+// ヘッダのプロフィールリンクはアイコンを包み、投稿者のプロフィールリンクは
+// アバター画像を包む。
+describe("リポストを読む", () => {
+  it("アイコンを包むプロフィールリンクをリポストのヘッダとして読む", () => {
     const card = renderPost(
       '<a href="/profile/example.bsky.social"><svg></svg></a>',
     );
@@ -266,7 +264,7 @@ describe("reading a repost", () => {
     expect(blueskyAdapter.readIsRepost(card)).toBe(true);
   });
 
-  it("does not read an author's link as one, icon or not", () => {
+  it("投稿者のリンクは、アイコンがあってもリポストとして読まない", () => {
     const card = renderPost(
       '<a href="/profile/example.bsky.social"><svg></svg><img src="/avatar.jpg"></a>',
     );
@@ -274,7 +272,7 @@ describe("reading a repost", () => {
     expect(blueskyAdapter.readIsRepost(card)).toBe(false);
   });
 
-  it("does not read a profile link wrapping anything else as one", () => {
+  it("他のものを包むプロフィールリンクもリポストとして読まない", () => {
     const card = renderPost(
       '<a href="/profile/example.bsky.social"><div></div></a>',
     );
@@ -282,21 +280,21 @@ describe("reading a repost", () => {
     expect(blueskyAdapter.readIsRepost(card)).toBe(false);
   });
 
-  it("does not read an empty profile link as one", () => {
+  it("空のプロフィールリンクもリポストとして読まない", () => {
     const card = renderPost('<a href="/profile/example.bsky.social"></a>');
 
     expect(blueskyAdapter.readIsRepost(card)).toBe(false);
   });
 
-  it("answers false where there is no profile link", () => {
+  it("プロフィールリンクが無ければ false を返す", () => {
     expect(blueskyAdapter.readIsRepost(renderPost())).toBe(false);
   });
 });
 
-// Bluesky's like is X's like, so the thresholds and the messages that name it
-// are shared rather than duplicated per service.
-describe("what the thresholds count", () => {
-  it("is the same like X counts, against the same pair of numbers", () => {
+// Bluesky のいいねは X のいいねなので、しきい値とそれを名指しするメッセージは
+// サービスごとに複製せず共有する。
+describe("しきい値が数えるもの", () => {
+  it("X が数えるいいねと同じもの＝同じ2つの数と比べる", () => {
     expect(blueskyAdapter.reactionLabels).toBe(xAdapter.reactionLabels);
     expect(blueskyAdapter.thresholdKeys).toBe(LIKE_THRESHOLDS);
   });
