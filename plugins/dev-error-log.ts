@@ -1,10 +1,10 @@
-// The development server's other half: the endpoint the service worker posts its
-// error buffer to, and the liveness probe it polls. A Vite plugin, applied to
-// `serve` alone, which wxt.config.ts installs.
+// 開発サーバーのもう半分＝service worker がエラーのバッファを送る先の
+// エンドポイントと、それが叩く生存確認。`serve` にだけ当たる Vite の
+// プラグインで、これを差し込むのは wxt.config.ts。
 //
-// It sits here rather than in scripts/ because it is never run — scripts/ is
-// what node executes directly (`npm run dev`, `npm run deploy`,
-// `npm run verify:manifest`), and this is imported by the build config instead.
+// scripts/ ではなくここにあるのは、これが一度も実行されないから＝scripts/ は
+// node が直接動かすもの（`npm run dev`・`npm run deploy`・
+// `npm run verify:manifest`）で、こちらはビルドの設定から読み込まれる。
 import { randomUUID } from "node:crypto";
 import fs from "node:fs";
 import type { IncomingMessage, ServerResponse } from "node:http";
@@ -35,7 +35,7 @@ function readBody(request: IncomingMessage): Promise<string> {
     request.on("data", (chunk: Buffer) => {
       size += chunk.length;
       if (size > BODY_LIMIT_BYTES) {
-        reject(new Error("The development error log payload is too large."));
+        reject(new Error("開発時のエラーログの本文が大きすぎる。"));
         request.destroy();
         return;
       }
@@ -46,9 +46,9 @@ function readBody(request: IncomingMessage): Promise<string> {
   });
 }
 
-// The extension's service worker fetches this from chrome-extension://<id>, so
-// the response has to carry the permission itself. Mirrors the origin policy of
-// the server's own CORS configuration.
+// 拡張機能の service worker はこれを chrome-extension://<id> から取りに来るので、
+// 応答が自分で許可を運ばなければならない。オリジンの方針はサーバー自身の CORS
+// 設定に合わせてある。
 function allowExtensionOrigin(
   request: IncomingMessage,
   response: ServerResponse,
@@ -65,22 +65,21 @@ export interface DevErrorLogOptions {
   isBuilt?: () => boolean;
 }
 
-// Receives the uncaught exceptions the extension collected and appends them to
-// ~/.sift/extension-errors.log as JSON Lines. This file is the whole point of
-// the exercise: Chrome's own error box cannot be read from outside the browser,
-// so without a file on disk an exception in the extension is invisible to any
-// automated diagnosis.
+// 拡張機能が集めた、捕まえ損ねた例外を受け取り、~/.sift/extension-errors.log へ
+// JSON Lines として書き足す。この一連の目的はこのファイルそのもの＝Chrome 自身の
+// エラー欄はブラウザの外から読めないので、ディスク上のファイルが無ければ、
+// 拡張機能の中の例外はどんな自動診断からも見えない。
 //
-// The endpoint is registered ahead of Vite's own middlewares, which is why it
-// answers CORS itself rather than relying on the server's cors option running
-// first.
+// このエンドポイントは Vite 自身のミドルウェアより前に登録される＝だから
+// サーバーの cors 設定が先に走るのを当てにせず、自分で CORS に答えている。
 export function devErrorLog({
   logPath = DEFAULT_ERROR_LOG_PATH,
   isBuilt = () => true,
 }: DevErrorLogOptions = {}): Plugin {
-  // Identifies this server process to the extension. A worker that sees an id it
-  // did not start with knows its HMR socket belongs to a server that is gone,
-  // and that only restarting itself will attach it to the one that is up (#31).
+  // このサーバーのプロセスを拡張機能に対して名乗るためのもの。自分が起動した
+  // ときのものと違う id を見た worker は、自分の HMR ソケットがもう居ない
+  // サーバーのものであり、立っている方へ繋ぎ直すには自分を起動し直すしかないと
+  // 分かる（#31）。
   const boot = randomUUID();
 
   return {
@@ -95,12 +94,12 @@ export function devErrorLog({
         allowExtensionOrigin(request, response);
         response.setHeader("content-type", "application/json");
         response.setHeader("cache-control", "no-store");
-        // `ready` gates the worker's self-reload. The server answers as soon as
-        // it is listening, but starting it wipes and rewrites the build folder —
-        // and reloading an unpacked extension whose folder is momentarily empty
-        // does not retry, it FAILS: Chrome unloads the extension and puts up a
-        // dialog about a missing manifest (measured 2026-08-02, #31). So the
-        // worker is told to hold until there is something to reload into.
+        // `ready` は worker の自己再読み込みの門。サーバーは待ち受けを始めた
+        // 時点で答えるが、起動すること自体がビルドの置き場を消して書き直す＝
+        // そして中身が一瞬空の状態で展開済み拡張機能を再読み込みすると、
+        // 再試行ではなく失敗する。Chrome は拡張機能を降ろし、manifest が無いと
+        // いうダイアログを出す（2026-08-02 に確認・#31）。だから worker には、
+        // 読み込み直す先ができるまで待てと伝える。
         response.end(JSON.stringify({ boot, ready: isBuilt() }));
       });
 
@@ -134,7 +133,7 @@ export function devErrorLog({
             response.end();
           } catch (error) {
             server.config.logger.warn(
-              `[sift] Could not write the extension error log: ${error instanceof Error ? error.message : String(error)}`,
+              `[sift] 拡張機能のエラーログを書けなかった: ${error instanceof Error ? error.message : String(error)}`,
             );
             response.statusCode = 400;
             response.end();

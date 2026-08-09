@@ -1,24 +1,23 @@
-// Uncaught exceptions in an extension reach only the error box of
-// chrome://extensions, which nothing outside Chrome can read: an extension
-// cannot inject into chrome://, chrome.developerPrivate is exposed to internal
-// pages only, and Chrome 136 disabled CDP against the default profile. Anything
-// that diagnoses Sift automatically is therefore blind to them.
+// 拡張機能の中で捕まえ損ねた例外が届く先は chrome://extensions のエラー欄だけ
+// で、そこは Chrome の外からは誰にも読めない＝拡張機能は chrome:// へ注入でき
+// ないし、chrome.developerPrivate は内部のページにしか出ていないし、Chrome 136
+// は既定のプロファイルに対する CDP を止めた。だから Sift を自動で診断するもの
+// からは、それらが一切見えない。
 //
-// What follows is the capture half of ordinary error telemetry — the same two
-// global event subscriptions a Sentry-style SDK installs inside an extension —
-// with a local destination instead of a server. Every surface writes to a ring
-// buffer in browser.storage.local, in every build. In development the service
-// worker forwards that buffer to the development server, which appends it to
-// ~/.sift/extension-errors.log (plugins/dev-error-log.ts). A release build keeps
-// filling the buffer and has nobody to forward it to.
+// 以下はよくあるエラー計測の「集める側」＝Sentry 型の SDK が拡張機能の中に
+// 入れるのと同じ2つのグローバルなイベント購読で、宛先だけがサーバーではなく
+// 手元。どの画面も browser.storage.local の環状バッファへ書き、それはどの
+// ビルドでも同じ。開発時は service worker がそのバッファを開発サーバーへ送り、
+// サーバーが ~/.sift/extension-errors.log へ書き足す（plugins/dev-error-log.ts）。
+// リリースのビルドはバッファを埋め続けるが、送る相手がいない。
 //
-// Best-effort by construction: nothing here throws, and nothing here is awaited
-// by the code it watches. A lost diagnostic line is always better than a
-// diagnostic that breaks filtering.
+// 作りからして best-effort＝ここには例外を投げるものが無いし、ここが見ている
+// コードがここを待つこともない。診断の1行が失われる方が、診断がフィルタを壊す
+// よりいつでも良い。
 import { browser } from "wxt/browser";
 import { storage } from "wxt/utils/storage";
 
-// The key the buffer is kept under, and how many entries it holds.
+// バッファを置くキーと、そこに入る件数。
 const ERROR_LOG_KEY = "siftErrorLog";
 const ERROR_LOG_LIMIT = 50;
 
@@ -33,9 +32,9 @@ export interface UncaughtEventDetails {
 
 export type UncaughtEventKind = "error" | "unhandledrejection";
 
-// The minimum either a real ErrorEvent/PromiseRejectionEvent or the test's
-// fakes carry. Both event shapes are read through this one type, since which
-// fields are meaningful depends on `kind`, not on the DOM event class.
+// 本物の ErrorEvent / PromiseRejectionEvent も、テストの偽物も、最低限持って
+// いるもの。どちらの形もこの1つの型を通して読む＝どのフィールドが意味を持つかは
+// DOM のイベントクラスではなく `kind` で決まるから。
 export interface UncaughtEventLike {
   message?: unknown;
   filename?: unknown;
@@ -53,8 +52,8 @@ export interface ErrorLogEntry {
   seq: number;
 }
 
-// The ring buffer itself. Local rather than sync: it is about this browser on
-// this machine, it turns over constantly, and sync's quota is for settings.
+// 環状バッファそのもの。sync ではなく local＝これはこの機械のこのブラウザに
+// ついての話で、絶えず入れ替わるし、sync の容量は設定のためのもの。
 export const errorLogItem = storage.defineItem<ErrorLogEntry[]>(
   `local:${ERROR_LOG_KEY}`,
   { fallback: [] },
@@ -64,9 +63,9 @@ function isInteger(value: unknown): value is number {
   return Number.isInteger(value);
 }
 
-// A `seq` read off a value of unknown shape — storage can hold whatever an
-// older version of this extension put there. Untyped on purpose: callers
-// re-check the result with isInteger() before trusting it.
+// 形の分からない値から読んだ `seq`＝保管庫には、この拡張機能の古い版が置いた
+// ものも入りうる。型を付けていないのは意図的で、呼び出し側は信じる前に
+// isInteger() で確かめ直す。
 function readSeq(value: unknown): unknown {
   return typeof value === "object" && value !== null && "seq" in value
     ? (value as { seq: unknown }).seq
@@ -88,25 +87,26 @@ function readMessage(reason: unknown): string {
   try {
     return String(reason);
   } catch {
-    // A thrown value need not be stringifiable (a null-prototype object, a
-    // Proxy that traps toString). Losing its text beats losing the whole entry.
-    return "(unstringifiable value)";
+    // 投げられた値が文字にできるとは限らない（プロトタイプが null の
+    // オブジェクト・toString を捕まえる Proxy）。その文字を失う方が、記録ごと
+    // 失うよりまし。
+    return "(文字にできない値)";
   }
 }
 
-// A `.stack` read off a value of unknown shape, the same way readSeq() reads
-// `.seq` — reason/error is whatever was thrown, not necessarily an Error.
+// readSeq() が `.seq` を読むのと同じやり方で、形の分からない値から読んだ
+// `.stack`＝reason / error は投げられた値そのもので、Error とは限らない。
 function readStack(value: unknown): unknown {
   return typeof value === "object" && value !== null && "stack" in value
     ? (value as { stack: unknown }).stack
     : undefined;
 }
 
-// Whether an error raised on a shared window came from Sift rather than from the
-// page hosting it. `browser.runtime.getURL("")` is the right prefix in both
-// builds: WXT bundles the content script into the extension in development too,
-// so Sift's own frames always carry chrome-extension://<id>/ and only the dev
-// server's own socket ever names localhost.
+// 共有の window で起きたエラーが、それを載せているページではなく Sift から
+// 来たものかどうか。`browser.runtime.getURL("")` はどちらのビルドでも正しい
+// 前半になる＝WXT は開発時も content script を拡張機能へ束ねるので、Sift 自身の
+// フレームは常に chrome-extension://<id>/ を持ち、localhost を名乗るのは開発
+// サーバー自身のソケットだけ。
 export function isOwnExtensionError(
   details: Partial<UncaughtEventDetails> | null | undefined,
   extensionUrlPrefix: string,
@@ -122,8 +122,8 @@ export function isOwnExtensionError(
   );
 }
 
-// The two event shapes differ: an ErrorEvent carries the location the exception
-// escaped from, a PromiseRejectionEvent carries only the rejected value.
+// 2つのイベントの形は違う＝ErrorEvent は例外が抜け出した場所を持ち、
+// PromiseRejectionEvent は拒まれた値しか持たない。
 export function describeUncaughtEvent(
   event: UncaughtEventLike,
   kind: UncaughtEventKind,
@@ -149,8 +149,8 @@ export function describeUncaughtEvent(
   };
 }
 
-// `seq` is minted from the buffer itself so that the development drain can tell
-// what it has already forwarded without a second counter to keep in step.
+// `seq` はバッファ自身から作る＝そうすれば開発時の送り出しは、足並みを揃える
+// 2つ目の数え役を持たずに、自分が既に送ったものを見分けられる。
 export function appendErrorEntry(
   entries: unknown,
   entry: Omit<ErrorLogEntry, "seq">,
@@ -169,9 +169,9 @@ export function collectUndrainedEntries(
 ): ErrorLogEntry[] {
   const existing: unknown[] = Array.isArray(entries) ? entries : [];
   const lastSeq = readSeq(existing.at(-1));
-  // A buffer whose newest entry predates the drain mark was started over
-  // (storage cleared, extension reinstalled). Forward all of it rather than
-  // silently discarding everything until the counter catches up again.
+  // 最新の記録が送り出しの印より古いバッファは、作り直されている（保管庫が
+  // 消された・拡張機能を入れ直した）。数え役が追い付くまで全部を黙って捨てる
+  // のではなく、丸ごと送る。
   const from =
     isInteger(drainedSeq) && isInteger(lastSeq) && lastSeq >= drainedSeq
       ? drainedSeq
@@ -182,10 +182,10 @@ export function collectUndrainedEntries(
   ) as ErrorLogEntry[];
 }
 
-// Serialized within a context so two errors in the same tick cannot each write
-// the buffer they both read. Surfaces still race with one another, which can
-// drop a line; diagnostics are best-effort and a lock would cost more than it
-// saves here.
+// 1つのコンテキストの中では直列にしてある＝同じ tick の2つのエラーが、どちらも
+// 自分の読んだバッファを書いてしまうことがないように。画面同士はなお競争して
+// いて、そこでは1行落ちうるが、診断は best-effort であり、ここでの錠は救う分
+// より高くつく。
 let pendingWrite: Promise<void> = Promise.resolve();
 
 export function recordErrorEntry(
@@ -198,15 +198,15 @@ export function recordErrorEntry(
       await errorLogItem.setValue(appendErrorEntry(stored, entry, limit));
     })
     .catch(() => {
-      // The extension context can be invalidated mid-write after a reload.
+      // 再読み込みの後、書き込みの途中で拡張機能のコンテキストが無効になりうる。
     });
 
   return pendingWrite;
 }
 
-// The surface `window`, a service worker's `globalThis`, and the test's fake
-// targets all satisfy. Narrower than EventTarget on purpose: the fakes have no
-// dispatchEvent, and nothing here needs one.
+// 画面の `window`・service worker の `globalThis`・テストの偽物のどれもが
+// 満たすもの。EventTarget より狭くしてあるのは意図的で、偽物は dispatchEvent を
+// 持たないし、ここにそれを要るものは無い。
 export interface UncaughtReportingTarget {
   location?: { href?: string | null } | null;
   addEventListener(
@@ -263,12 +263,12 @@ export function installUncaughtReporting({
         stack: details.stack,
         url: readPageUrl(),
       });
-      // A rejection escaping here would be caught by this very handler.
+      // ここから抜け出た拒否は、この handler 自身に捕まることになる。
       if (isThenable(written)) {
         written.then(undefined, () => {});
       }
     } catch {
-      // Diagnostics must never break the code they watch.
+      // 診断が、それが見ているコードを壊してはならない。
     }
   }
 
@@ -291,8 +291,8 @@ export interface StartUncaughtReportingOptions {
   filterToOwnCode: boolean;
 }
 
-// The browser-side wiring the three surfaces share. `filterToOwnCode` is on only
-// where the page's own exceptions land on the same target.
+// 3つの画面が共有する、ブラウザ側の繋ぎ込み。`filterToOwnCode` を入れるのは、
+// ページ自身の例外が同じ相手に届く所だけ。
 export function startUncaughtReporting({
   target,
   source,

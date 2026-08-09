@@ -1,16 +1,16 @@
 import { describe, expect, it } from "vitest";
 import { formatErrorLogLines } from "./dev-error-log.ts";
 
-// One JSON object per line is what makes the log file readable by `tail` and by
-// anything else that takes a line at a time.
+// 1行に JSON 1つという形が、このログファイルを `tail` や、1行ずつ受け取る他の
+// ものから読めるようにしている。
 describe("formatErrorLogLines", () => {
-  it("writes one entry per line", () => {
+  it("1行に記録1つを書く", () => {
     expect(
       formatErrorLogLines([{ seq: 1, message: "first" }, { seq: 2 }]),
     ).toBe('{"seq":1,"message":"first"}\n{"seq":2}\n');
   });
 
-  it("writes nothing for nothing", () => {
+  it("何も無ければ何も書かない", () => {
     expect(formatErrorLogLines(undefined)).toBe("");
   });
 });

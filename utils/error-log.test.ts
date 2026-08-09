@@ -17,10 +17,10 @@ const extensionPrefix = "chrome-extension://abcdefghijklmnopabcdefghijklmnop/";
 const uncaughtError = new Error("boom");
 uncaughtError.stack = `Error: boom\n    at ${extensionPrefix}src/content/index.js:3:1`;
 
-// The window an uncaught exception reaches, with a way to fire one and to count
-// what is still subscribed. A content script shares its window with the page's
-// own code, which is why what is subscribed — and what is left behind after
-// dispose — is part of the reading.
+// 捕まえ損ねた例外が届く window に、それを発火させる手段と、まだ購読されて
+// いるものを数える手段を足したもの。content script は window をページ自身の
+// コードと共有するので、何が購読されているか＝そして片付けの後に何が残って
+// いるかが、読み取りの一部になる。
 function createFakeTarget(href: string | null = null) {
   const listeners = new Map<
     string,
@@ -54,11 +54,10 @@ function createFakeTarget(href: string | null = null) {
   };
 }
 
-// X's own exceptions reach the same window a content script does, and recording
-// them would be a false report. Only frames naming the extension's origin are
-// Sift's.
+// X 自身の例外も content script と同じ window に届き、それを記録すれば誤報に
+// なる。Sift のものは、拡張機能のオリジンを名乗るフレームだけ。
 describe("isOwnExtensionError", () => {
-  it("reads a frame naming the extension's own origin", () => {
+  it("拡張機能自身のオリジンを名乗るフレームを読む", () => {
     expect(
       isOwnExtensionError(
         { filename: `${extensionPrefix}src/content/index.js`, stack: null },
@@ -67,7 +66,7 @@ describe("isOwnExtensionError", () => {
     ).toBe(true);
   });
 
-  it("reads the origin out of the stack when there is no filename", () => {
+  it("filename が無ければスタックからオリジンを読む", () => {
     expect(
       isOwnExtensionError(
         {
@@ -79,7 +78,7 @@ describe("isOwnExtensionError", () => {
     ).toBe(true);
   });
 
-  it("leaves the page's own exceptions alone", () => {
+  it("ページ自身の例外には手を出さない", () => {
     expect(
       isOwnExtensionError(
         {
@@ -91,7 +90,7 @@ describe("isOwnExtensionError", () => {
     ).toBe(false);
   });
 
-  it("claims nothing when there is nothing to read", () => {
+  it("読むものが無ければ何も名乗らない", () => {
     expect(
       isOwnExtensionError({ filename: null, stack: null }, extensionPrefix),
     ).toBe(false);
@@ -102,7 +101,7 @@ describe("isOwnExtensionError", () => {
 });
 
 describe("describeUncaughtEvent", () => {
-  it("reads an error event", () => {
+  it("error のイベントを読む", () => {
     expect(
       describeUncaughtEvent(
         {
@@ -119,7 +118,7 @@ describe("describeUncaughtEvent", () => {
     });
   });
 
-  it("reads a rejection carrying an Error", () => {
+  it("Error を運ぶ拒否を読む", () => {
     expect(
       describeUncaughtEvent({ reason: uncaughtError }, "unhandledrejection"),
     ).toEqual({
@@ -129,7 +128,7 @@ describe("describeUncaughtEvent", () => {
     });
   });
 
-  it("reads a rejection carrying a bare value", () => {
+  it("裸の値を運ぶ拒否を読む", () => {
     expect(
       describeUncaughtEvent({ reason: "plain string" }, "unhandledrejection"),
     ).toEqual({
@@ -139,15 +138,15 @@ describe("describeUncaughtEvent", () => {
     });
   });
 
-  // The reason is whatever the failing code threw, so reading it must not be a
-  // second way to throw.
-  it("survives a reason whose message throws", () => {
+  // reason は失敗したコードが投げたものそのものなので、それを読むこと自体が
+  // 2つ目の投げ方になってはならない。
+  it("message が例外になる reason でも壊れない", () => {
     expect(
       describeUncaughtEvent(
         {
           reason: {
             get message() {
-              throw new Error("hostile");
+              throw new Error("敵対的");
             },
           },
         },
@@ -156,18 +155,18 @@ describe("describeUncaughtEvent", () => {
     ).toBe("[object Object]");
   });
 
-  it("survives a reason that cannot be turned into a string at all", () => {
+  it("そもそも文字にできない reason でも壊れない", () => {
     expect(
       describeUncaughtEvent(
         { reason: Object.assign(Object.create(null), { toString: null }) },
         "unhandledrejection",
       ).message,
-    ).toBe("(unstringifiable value)");
+    ).toBe("(文字にできない値)");
   });
 
-  // The buffer lives in browser.storage, so one enormous message must not be
-  // able to fill it.
-  it("cuts an overlong message down", () => {
+  // バッファは browser.storage の中にあるので、途方もなく長いメッセージ1つで
+  // 埋められてはならない。
+  it("長すぎるメッセージを切り詰める", () => {
     expect(
       describeUncaughtEvent({ message: "x".repeat(600) }, "error").message,
     ).toHaveLength(501);
@@ -175,13 +174,13 @@ describe("describeUncaughtEvent", () => {
 });
 
 describe("appendErrorEntry", () => {
-  it("numbers the first entry from one", () => {
+  it("最初の記録に 1 から番号を振る", () => {
     expect(appendErrorEntry(undefined, { source: "content" })).toEqual([
       { source: "content", seq: 1 },
     ]);
   });
 
-  it("carries the numbering on from what is already stored", () => {
+  it("既に保管されているものから番号を継ぐ", () => {
     expect(
       appendErrorEntry([{ source: "popup", seq: 4 }], { source: "content" }),
     ).toEqual([
@@ -190,7 +189,7 @@ describe("appendErrorEntry", () => {
     ]);
   });
 
-  it("keeps the newest entries and drops the oldest", () => {
+  it("新しい記録を残し、古いものを落とす", () => {
     let ringBuffer: ErrorLogEntry[] = [];
     for (let index = 0; index < 5; index += 1) {
       ringBuffer = appendErrorEntry(
@@ -206,21 +205,21 @@ describe("appendErrorEntry", () => {
 });
 
 describe("collectUndrainedEntries", () => {
-  it("takes what is past the drain mark", () => {
+  it("送り出しの印より先のものを取る", () => {
     expect(
       collectUndrainedEntries([{ seq: 1 }, { seq: 2 }, { seq: 3 }], 2),
     ).toEqual([{ seq: 3 }]);
   });
 
-  it("takes everything when nothing has been drained", () => {
+  it("何も送っていなければ全部を取る", () => {
     expect(
       collectUndrainedEntries([{ seq: 1 }, { seq: 2 }], undefined),
     ).toEqual([{ seq: 1 }, { seq: 2 }]);
   });
 
-  // A buffer that restarted below the drain mark is forwarded whole rather than
-  // silently withheld until the counter catches up.
-  it("forwards a buffer that restarted below the mark", () => {
+  // 送り出しの印より下から始まり直したバッファは、数え役が追い付くまで黙って
+  // 留め置かず、丸ごと送る。
+  it("印より下から始まり直したバッファを送る", () => {
     expect(collectUndrainedEntries([{ seq: 1 }], 9)).toEqual([{ seq: 1 }]);
     expect(collectUndrainedEntries([], 9)).toEqual([]);
   });
@@ -232,7 +231,7 @@ describe("recordErrorEntry", () => {
     vi.restoreAllMocks();
   });
 
-  it("appends to the buffer in storage", async () => {
+  it("保管庫のバッファへ書き足す", async () => {
     await recordErrorEntry({ source: "content", message: "first" });
     await recordErrorEntry({ source: "popup", message: "second" });
 
@@ -242,10 +241,10 @@ describe("recordErrorEntry", () => {
     ]);
   });
 
-  // The extension being reloaded under a live content script invalidates its
-  // context, and every storage call from then on throws. Recording an error
-  // must not become an error.
-  it("swallows a storage that is gone", async () => {
+  // 生きている content script の下で拡張機能が再読み込みされるとコンテキストが
+  // 無効になり、それ以降どの保管庫の呼び出しも例外になる。エラーを記録すること
+  // 自体がエラーになってはならない。
+  it("消えた保管庫を飲み込む", async () => {
     vi.spyOn(errorLogItem, "getValue").mockRejectedValue(
       new Error("Extension context invalidated."),
     );
@@ -257,7 +256,7 @@ describe("recordErrorEntry", () => {
 });
 
 describe("installUncaughtReporting", () => {
-  it("records the extension's own exceptions and leaves the page's alone", () => {
+  it("拡張機能自身の例外を記録し、ページのものには手を出さない", () => {
     const target = createFakeTarget("https://x.com/home");
     const recorded: Omit<ErrorLogEntry, "seq">[] = [];
     installUncaughtReporting({
@@ -303,9 +302,9 @@ describe("installUncaughtReporting", () => {
     ]);
   });
 
-  // The injection that replaces a content script disposes the previous runtime
-  // first, and what it leaves subscribed would report into a dead context.
-  it("unsubscribes everything it subscribed", () => {
+  // content script を差し替える注入は、先に前の実行環境を片付ける。そこで購読
+  // したまま残ったものは、死んだコンテキストへ報告することになる。
+  it("購読したものを全部外す", () => {
     const target = createFakeTarget("https://x.com/home");
     const recorded: Omit<ErrorLogEntry, "seq">[] = [];
     const stop = installUncaughtReporting({
@@ -328,9 +327,9 @@ describe("installUncaughtReporting", () => {
     expect(recorded).toEqual([]);
   });
 
-  // Everything running on an extension page is the extension's own, so nothing
-  // is filtered out there.
-  it("records everything on an extension page", () => {
+  // 拡張機能のページで動いているものは全部が拡張機能自身のものなので、そこでは
+  // 何も除かない。
+  it("拡張機能のページでは全部を記録する", () => {
     const target = createFakeTarget("chrome-extension://abc/popup.html");
     const recorded: Omit<ErrorLogEntry, "seq">[] = [];
     installUncaughtReporting({
@@ -350,27 +349,27 @@ describe("installUncaughtReporting", () => {
     expect(recorded[0]?.source).toBe("popup");
   });
 
-  // A recorder that fails must not take the watched code down with it.
-  it("survives a recorder that throws", () => {
+  // 記録役が失敗しても、見られている側のコードを道連れにしてはならない。
+  it("例外を投げる記録役でも壊れない", () => {
     const target = createFakeTarget();
     installUncaughtReporting({
       target,
       source: "popup",
       record: () => {
-        throw new Error("storage is gone");
+        throw new Error("保管庫が消えている");
       },
     });
 
     expect(() => target.emit("error", { message: "x" })).not.toThrow();
   });
 
-  // And a rejected write must not become the next unhandled rejection.
-  it("survives a recorder that rejects", async () => {
+  // そして、拒まれた書き込みが次の未処理の拒否になってはならない。
+  it("拒否を返す記録役でも壊れない", async () => {
     const target = createFakeTarget();
     installUncaughtReporting({
       target,
       source: "popup",
-      record: () => Promise.reject(new Error("storage is gone")),
+      record: () => Promise.reject(new Error("保管庫が消えている")),
     });
 
     target.emit("unhandledrejection", { reason: "x" });
