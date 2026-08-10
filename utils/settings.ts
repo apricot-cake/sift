@@ -22,7 +22,8 @@ export const defaults = Object.freeze({
   risingEnabled: true as boolean,
   risingMinLikes: 100 as number,
   risingMaxAgeHours: 6 as number,
-  mediaMode: "any" as "any" | "images",
+  mediaMode: "any" as "any" | "images" | "video",
+  excludedKeywords: "" as string,
   hideReposts: true as boolean,
   misskeyInstances: Object.freeze([]) as readonly string[],
   // Misskey が数えるのはいいねではなくリアクションで、インスタンスの規模は X
@@ -70,6 +71,29 @@ function normalizeInstanceList(value: unknown): string[] {
     }
   }
   return hosts;
+}
+
+// 入力は1行に1語または1句。空行を捨て、同じ語を何度も判定しないようにする。
+// 照合は大小文字を区別しないので、重複判定も同じ基準で行う。
+export function normalizeExcludedKeywords(value: unknown): string {
+  const seen = new Set<string>();
+  const keywords: string[] = [];
+  for (const line of String(value ?? "").split(/\r?\n/)) {
+    const keyword = line.trim();
+    const normalized = keyword.toLowerCase();
+    if (keyword !== "" && !seen.has(normalized)) {
+      seen.add(normalized);
+      keywords.push(keyword);
+    }
+  }
+  return keywords.join("\n");
+}
+
+export function excludedKeywordsFrom(value: string): readonly string[] {
+  return normalizeExcludedKeywords(value)
+    .split("\n")
+    .filter(Boolean)
+    .map((keyword) => keyword.toLowerCase());
 }
 
 function normalizeSiteEnabled(
@@ -129,7 +153,11 @@ export function normalizeSettings(value: unknown): Settings {
       1,
       168,
     ),
-    mediaMode: source.mediaMode === "images" ? "images" : "any",
+    mediaMode:
+      source.mediaMode === "images" || source.mediaMode === "video"
+        ? source.mediaMode
+        : "any",
+    excludedKeywords: normalizeExcludedKeywords(source.excludedKeywords),
     hideReposts: source.hideReposts !== false,
     misskeyInstances: normalizeInstanceList(source.misskeyInstances),
     misskeyMinReactions: clampInteger(
@@ -208,6 +236,7 @@ export function thresholdsFor(
   keys: ThresholdKeys,
 ): ClassifyThresholds {
   return {
+    excludedKeywords: excludedKeywordsFrom(settings.excludedKeywords),
     hideReposts: settings.hideReposts,
     minLikes: settings[keys.minReactions],
     risingEnabled: settings.risingEnabled,

@@ -24,6 +24,7 @@ const BLUESKY_SELECTORS = Object.freeze({
   video: '[style*="video.bsky.app"]',
   // GIF は Bluesky のメディアではなく外部埋め込みとして届く。
   animatedImage: 'video[src*="t.gifs.bsky.app"]',
+  postText: '[data-testid="postText"]',
   profileLink: 'a[href^="/profile/"]',
 });
 
@@ -154,6 +155,13 @@ export const blueskyAdapter = Object.freeze({
           postCard.querySelector(BLUESKY_SELECTORS.animatedImage),
       ),
     };
+  },
+
+  readText(postCard: Element) {
+    return Array.from(postCard.querySelectorAll(BLUESKY_SELECTORS.postText))
+      .filter((text) => text.closest(BLUESKY_SELECTORS.postCard) === postCard)
+      .map((text) => text.textContent ?? "")
+      .join(" ");
   },
 
   // リポストには testid も安定した文言も付かない＝ヘッダは読者の言語で

@@ -16,6 +16,7 @@ const X_SELECTORS = Object.freeze({
   image: '[data-testid="tweetPhoto"], a[href*="/photo/"]',
   video:
     '[data-testid="videoPlayer"], [data-testid="videoComponent"], video, a[href*="/video/"]',
+  postText: '[data-testid="tweetText"]',
   socialContext: '[data-testid="socialContext"]',
 });
 
@@ -69,6 +70,13 @@ export const xAdapter = Object.freeze({
       hasImage: Boolean(postCard.querySelector(X_SELECTORS.image)),
       hasVideo: Boolean(postCard.querySelector(X_SELECTORS.video)),
     };
+  },
+
+  readText(postCard: Element) {
+    return Array.from(postCard.querySelectorAll(X_SELECTORS.postText))
+      .filter((text) => text.closest(X_SELECTORS.postCard) === postCard)
+      .map((text) => text.textContent ?? "")
+      .join(" ");
   },
 
   readIsRepost(postCard: Element) {

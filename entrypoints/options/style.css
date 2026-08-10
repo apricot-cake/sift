@@ -87,8 +87,14 @@ h2 {
   line-height: 1.35;
 }
 
+.setting-row.keyword-filter {
+  align-items: start;
+  padding: 6px 0;
+}
+
 input,
-select {
+select,
+textarea {
   font: inherit;
 }
 
@@ -103,12 +109,24 @@ select {
   width: 116px;
 }
 
+textarea {
+  background: var(--control-background);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--foreground);
+  min-height: 68px;
+  padding: 6px 8px;
+  resize: vertical;
+  width: 220px;
+}
+
 select {
   cursor: pointer;
 }
 
 input:focus-visible,
-select:focus-visible {
+select:focus-visible,
+textarea:focus-visible {
   border-color: var(--accent);
   outline: 2px solid color-mix(in srgb, var(--accent) 35%, transparent);
   outline-offset: 1px;

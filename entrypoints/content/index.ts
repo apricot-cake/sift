@@ -78,7 +78,7 @@ const TOOLBAR_CSS = `
   .toolbar { align-items: center; background: var(--background); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 4px 14px rgb(0 0 0 / 18%); color: var(--foreground); display: flex; gap: 6px; padding: 7px; }
   button { background: var(--control-background); border: 1px solid var(--border); border-radius: 6px; color: inherit; cursor: pointer; font: inherit; font-size: 12px; font-weight: 600; min-height: 30px; padding: 5px 9px; white-space: nowrap; }
   button:hover { background: var(--subtle-background); }
-  button:focus-visible, input:focus-visible, select:focus-visible { border-color: var(--accent); outline: 2px solid color-mix(in srgb, var(--accent) 40%, transparent); outline-offset: 1px; }
+  button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible { border-color: var(--accent); outline: 2px solid color-mix(in srgb, var(--accent) 40%, transparent); outline-offset: 1px; }
   button[data-active="true"] { background: var(--accent); border-color: var(--accent); color: #ffffff; }
   .status { font-size: 12px; font-variant-numeric: tabular-nums; padding: 0 4px; white-space: nowrap; }
   .panel { background: var(--background); border: 1px solid var(--border); border-radius: 8px; bottom: 48px; box-shadow: 0 8px 24px rgb(0 0 0 / 22%); color: var(--foreground); min-width: 292px; padding: 14px; position: absolute; right: 0; }
@@ -87,9 +87,11 @@ const TOOLBAR_CSS = `
   .panel-header strong { font-size: 14px; font-weight: 600; }
   .panel-header span { color: var(--muted); font-size: 11px; }
   label { align-items: center; display: flex; font-size: 13px; gap: 12px; justify-content: space-between; min-height: 36px; }
-  input, select { font: inherit; }
+  input, select, textarea { font: inherit; }
   input[type="checkbox"] { accent-color: var(--accent); height: 17px; width: 17px; }
   input[type="number"], select { background: var(--control-background); border: 1px solid var(--border); border-radius: 6px; color: var(--foreground); height: 30px; padding: 4px 7px; width: 96px; }
+  textarea { background: var(--control-background); border: 1px solid var(--border); border-radius: 6px; color: var(--foreground); min-height: 58px; padding: 5px 7px; resize: vertical; width: 156px; }
+  label.keyword-filter { align-items: start; padding: 5px 0; }
   .input-with-unit { align-items: center; color: var(--muted); display: flex; font-size: 11px; gap: 5px; }
   .input-with-unit input { width: 66px; }
   .hint { border-top: 1px solid var(--border); color: var(--muted); font-size: 11px; line-height: 1.45; margin: 8px 0 0; padding-top: 10px; }
@@ -148,7 +150,13 @@ export function startContentRuntime(
   // アダプターから別々に届き、ここで畳み合わされる。
   function hasMedia(postCard: Element): boolean {
     const { hasImage, hasVideo } = adapter.readMedia(postCard);
-    return settings.mediaMode === "images" ? hasImage : hasImage || hasVideo;
+    if (settings.mediaMode === "images") {
+      return hasImage;
+    }
+    if (settings.mediaMode === "video") {
+      return hasVideo;
+    }
+    return hasImage || hasVideo;
   }
 
   function setCellState(
@@ -238,6 +246,7 @@ export function startContentRuntime(
           likeCount: adapter.readReactionCount(postCard),
           createdAtMs: adapter.readCreatedAt(postCard),
           isRepost: adapter.readIsRepost(postCard),
+          text: adapter.readText(postCard),
         },
         // その数をどの数と比べるかはサービスの話で、この繰り返しの話では
         // ない＝Misskey のリアクションは専用の組を持つ。
@@ -306,7 +315,8 @@ export function startContentRuntime(
           <label>${t("toolbarRisingEnabled")}<input data-setting="risingEnabled" type="checkbox"></label>
           <label>${t(risingMinCount)}<input data-setting="${risingMinReactions}" type="number" min="0" step="${thresholdStep(risingMinReactions)}"></label>
           <label>${t("toolbarMaxAge")}<span class="input-with-unit"><input data-setting="risingMaxAgeHours" type="number" min="1" max="168">${t("toolbarUnitHours")}</span></label>
-          <label>${t("toolbarMedia")}<select data-setting="mediaMode"><option value="any">${t("toolbarMediaAny")}</option><option value="images">${t("toolbarMediaImages")}</option></select></label>
+          <label>${t("toolbarMedia")}<select data-setting="mediaMode"><option value="any">${t("toolbarMediaAny")}</option><option value="images">${t("toolbarMediaImages")}</option><option value="video">${t("toolbarMediaVideo")}</option></select></label>
+          <label class="keyword-filter">${t("toolbarExcludedKeywords")}<textarea data-setting="excludedKeywords" rows="3" placeholder="${t("toolbarExcludedKeywordsPlaceholder")}"></textarea></label>
           <label>${t("toolbarHideReposts")}<input data-setting="hideReposts" type="checkbox"></label>
           <p class="hint">${t("toolbarHint")}</p>
         </div>
@@ -322,7 +332,7 @@ export function startContentRuntime(
     }
 
     for (const element of root.querySelectorAll<
-      HTMLInputElement | HTMLSelectElement
+      HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement
     >("[data-setting]")) {
       const key = element.dataset.setting as keyof Settings;
       if (element instanceof HTMLInputElement && element.type === "checkbox") {
@@ -372,7 +382,8 @@ export function startContentRuntime(
       !element ||
       !(
         element instanceof HTMLInputElement ||
-        element instanceof HTMLSelectElement
+        element instanceof HTMLSelectElement ||
+        element instanceof HTMLTextAreaElement
       )
     ) {
       return;

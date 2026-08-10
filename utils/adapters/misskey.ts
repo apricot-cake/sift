@@ -42,6 +42,7 @@ const MISSKEY_SELECTORS = Object.freeze({
   // 隠された画像が残すもの＝閲覧注意のファイル（種類までは分からない）か、
   // データセーバーが止めたファイルのプレースホルダ。
   hiddenMedia: "i.ti-photo, i.ti-eye-exclamation",
+  postText: "._selectable",
   // クライアントが動く前の、サーバー応答のページに書き込まれている。
   application: 'meta[name="application-name"][content="Misskey"]',
 });
@@ -190,6 +191,13 @@ export const misskeyAdapter = Object.freeze({
         Boolean(postCard.querySelector(MISSKEY_SELECTORS.hiddenMedia)),
       hasVideo: Boolean(postCard.querySelector(MISSKEY_SELECTORS.video)),
     };
+  },
+
+  readText(postCard: Element) {
+    return Array.from(postCard.querySelectorAll(MISSKEY_SELECTORS.postText))
+      .filter((text) => text.closest(MISSKEY_SELECTORS.postCard) === postCard)
+      .map((text) => text.textContent ?? "")
+      .join(" ");
   },
 
   // リノートは、同じ root の中で article の上のヘッダとして描かれる。ヘッダの

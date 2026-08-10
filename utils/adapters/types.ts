@@ -50,5 +50,7 @@ export interface ServiceAdapter {
   // 投稿時刻が読めないときは NaN。
   readCreatedAt(postCard: Element): number;
   readMedia(postCard: Element): PostMedia;
+  // 投稿本文とハッシュタグ。カードの操作やプロフィール名は含めない。
+  readText(postCard: Element): string;
   readIsRepost(postCard: Element): boolean;
 }

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { classifyPost, parseMetric } from "./filter-core.ts";
 
 const settings = {
+  excludedKeywords: [],
   minLikes: 500,
   risingEnabled: true,
   risingMinLikes: 100,
@@ -141,6 +142,22 @@ describe("classifyPost", () => {
         now,
       ),
     ).toEqual({ state: "hidden", reason: "repost" });
+  });
+
+  it("除外キーワードを本文またはハッシュタグに含む投稿を隠す", () => {
+    expect(
+      classifyPost(
+        {
+          hasMedia: true,
+          likeCount: 1000,
+          createdAtMs: now,
+          isRepost: false,
+          text: "New trailer #Spoiler",
+        },
+        { ...settings, excludedKeywords: ["spoiler"] },
+        now,
+      ),
+    ).toEqual({ state: "hidden", reason: "excluded-keyword" });
   });
 
   it("反応数が判定不能（NaN）な投稿は隠さずに残す", () => {

@@ -68,7 +68,11 @@
         <h2 id="post-heading" data-i18n="optionsSectionPost">Post</h2>
         <label class="setting-row">
           <span class="setting-label" data-i18n="optionsMedia">Media</span>
-          <select data-setting="mediaMode"><option value="any" data-i18n="optionsMediaAny">Images and video</option><option value="images" data-i18n="optionsMediaImages">Images only</option></select>
+          <select data-setting="mediaMode"><option value="any" data-i18n="optionsMediaAny">Images and video</option><option value="images" data-i18n="optionsMediaImages">Images only</option><option value="video" data-i18n="optionsMediaVideo">Video only</option></select>
+        </label>
+        <label class="setting-row keyword-filter">
+          <span class="setting-label" data-i18n="optionsExcludedKeywords">Excluded keywords</span>
+          <textarea data-setting="excludedKeywords" rows="3" data-i18n-placeholder="optionsExcludedKeywordsPlaceholder" placeholder="One word or phrase per line"></textarea>
         </label>
         <label class="setting-row">
           <span class="setting-label" data-i18n="optionsHideReposts">Exclude reposts</span>
