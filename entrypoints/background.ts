@@ -22,6 +22,7 @@ import {
   reconcileInstances,
 } from "../utils/instances.ts";
 import { instanceStorage } from "../utils/settings-storage.ts";
+import { TIMELINE_CONTROL } from "../utils/timeline-controls.ts";
 
 // このファイルは3つの仕事を持っている。Misskey インスタンスの登録を正しく
 // 保つ仕事はどのビルドでも走る。開発時のエラーログの送り出しと dev-link の
@@ -99,6 +100,15 @@ export default defineBackground(() => {
     handlePermissionsAdded(added, instanceDeps).catch(() => {});
   });
 
+  browser.commands.onCommand.addListener((command, tab) => {
+    if (command !== "toggle-filtering" || tab?.id === undefined) {
+      return;
+    }
+    void browser.tabs
+      .sendMessage(tab.id, { type: TIMELINE_CONTROL.toggleFiltering })
+      .catch(() => {});
+  });
+
   if (!__SIFT_DEV__) {
     return;
   }
@@ -163,11 +173,7 @@ export default defineBackground(() => {
       }
       if (message?.type === DEV_FILTER_PASS) {
         const { hit, rising, hidden } = message.counts;
-        note(
-          `フィルタ一巡: 表示 ${hit}・上昇中 ${rising}・非表示 ${hidden}、ツールバーは${
-            message.toolbar ? "あり" : "なし"
-          }`,
-        );
+        note(`フィルタ一巡: 表示 ${hit}・上昇中 ${rising}・非表示 ${hidden}`);
       }
     },
   );

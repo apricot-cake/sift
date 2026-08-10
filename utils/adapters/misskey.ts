@@ -14,7 +14,7 @@
 // ノートに対する各インスタンス自身の API の答えと突き合わせた。
 import { parseMetric } from "../filter-core.ts";
 import { MISSKEY_REACTION_THRESHOLDS } from "../settings.ts";
-import { REACTION_LABELS, type ServiceAdapter } from "./types.ts";
+import type { ServiceAdapter } from "./types.ts";
 
 // Misskey の画面の作りを1箇所に集めてあるので、インスタンス側の変更はここ1箇所
 // の修正で済む。エクスポートしないのは、テストが与えるのはマークアップで、
@@ -112,7 +112,6 @@ export const misskeyAdapter = Object.freeze({
   matches: Object.freeze([]),
   // Misskey のリアクションは、いいねと同じく1人1回。ただしインスタンスの規模が
   // X とは桁で違うので、専用のしきい値と比べる（#2 の Issue コメント第4節）。
-  reactionLabels: REACTION_LABELS,
   thresholdKeys: MISSKEY_REACTION_THRESHOLDS,
 
   getPostCards(root: ParentNode) {

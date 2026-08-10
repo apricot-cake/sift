@@ -3,7 +3,7 @@
 // filter-core.ts にあり、全サービスで共有している。
 import { parseMetric } from "../filter-core.ts";
 import { LIKE_THRESHOLDS } from "../settings.ts";
-import { LIKE_LABELS, type ServiceAdapter } from "./types.ts";
+import type { ServiceAdapter } from "./types.ts";
 
 // X の画面の作りを1箇所に集めてあるので、X 側の描き直しはここ1箇所の修正で
 // 済む。エクスポートしないのは、テストが与えるのはマークアップで、読み取るのは
@@ -26,8 +26,6 @@ const X_SELECTORS = Object.freeze({
 export const xAdapter = Object.freeze({
   id: "x",
   matches: Object.freeze(["https://x.com/*", "https://twitter.com/*"]),
-  // しきい値が数える反応を、このサービスでは何と呼ぶか。
-  reactionLabels: LIKE_LABELS,
   thresholdKeys: LIKE_THRESHOLDS,
 
   getPostCards(root: ParentNode) {

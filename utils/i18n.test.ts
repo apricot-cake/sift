@@ -86,20 +86,6 @@ describe("t()", () => {
   it("メッセージを返す", () => {
     expect(t("optionsInstanceAdd")).toBe(english.optionsInstanceAdd?.message);
   });
-
-  it("差し込みを名指した順で入れる（結合テンプレート）", () => {
-    expect(t("toolbarStatusCounts", ["3 hits", "2 rising", "1 hidden"])).toBe(
-      "3 hits · 2 rising · 1 hidden",
-    );
-  });
-
-  // 複数形（0/1/n）は count を第2引数に渡すだけで分岐する＝差し込みは省くと
-  // count 自身が $1 へ入る。
-  it("複数形の数に応じて形を変える", () => {
-    expect(t("toolbarHitCount", 1)).toBe("1 hit");
-    expect(t("toolbarHitCount", 3)).toBe("3 hits");
-    expect(t("toolbarHitCount", 0)).toBe("0 hits");
-  });
 });
 
 describe("localizeDocument()", () => {

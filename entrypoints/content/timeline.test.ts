@@ -1,0 +1,55 @@
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { fakeBrowser } from "wxt/testing/fake-browser";
+import { ContentScriptContext } from "wxt/utils/content-script-context";
+import { xAdapter } from "../../utils/adapters/x.ts";
+import { startContentRuntime } from "./index.ts";
+
+const timelineMarkup = `
+  <div data-testid="cellInnerDiv">
+    <article data-testid="tweet">
+      <div data-testid="tweetPhoto"></div>
+      <button data-testid="like" aria-label="900 件のいいね"></button>
+      <time datetime="2026-08-01T12:00:00.000Z"></time>
+    </article>
+  </div>
+`;
+
+beforeEach(() => {
+  fakeBrowser.reset();
+  document.body.innerHTML = "";
+});
+
+describe("タイムラインのフィルター", () => {
+  it("投稿を絞り込み、ページ上の操作UIは作らない", async () => {
+    document.body.innerHTML = timelineMarkup;
+    const runtime = startContentRuntime(
+      new ContentScriptContext("sift-test"),
+      xAdapter,
+    );
+
+    await vi.waitFor(() => {
+      expect(
+        document.querySelector<HTMLElement>("[data-sift-filter-state]"),
+      ).not.toBeNull();
+    });
+    expect(document.body.children).toHaveLength(1);
+
+    runtime.dispose();
+  });
+
+  it("投稿のない画面には操作UIもフィルター状態も残さない", async () => {
+    document.body.innerHTML = '<div data-testid="primaryColumn">settings</div>';
+    const runtime = startContentRuntime(
+      new ContentScriptContext("sift-test"),
+      xAdapter,
+    );
+
+    await vi.waitFor(() => {
+      expect(document.querySelector("article")).toBeNull();
+    });
+    expect(document.body.children).toHaveLength(1);
+    expect(document.querySelector("[data-sift-filter-state]")).toBeNull();
+
+    runtime.dispose();
+  });
+});

@@ -3,7 +3,7 @@
 // filter-core.ts にあり、全サービスで共有している。
 import { parseMetric } from "../filter-core.ts";
 import { LIKE_THRESHOLDS } from "../settings.ts";
-import { LIKE_LABELS, type ServiceAdapter } from "./types.ts";
+import type { ServiceAdapter } from "./types.ts";
 
 // Bluesky の画面の作りを1箇所に集めてあるので、Bluesky 側の描き直しはここ1箇所
 // の修正で済む。エクスポートしないのは、テストが与えるのはマークアップで、
@@ -92,7 +92,6 @@ export const blueskyAdapter = Object.freeze({
   matches: Object.freeze(["https://bsky.app/*"]),
   // しきい値が数える反応を、このサービスでは何と呼ぶか。X と同じ反応なので、
   // しきい値も共有する。
-  reactionLabels: LIKE_LABELS,
   thresholdKeys: LIKE_THRESHOLDS,
 
   getPostCards(root: ParentNode) {

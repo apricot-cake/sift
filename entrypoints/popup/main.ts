@@ -1,6 +1,12 @@
 import { browser } from "wxt/browser";
 import { startUncaughtReporting } from "../../utils/error-log.ts";
-import { localizeDocument } from "../../utils/i18n.ts";
+import { localizeDocument, t } from "../../utils/i18n.ts";
+import {
+  isTimelineControlState,
+  TIMELINE_CONTROL,
+  type TimelineControlMessage,
+  type TimelineControlState,
+} from "../../utils/timeline-controls.ts";
 
 // このページで動いているものは全部が拡張機能自身のものなので、何も除かない。
 // 購読は popup と同じだけ生きる。
@@ -20,19 +26,70 @@ function main(): void {
   localizeDocument(document);
   document.documentElement.lang = browser.i18n.getUILanguage();
 
-  const maybeOpenOptions = document.querySelector<HTMLButtonElement>(
+  const status = document.querySelector<HTMLElement>('[data-role="status"]');
+  const toggleFiltering = document.querySelector<HTMLButtonElement>(
+    '[data-role="toggle-filtering"]',
+  );
+  const toggleShowAll = document.querySelector<HTMLButtonElement>(
+    '[data-role="toggle-show-all"]',
+  );
+  const openOptions = document.querySelector<HTMLButtonElement>(
     '[data-role="open-options"]',
   );
-  if (!maybeOpenOptions) {
+  if (!status || !toggleFiltering || !toggleShowAll || !openOptions) {
     return;
   }
 
-  maybeOpenOptions.addEventListener("click", () => {
+  const renderState = (state: TimelineControlState | null) => {
+    const available = state?.timelineAvailable === true;
+    const filteringEnabled = state?.filteringEnabled === true;
+    status.textContent = available
+      ? filteringEnabled
+        ? t("popupFilterOn")
+        : t("popupFilterOff")
+      : t("popupStatusUnavailable");
+    toggleFiltering.disabled = !available;
+    toggleFiltering.textContent = filteringEnabled
+      ? t("popupDisableFiltering")
+      : t("popupEnableFiltering");
+    toggleShowAll.disabled = !available || !filteringEnabled;
+    toggleShowAll.textContent = state?.showAllTemporarily
+      ? t("popupShowFiltered")
+      : t("popupShowAll");
+  };
+
+  const sendToTimeline = async (type: TimelineControlMessage) => {
+    const [tab] = await browser.tabs.query({
+      active: true,
+      currentWindow: true,
+    });
+    if (tab?.id === undefined) {
+      return null;
+    }
+    const response = await browser.tabs.sendMessage(tab.id, { type });
+    return isTimelineControlState(response) ? response : null;
+  };
+
+  const updateTimeline = (type: TimelineControlMessage) => {
+    void sendToTimeline(type)
+      .then(renderState)
+      .catch(() => renderState(null));
+  };
+
+  toggleFiltering.addEventListener("click", () => {
+    updateTimeline(TIMELINE_CONTROL.toggleFiltering);
+  });
+  toggleShowAll.addEventListener("click", () => {
+    updateTimeline(TIMELINE_CONTROL.toggleShowAll);
+  });
+  openOptions.addEventListener("click", () => {
     // ページが開けば Chrome が自分で popup を閉じる。そのページがタブなのか
     // 埋め込みの枠なのかを決めるのは options_ui で、
     // entrypoints/options/index.html はタブを求めている。
     void browser.runtime.openOptionsPage();
   });
+
+  updateTimeline(TIMELINE_CONTROL.getState);
 }
 
 main();

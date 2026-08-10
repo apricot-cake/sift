@@ -132,6 +132,11 @@ export default defineConfig({
     action: {
       default_title: "Sift",
     },
+    commands: {
+      "toggle-filtering": {
+        description: "Toggle filtering on the current timeline.",
+      },
+    },
   },
   hooks: {
     // 開発サーバーが書くビルドのたびに発火する。最初の1回も含む。

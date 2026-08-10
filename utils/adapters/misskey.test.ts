@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import { render } from "../../test/dom.ts";
 import { MISSKEY_REACTION_THRESHOLDS } from "../settings.ts";
 import { misskeyAdapter } from "./misskey.ts";
-import { REACTION_LABELS } from "./types.ts";
 import { xAdapter } from "./x.ts";
 
 // Misskey のノートには目印が何も無い＝クラス名はビルドごとのハッシュで、
@@ -271,8 +270,6 @@ describe("リノートを読む", () => {
 // 桁が違うので、しきい値は Misskey 自身の2つの数と比べる。
 describe("しきい値が数えるもの", () => {
   it("リアクション＝Misskey 自身の2つの数と比べる", () => {
-    expect(misskeyAdapter.reactionLabels).toBe(REACTION_LABELS);
-    expect(misskeyAdapter.reactionLabels).not.toBe(xAdapter.reactionLabels);
     expect(misskeyAdapter.thresholdKeys).toBe(MISSKEY_REACTION_THRESHOLDS);
     expect(misskeyAdapter.thresholdKeys).not.toBe(xAdapter.thresholdKeys);
   });

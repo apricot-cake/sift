@@ -33,7 +33,7 @@ WXT は service worker の起動時に 1 回だけ開発サーバーへ接続し
 - `development link: adopt`: 新しいサーバーへ接続した
 - `development link: reload`: 復帰のために拡張機能をリロードした
 - `content script started on <URL>`: content script を対象ページに登録した
-- `filter pass: <n> hit, <n> rising, <n> hidden, toolbar mounted`: 最初の判定を完了し、ツールバーを表示した
+- `filter pass: <n> hit, <n> rising, <n> hidden`: 最初の判定を完了した
 
 ## 開発用プロファイル
 
