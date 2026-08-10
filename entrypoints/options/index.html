@@ -27,7 +27,7 @@
     <main class="settings">
       <header class="app-header">
         <h1>Sift</h1>
-        <p data-i18n="optionsTagline">Filters the posts on screen with shared rules and site-specific switches</p>
+        <p data-i18n="optionsTagline">Filter posts on screen with shared rules and site-specific settings.</p>
       </header>
       <section aria-labelledby="filter-heading">
         <h2 id="filter-heading" data-i18n="optionsSectionFilter">Filter</h2>
@@ -71,7 +71,7 @@
           <select data-setting="mediaMode"><option value="any" data-i18n="optionsMediaAny">Images and video</option><option value="images" data-i18n="optionsMediaImages">Images only</option></select>
         </label>
         <label class="setting-row">
-          <span class="setting-label" data-i18n="optionsHideReposts">Leave out reposts</span>
+          <span class="setting-label" data-i18n="optionsHideReposts">Exclude reposts</span>
           <input data-setting="hideReposts" type="checkbox">
         </label>
       </section>
@@ -84,17 +84,17 @@
             type="text"
             placeholder="e.g. misskey.io"
             data-i18n-placeholder="optionsInstancePlaceholder"
-            aria-label="Hostname of the Misskey instance to add"
+            aria-label="Misskey instance hostname"
             data-i18n-aria-label="optionsInstanceInputLabel"
           >
           <button type="submit" data-i18n="optionsInstanceAdd">Add</button>
         </form>
         <p class="instance-error" data-role="instance-error" role="alert"></p>
-        <p class="note" data-i18n="optionsInstanceNote">Adding one has Chrome ask you to allow access to that host and no other.</p>
+        <p class="note" data-i18n="optionsInstanceNote">Chrome asks for permission to access this host when you add it.</p>
       </section>
       <footer>
         <p class="status" data-role="status" role="status" aria-live="polite" data-i18n="optionsStatusLoading">Loading…</p>
-        <p class="note" data-i18n="optionsAutosaveNote">Settings save themselves and reach every supported timeline.</p>
+        <p class="note" data-i18n="optionsAutosaveNote">Settings are saved automatically and apply to all supported timelines.</p>
       </footer>
     </main>
     <script type="module" src="./main.js"></script>

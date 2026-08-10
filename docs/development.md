@@ -1,14 +1,16 @@
-# Sift 開発
+# Sift の開発
 
-開発は日常のChromeとは別のプロファイルで行います。日常のChromeには検証済みのreleaseだけを載せます。
+開発には、日常用とは別の Chrome プロファイルを使います。日常用のプロファイルには、検証済みのリリースビルドだけを読み込みます。
 
-## Node
+## Node.js
 
-Node 24.12以降。`.node-version` と `package.json` の `engines` の両方に書いてあり、CIは `.node-version` が指すものを入れます。`scripts\` 配下はビルドを挟まずnodeが直接動かすので、node自身の型剥ぎに乗っています——それがexperimentalでなくなったのが24.12です。
+Node.js 24.12 以降が必要です。`.node-version` と `package.json` の `engines` に必要なバージョンを記載しています。CI は `.node-version` のバージョンを使います。
 
-## 依存
+`scripts/` の TypeScript はビルドせずに Node.js で実行します。Node.js 24.12 で TypeScript の型除去が安定したため、このバージョンを最低要件にしています。
 
-`package.json` のバージョンはすべて完全固定で、次の `npm install` が範囲指定を書き戻さないように `.npmrc` で `save-exact=true` にしてあります。更新はDependabotのPRで届きます（週次、minorとpatchはまとめて）＝ワークフローの `uses:` をSHAで固定してDependabotに動かさせているのと同じ仕組みです。範囲指定だと、それを言うコミットが無いまま依存が動きます。
+## 依存関係
+
+`package.json` の依存関係はすべて完全なバージョンで固定しています。`.npmrc` の `save-exact=true` により、`npm install` が範囲指定へ書き換えることはありません。更新は Dependabot のプルリクエストで受け取ります。ワークフローの `uses:` もコミット SHA で固定しています。
 
 ## 開発サーバー
 
@@ -16,68 +18,70 @@ Node 24.12以降。`.node-version` と `package.json` の `engines` の両方に
 npm run dev
 ```
 
-出力先は `~\.sift-dev\chrome-mv3-dev` に固定してあり、どのworktreeから起こしても同じ場所に出ます。待ち受けは `127.0.0.1:51732` だけで、ポートが使用中でも別のポートへは移らず失敗します（拡張がこのアドレス向けにビルドされるため）。同時に起こせる開発サーバーは1つだけです。
+開発ビルドは `~\.sift-dev\chrome-mv3-dev` に出力します。出力先はすべての worktree で共通です。サーバーは `127.0.0.1:51732` で待ち受けます。ポートが使用中の場合は、別のポートへ移らずに失敗します。拡張機能がこのアドレスを使用するため、同時に起動できる開発サーバーは 1 つです。
 
-## 開発ビルドと開発サーバーのつながり
+## 開発ビルドの接続状態
 
-開発ビルドのcontent scriptはmanifestに載っていません。service workerが開発サーバーへ接続した後に `browser.scripting.registerContentScripts()` で登録するため、つながっていないworkerではcontent scriptが動きません。
+開発ビルドの content script は manifest に含めません。service worker が開発サーバーへ接続した後、`browser.scripting.registerContentScripts()` で登録します。接続していない service worker では content script は動作しません。
 
-WXTがソケットを張るのはworkerの起動時に1回だけです。開発サーバーより先にブラウザが起きていた場合や、サーバーを起こし直した場合は切れたままになりますが、開発ビルドはこれを自分で検出します。workerが5秒ごとにサーバーへ問い合わせ、起動時と違うサーバー（または未登録の状態）を見つけると `browser.runtime.reload()` で復帰します。出力フォルダへビルドが書き終わるまでは待ちます（空のフォルダをリロードすると拡張が読み込み解除されるため）。
+WXT は service worker の起動時に 1 回だけ開発サーバーへ接続します。ブラウザを先に起動した場合や、開発サーバーを再起動した場合は接続が切れたままになります。開発ビルドは 5 秒ごとに接続状態を確認し、起動時と異なるサーバーまたは未登録の状態を検出すると `browser.runtime.reload()` で復帰します。出力フォルダの書き込みが終わるまではリロードしません。空のフォルダをリロードすると、拡張機能が読み込み解除されるためです。
 
-状態は `~\.sift\extension-errors.log` の `"kind":"dev-link"` 行で読めます。書く先が開発サーバーなので、サーバーが落ちている間は何も出ません。developmentビルドだけが書きます。
+接続状態は `~\.sift\extension-errors.log` の `"kind":"dev-link"` 行で確認できます。ログは開発サーバーに書き込むため、サーバーが停止している間は記録されません。リリースビルドはこのログを書き込みません。
 
-- `development link: linked` — つながっていて登録もある
-- `development link: building` — サーバーは居るがビルドがまだ
-- `development link: adopt` — 新しいサーバーにつながった
-- `development link: reload` — 復帰のため自分を起動し直した
-- `content script started on <URL>` — そのページにcontent scriptが入った
-- `filter pass: <n> hit, <n> rising, <n> hidden, toolbar mounted` — 最初の判定が通りツールバーが出た
+- `development link: linked`: 接続と登録が完了している
+- `development link: building`: サーバーは起動しているが、ビルドが完了していない
+- `development link: adopt`: 新しいサーバーへ接続した
+- `development link: reload`: 復帰のために拡張機能をリロードした
+- `content script started on <URL>`: content script を対象ページに登録した
+- `filter pass: <n> hit, <n> rising, <n> hidden, toolbar mounted`: 最初の判定を完了し、ツールバーを表示した
 
-## 開発プロファイル
+## 開発用プロファイル
 
 ```powershell
 npm run dev:browser
 ```
 
-専用の `--user-data-dir` でChromeを開きます。日常のChromeとは別プロセスで、並べて使えます。初回だけ `chrome://extensions` から `~\.sift-dev\chrome-mv3-dev` を読み込み、Xへログインします。以後はプロファイルが覚えます。
+専用の `--user-data-dir` で Chrome を開きます。日常用の Chrome とは別プロセスで、同時に利用できます。初回だけ `chrome://extensions` から `~\.sift-dev\chrome-mv3-dev` を読み込み、X にログインしてください。以後はプロファイルが設定を保存します。
 
-service workerの中身を差し替えたときだけ、`chrome://extensions` のリロード（または開発プロファイルのウィンドウで `Alt+R`）を1回押します。
+service worker を変更した場合は、`chrome://extensions` で拡張機能をリロードします。開発用プロファイルのウィンドウで `Alt+R` を押してもリロードできます。
 
-developmentとreleaseは同じ拡張IDを持つため、同じプロファイルには同居できません。開発ビルドを日常のプロファイルへ読み込まないでください。
+開発ビルドとリリースビルドは同じ拡張機能 ID を使うため、同じプロファイルには読み込めません。開発ビルドを日常用プロファイルに読み込まないでください。
 
-パスの確認だけなら `node scripts/dev-browser.ts --print` がウィンドウを開かずに解決結果を表示します。
+パスだけを確認する場合は、次のコマンドを実行します。ブラウザは起動しません。
 
-## 日常Chromeへの反映
+```powershell
+node scripts/dev-browser.ts --print
+```
 
-mainへマージすると `post-merge` フックが `npm run deploy` を走らせ、検証済みのreleaseを `.output\chrome-mv3` へ差し替えます（フックは `npm install` 時に `scripts/setup.ts` が設定します）。手で走らせることもできます。
+## 日常用 Chrome に反映する
+
+`main` へマージすると、`post-merge` フックが `npm run deploy` を実行し、検証済みのリリースビルドを `.output\chrome-mv3` に配置します。フックは `npm install` 時に `scripts/setup.ts` が設定します。手動で反映する場合は、次のコマンドを実行します。
 
 ```powershell
 npm run deploy
 ```
 
-検証を通らなかったときは差し替えず、日常のChromeは前の版のまま動き続けます。リンクされたworktreeでは差し替えません。
+検証に失敗した場合は、配置を更新しません。日常用 Chrome は以前のビルドを使い続けます。リンクされた worktree からは配置しません。
 
 ## 未捕捉例外の記録
 
-コードが受け止めそこねた例外は拡張自身が捕まえ、`browser.storage.local` の環状バッファ（新しい50件）へ書きます。捕まえる側はreleaseにも入っています。developmentビルドでは、service workerがバッファを開発サーバーへ送り、`~\.sift\extension-errors.log` へ1行1件のJSONで追記します。
+拡張機能は未捕捉例外を `browser.storage.local` の環状バッファに最大 50 件保存します。この処理はリリースビルドにも含まれます。開発ビルドでは、service worker がバッファを開発サーバーへ送信し、`~\.sift\extension-errors.log` に JSON Lines 形式で追記します。
 
-日常側のバッファを読み出す口はまだありません。content scriptは発生元が拡張と分かる例外だけを、popupと設定画面とservice workerは全件を記録します。
+日常用プロファイルのバッファを読み出す手段はありません。content script は拡張機能が発生元と分かる例外だけを記録します。popup、設定画面、service worker はすべての未捕捉例外を記録します。
 
 ## 文言
 
-読み手が見る文字列はすべて `locales\<言語>.yml` にあり、`@wxt-dev/i18n`（`wxt.config.ts` の `modules`）がビルド時にそこから `_locales\<言語>\messages.json` を焼きます。対象は `en` / `ja` / `ko` / `zh-TW` / `zh-CN` / `es` / `pt-BR` の7言語（hologram#222 の第1波と同じ）。既定ロケールは `en` なので、Siftが文言を持たない言語のブラウザには英語が出ます。拡張側に言語の切り替えはありません＝`browser.i18n` にそれを提供する手段が無く、WXTのi18nガイド自身も専用ライブラリではなく素のAPIを勧めています。
+利用者に表示する文言は `locales/<言語>.yml` にあります。`@wxt-dev/i18n` はビルド時に各ファイルから `_locales/<言語>/messages.json` を生成します。対象言語は `en`、`ja`、`ko`、`zh-TW`、`zh-CN`、`es`、`pt-BR` です。既定ロケールは `en` です。対応していない言語のブラウザには英語を表示します。
 
-文言への経路は3つ：
+文言は次の 3 つの経路で使用します。
 
-- コード中の `t("name")`（`utils\i18n.ts` が `#i18n` の `i18n.t` をそのまま外へ出したもの）。メッセージ名は `locales\en.yml` から型付けしてあります（`wxt prepare` が `.wxt\i18n\structure.d.ts` を生成するので、打ち間違いはコンパイルを通りません）。件数のように複数形分岐（`1` / `n`）を持つメッセージは `t("name", 件数)` の形で呼びます
-- 静的な2ページ（`entrypoints\options\index.html` と `entrypoints\popup\index.html`）の `data-i18n` / `data-i18n-placeholder` / `data-i18n-aria-label`。`localizeDocument()` が埋めます＝静的HTMLはmanifestのように `__MSG_name__` を持てません
-- `wxt.config.ts` の `__MSG_name__`。これを解釈するのはmanifestの該当フィールドだけです
+- コードでは `t("name")` を使います。`utils/i18n.ts` は `#i18n` の `i18n.t` を公開します。メッセージ名は `locales/en.yml` から型を生成するため、存在しない名前はコンパイルできません。複数形を持つメッセージは `t("name", 件数)` の形で呼びます。
+- `entrypoints/options/index.html` と `entrypoints/popup/index.html` の静的な文言には、`data-i18n`、`data-i18n-placeholder`、`data-i18n-aria-label` を使います。`localizeDocument()` が文言を置き換えます。
+- `wxt.config.ts` の manifest では `__MSG_name__` を使います。これは manifest の対応フィールドだけで展開されます。
 
-どちらのマークアップにも英語の文言そのものが書いてあります（`main.ts` が走る前の一瞬のため）。`utils\i18n.test.ts` がそれを `locales\en.yml` と同じ言葉に固定し、どちらにも無い名前を使っていないことを確認します。manifestのdescriptionについては `verify-manifest.ts` が同じことをします。
+静的 HTML には、起動前にも読めるように英語の既定文言を書きます。`utils/i18n.test.ts` は、この文言が `locales/en.yml` と一致することを検証します。manifest の説明文は `verify-manifest.ts` が検証します。
 
-7言語すべてが同じキー集合を持つかは `locales\locales.test.ts` が検査します＝1言語からキーを1つ落とす、または差し込みの数がずれると落ちます（複数形の言い回しそのものは言語ごとに違って当然なので比べません）。
-
-テストは `test\i18n.ts` 経由で `locales\en.yml` を読みます＝これが `browser.i18n.getMessage` の代わりです（WXTのfake browserは未実装のまま）。
+`locales/locales.test.ts` は、全言語が同じキーと差し込み数を持つことを検証します。複数形の表現自体は言語ごとに異なるため、比較しません。テストでは `test/i18n.ts` を通じて `locales/en.yml` を読み込み、`browser.i18n.getMessage` の代わりに使います。
 
 ## Lint
 
@@ -85,55 +89,69 @@ npm run deploy
 npm run lint
 ```
 
-Biomeがツリー全体を1度に見ます＝整形・lintルール・importの順序。書き換えはしません。直すのは `npm run lint:fix` で、見るものは同じです。
+Biome はリポジトリ全体の整形、lint、import の順序を検証します。自動修正する場合は次のコマンドを実行します。
 
-インデント・改行・末尾改行は `biome.jsonc` で宣言せず `.editorconfig` から読ませてあるので、Biomeを知らないエディタでも同じ結果になります。`biome.jsonc` に残っているのは `.editorconfig` では言えないものと、`entrypoints/content/style.css` の例外1つ（ここでの `!important` は間違いではなく設計そのものです）。
+```powershell
+npm run lint:fix
+```
+
+インデント、改行、末尾改行は `.editorconfig` で定義します。Biome を使わないエディタも同じ設定を参照できます。`biome.jsonc` には `.editorconfig` で定義できない設定と、`entrypoints/content/style.css` の `!important` に関する例外だけを置いています。
 
 ## ビルドとテスト
+
+Chrome 向けのリリースビルドは、次のコマンドで作成します。
 
 ```powershell
 npm run build
 ```
 
-`.output\chrome-mv3-release` へ出力し、生成manifestがソースの宣言どおりかを確認します＝権限と署名鍵と名前は `wxt.config.ts`、対象ホストは `utils/site-matches.ts`、バージョンは `package.json`、そしてcontent scriptがmanifestに載っていること。`.output\chrome-mv3` は書き換えません。
+ビルドは `.output\chrome-mv3-release` に出力します。`verify-manifest.ts` は、生成した manifest がソースの宣言と一致することを検証します。検証対象は、`wxt.config.ts` の権限、署名鍵、名前、`utils/site-matches.ts` の対象ホスト、`package.json` のバージョン、content script の登録です。`.output\chrome-mv3` は更新しません。
+
+Firefox 向けのビルドと manifest の検証は、次のコマンドで実行します。
 
 ```powershell
 npm run build:firefox
 ```
 
-同じビルドと同じ確認をFirefox向けに、`.output\firefox-mv3-release` へ。SiftがFirefoxで動くという主張ではありません＝一度も検証していません。`wxt.config.ts` がFirefoxのMV2フォールバックを避けるために `manifestVersion` を3に固定しており、その判断を触るのはこのビルドだけです。CIが走らせているのも同じ理由です。
+出力先は `.output\firefox-mv3-release` です。Firefox での動作は検証していません。このビルドは、`wxt.config.ts` で manifest version を 3 に固定した設定を検証するために CI でも実行します。
+
+型検査と単体テストは、次のコマンドで実行します。
 
 ```powershell
 npm test
 ```
 
-全体を型検査（`tsc --noEmit`）してから、Vitestで単体テストを実行します。テストファイルは対象コードの隣に置いてあり（`utils/filter-core.test.ts` など）、アダプターは本物のDOMにセレクタを当てて検証します＝テストが書いたマークアップをhappy-domがパースするので、通るということはそのセレクタが実ページでも要素を見つけるということです。型検査だけを走らせるコマンドは別にありません＝これが唯一で、CIも同じものを走らせます。
+このコマンドは `tsc --noEmit` の後に Vitest を実行します。テストは対象コードの隣に置きます。アダプターのテストは実際の DOM にセレクタを適用して検証します。型検査だけを実行するコマンドはありません。CI も同じコマンドを使います。
 
 ## コミット
 
-件名はConventional Commitsのtypeに日本語の要約を続けます＝`feat: 設定を options ページへ移し、popup は入口だけにする`。使うtypeは `feat` / `fix` / `refactor` / `chore` / `docs` / `test` / `perf` で、絞り込む意味があるときはスコープを付けます（`chore(ci):`）。
+コミットの件名には Conventional Commits の type と日本語の要約を使います。
 
-本文には理由を書きます。何が変わったかはdiffが持っており、それを繰り返したメッセージは腐る2つ目の写しになります。diffが示せないのは、古い形のどこが間違いだったかです。長くて構いません。
+```text
+feat: 設定を options ページへ移し、popup は入口だけにする
+```
 
-PRはsquashマージなので、PRのタイトルが `main` 上の件名になり、PRの本文が `git log` からたどり着く先になります。どちらもコミットのつもりで書いてください＝実際、片方はコミットそのものです。
+利用できる type は `feat`、`fix`、`refactor`、`chore`、`docs`、`test`、`perf` です。対象を絞る意味がある場合は、`chore(ci):` のようにスコープを付けます。
+
+本文には変更理由を書きます。変更内容は diff で確認できます。以前の実装の問題点や、選択した理由を残してください。
+
+プルリクエストは squash マージします。プルリクエストのタイトルは `main` のコミット件名になり、本文は `git log` から確認できます。どちらもコミットとして読める文章にしてください。
 
 ## リリース
 
-バージョンは `package.json` にだけあります。生成manifestへはWXTが写し、`verify-manifest.ts` が届いたことを確認します。
+バージョンは `package.json` だけで管理します。WXT が生成した manifest にバージョンを反映し、`verify-manifest.ts` が検証します。
 
-`main` へのマージは `post-merge` フックで日常のChromeに届くので、リリースという出来事は特にありません。バージョンが要るのは「そのプロファイルが今どのビルドを動かしているか」を言えるようにするためです＝`chrome://extensions` がそれを表示し、タグがそれをチェックアウトできるものにします。
-
-上げるのは、読み手から見た拡張が変わったとき＝機能、動いたUI、指し示す価値のある修正。マージのたびではありません。
+`main` へのマージは `post-merge` フックにより日常用 Chrome へ反映されます。バージョンは、利用中のビルドを識別し、タグから同じ状態を取り出すために使います。機能、利用者に見える UI、参照する価値がある修正を加えたときに更新します。マージごとには更新しません。
 
 ```powershell
 npm version minor --no-git-tag-version
 ```
 
-`--no-git-tag-version` なのは `main` がPRしか受け付けないためです＝バージョンの引き上げはPRで入れ、タグはその後マージコミットに打ちます。
+`main` はプルリクエストだけを受け付けるため、バージョンの更新では `--no-git-tag-version` を使います。更新はプルリクエストに含め、マージ後のコミットにタグを付けます。
 
 ```powershell
 git tag v0.2.0
 git push origin v0.2.0
 ```
 
-`CHANGELOG.md` は置きません。コミットメッセージが既に理由を文章で持っているので、`git log v0.1.0..v0.2.0` がそのまま変更の一覧です＝2つ目の写しは、腐るほうにしかなりません。
+`CHANGELOG.md` は作成しません。コミットメッセージに変更理由を残し、`git log v0.1.0..v0.2.0` を変更履歴として使います。
