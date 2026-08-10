@@ -1,4 +1,5 @@
 import { browser } from "wxt/browser";
+import { ADAPTERS } from "../../utils/adapters/index.ts";
 import { DEFAULT_MISSKEY_HOSTS } from "../../utils/default-instances.ts";
 import { startUncaughtReporting } from "../../utils/error-log.ts";
 import { localizeDocument, t } from "../../utils/i18n.ts";
@@ -8,7 +9,12 @@ import {
   normalizeInstanceHost,
   removeInstance,
 } from "../../utils/instances.ts";
-import { normalizeSettings, type Settings } from "../../utils/settings.ts";
+import {
+  isSiteEnabled,
+  normalizeSettings,
+  type Settings,
+  withSiteEnabled,
+} from "../../utils/settings.ts";
 import { instanceStorage, settingsItem } from "../../utils/settings-storage.ts";
 
 // このページで動いているものは全部が拡張機能自身のものなので、何も除かない。
@@ -36,6 +42,9 @@ function main(): void {
   const maybeInstanceList = document.querySelector<HTMLElement>(
     '[data-role="instance-list"]',
   );
+  const maybeSiteList = document.querySelector<HTMLElement>(
+    '[data-role="site-list"]',
+  );
   const maybeInstanceForm = document.querySelector<HTMLFormElement>(
     '[data-role="instance-form"]',
   );
@@ -48,6 +57,7 @@ function main(): void {
   if (
     !maybeStatus ||
     !maybeInstanceList ||
+    !maybeSiteList ||
     !maybeInstanceForm ||
     !maybeInstanceInput ||
     !maybeInstanceError
@@ -59,6 +69,7 @@ function main(): void {
   // られた関数宣言の中まで自分では運ばない。
   const status = maybeStatus;
   const instanceList = maybeInstanceList;
+  const siteList = maybeSiteList;
   const instanceForm = maybeInstanceForm;
   const instanceInput = maybeInstanceInput;
   const instanceError = maybeInstanceError;
@@ -70,6 +81,17 @@ function main(): void {
   };
   let settings = normalizeSettings(defaults);
   let statusTimer: number | null = null;
+
+  function siteHosts(): string[] {
+    const hosts = [
+      ...ADAPTERS.flatMap((adapter) =>
+        adapter.matches.map((pattern) => new URL(pattern).hostname),
+      ),
+      ...DEFAULT_MISSKEY_HOSTS,
+      ...settings.misskeyInstances,
+    ];
+    return [...new Set(hosts)];
+  }
 
   function syncForm(): void {
     for (const element of document.querySelectorAll<
@@ -145,6 +167,35 @@ function main(): void {
     }
   }
 
+  function renderSites(): void {
+    siteList.innerHTML = "";
+    for (const host of siteHosts()) {
+      const item = document.createElement("li");
+      item.className = "site-row";
+
+      const label = document.createElement("label");
+      label.textContent = host;
+      label.htmlFor = `site-enabled-${host}`;
+
+      const toggle = document.createElement("input");
+      toggle.type = "checkbox";
+      toggle.id = label.htmlFor;
+      toggle.checked = isSiteEnabled(settings, host);
+      toggle.addEventListener("change", () => {
+        settings = withSiteEnabled(settings, host, toggle.checked);
+        void settingsItem
+          .setValue(settings)
+          .then(showSavedStatus)
+          .catch(() => {
+            status.textContent = t("optionsErrorSaveFailed");
+          });
+      });
+
+      item.append(label, toggle);
+      siteList.append(item);
+    }
+  }
+
   // 手元で `settings.misskeyInstances` を繕わず、保管庫を読み直す＝実際に何が
   // 登録されたかの正本は addInstance() / removeInstance() の側だし、それを変え
   // られる画面はこのページだけではない（chrome://extensions が足元で権限を
@@ -159,6 +210,7 @@ function main(): void {
     .then((storedSettings) => {
       settings = normalizeSettings(storedSettings);
       syncForm();
+      renderSites();
       renderInstances();
       status.textContent = "";
     })
@@ -175,6 +227,8 @@ function main(): void {
   // 一覧を読めば、自分がどちらの上にいるかを知らずに両方を賄える。
   settingsItem.watch((storedSettings) => {
     settings = normalizeSettings(storedSettings);
+    syncForm();
+    renderSites();
     renderInstances();
   });
 

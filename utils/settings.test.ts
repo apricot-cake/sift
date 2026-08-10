@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
   defaults,
+  isSiteEnabled,
   LIKE_THRESHOLDS,
   MISSKEY_REACTION_THRESHOLDS,
   normalizeSettings,
   thresholdsFor,
+  withSiteEnabled,
 } from "./settings.ts";
 
 describe("normalizeSettings", () => {
@@ -42,6 +44,20 @@ describe("normalizeSettings", () => {
       normalizeSettings({ misskeyInstances: "not-an-array" }).misskeyInstances,
     ).toEqual([]);
     expect(defaults.misskeyInstances).toEqual([]);
+  });
+
+  it("旧版の全体OFFをサイトごとの既定OFFへ移行する", () => {
+    const settings = normalizeSettings({ enabled: false });
+
+    expect(isSiteEnabled(settings, "x.com")).toBe(false);
+    expect(isSiteEnabled(settings, "misskey.example")).toBe(false);
+  });
+
+  it("ホストごとに抽出の有効・無効を分ける", () => {
+    const settings = withSiteEnabled(normalizeSettings({}), "x.com", false);
+
+    expect(isSiteEnabled(settings, "x.com")).toBe(false);
+    expect(isSiteEnabled(settings, "bsky.app")).toBe(true);
   });
 });
 

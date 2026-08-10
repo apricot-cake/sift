@@ -1,11 +1,10 @@
 extensionDescription: "X・Bluesky・Misskeyの投稿画面を、メディア・反応の数・投稿後の時間で絞り込みます。"
 
-popupEnabled: "フィルターを有効にする"
 popupOpenOptions: "設定を開く"
 
-optionsTagline: "表示中の投稿を共通の条件で絞り込みます"
+optionsTagline: "共通の条件とサイト別の切り替えで表示中の投稿を絞り込みます"
 optionsSectionFilter: "フィルター"
-optionsEnabled: "フィルターを有効にする"
+optionsSiteListLabel: "サイト"
 optionsSectionStandard: "通常"
 optionsMinLikes: "最低いいね数"
 optionsMinReactions: "最低リアクション数（Misskey）"

@@ -10,12 +10,11 @@
 
 extensionDescription: "Filters the post timelines on X, Bluesky and Misskey by media, reaction count and time since posting."
 
-popupEnabled: "Turn filtering on"
 popupOpenOptions: "Open settings"
 
-optionsTagline: "Filters the posts on screen by one shared set of rules"
+optionsTagline: "Filters the posts on screen with shared rules and site-specific switches"
 optionsSectionFilter: "Filter"
-optionsEnabled: "Turn filtering on"
+optionsSiteListLabel: "Sites"
 optionsSectionStandard: "Standard"
 optionsMinLikes: "Minimum likes"
 optionsMinReactions: "Minimum reactions (Misskey)"

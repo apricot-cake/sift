@@ -1,11 +1,10 @@
 extensionDescription: "依媒體、反應數與發文後經過時間篩選 X、Bluesky 與 Misskey 的貼文時間軸。"
 
-popupEnabled: "開啟篩選"
 popupOpenOptions: "開啟設定"
 
-optionsTagline: "以一組共用規則篩選畫面上的貼文"
+optionsTagline: "以共用規則和個別網站的開關篩選畫面上的貼文"
 optionsSectionFilter: "篩選"
-optionsEnabled: "開啟篩選"
+optionsSiteListLabel: "網站"
 optionsSectionStandard: "標準"
 optionsMinLikes: "最低按讚數"
 optionsMinReactions: "最低反應數（Misskey）"

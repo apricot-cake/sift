@@ -1,8 +1,6 @@
 import { browser } from "wxt/browser";
 import { startUncaughtReporting } from "../../utils/error-log.ts";
-import { localizeDocument, t } from "../../utils/i18n.ts";
-import { normalizeSettings } from "../../utils/settings.ts";
-import { settingsItem } from "../../utils/settings-storage.ts";
+import { localizeDocument } from "../../utils/i18n.ts";
 
 // このページで動いているものは全部が拡張機能自身のものなので、何も除かない。
 // 購読は popup と同じだけ生きる。
@@ -22,48 +20,12 @@ function main(): void {
   localizeDocument(document);
   document.documentElement.lang = browser.i18n.getUILanguage();
 
-  const maybeToggle = document.querySelector<HTMLInputElement>(
-    '[data-setting="enabled"]',
-  );
   const maybeOpenOptions = document.querySelector<HTMLButtonElement>(
     '[data-role="open-options"]',
   );
-  const maybeStatus = document.querySelector<HTMLElement>(
-    '[data-role="status"]',
-  );
-  if (!maybeToggle || !maybeOpenOptions || !maybeStatus) {
+  if (!maybeOpenOptions) {
     return;
   }
-  const toggle = maybeToggle;
-  const status = maybeStatus;
-
-  void settingsItem
-    .getValue()
-    .then((storedSettings) => {
-      toggle.checked = normalizeSettings(storedSettings).enabled;
-    })
-    .catch(() => {
-      status.textContent = t("optionsErrorLoadFailed");
-    });
-
-  // 状態が追うのはこのチェックボックスではなく保管庫＝この popup が出ている間
-  // にも、設定のページとタイムラインのツールバーの両方がそれを変えられる。
-  settingsItem.watch((storedSettings) => {
-    toggle.checked = normalizeSettings(storedSettings).enabled;
-  });
-
-  toggle.addEventListener("change", () => {
-    void settingsItem
-      .getValue()
-      .then((storedSettings) =>
-        settingsItem.setValue(
-          normalizeSettings({ ...storedSettings, enabled: toggle.checked }),
-        ),
-      )
-      .catch(() => {
-        status.textContent = t("optionsErrorSaveFailed");
-      });
-  });
 
   maybeOpenOptions.addEventListener("click", () => {
     // ページが開けば Chrome が自分で popup を閉じる。そのページがタブなのか

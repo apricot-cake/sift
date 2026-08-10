@@ -1,11 +1,10 @@
 extensionDescription: "Filtra las líneas de tiempo de publicaciones en X, Bluesky y Misskey por contenido multimedia, número de reacciones y tiempo transcurrido desde la publicación."
 
-popupEnabled: "Activar el filtrado"
 popupOpenOptions: "Abrir configuración"
 
-optionsTagline: "Filtra las publicaciones en pantalla con un único conjunto de reglas"
+optionsTagline: "Filtra las publicaciones en pantalla con reglas compartidas e interruptores por sitio"
 optionsSectionFilter: "Filtro"
-optionsEnabled: "Activar el filtrado"
+optionsSiteListLabel: "Sitios"
 optionsSectionStandard: "Estándar"
 optionsMinLikes: "Mínimo de me gusta"
 optionsMinReactions: "Mínimo de reacciones (Misskey)"

@@ -1,11 +1,10 @@
 extensionDescription: "按媒体、反应数和发布后经过时间筛选 X、Bluesky 和 Misskey 的帖子时间线。"
 
-popupEnabled: "开启筛选"
 popupOpenOptions: "打开设置"
 
-optionsTagline: "以一组共享规则筛选屏幕上的帖子"
+optionsTagline: "使用共享规则和按站点区分的开关筛选屏幕上的帖子"
 optionsSectionFilter: "筛选"
-optionsEnabled: "开启筛选"
+optionsSiteListLabel: "站点"
 optionsSectionStandard: "标准"
 optionsMinLikes: "最低点赞数"
 optionsMinReactions: "最低反应数（Misskey）"

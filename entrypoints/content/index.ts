@@ -17,10 +17,12 @@ import { t } from "../../utils/i18n.ts";
 import { CONTENT_RUNTIME_KEY } from "../../utils/runtime-key.ts";
 import {
   defaults,
+  isSiteEnabled,
   normalizeSettings,
   type Settings,
   type ThresholdKey,
   thresholdsFor,
+  withSiteEnabled,
 } from "../../utils/settings.ts";
 import { settingsItem } from "../../utils/settings-storage.ts";
 import { SITE_MATCHES } from "../../utils/site-matches.ts";
@@ -131,6 +133,10 @@ export function startContentRuntime(
   let disposed = false;
   let reportedFilterPass = false;
 
+  function filteringEnabled(): boolean {
+    return isSiteEnabled(settings, location.hostname);
+  }
+
   // ツールバーが画面に出ている間、その要素がどこにあるか。それを読み書きする
   // ものは全部ここを通す＝載せ替えをまたいで入れ物を持ち続けない。WXT は外す
   // ときにそれを空にし、次に載せるときは新しいものを埋める。
@@ -178,7 +184,7 @@ export function startContentRuntime(
     );
 
     if (status) {
-      status.textContent = settings.enabled
+      status.textContent = filteringEnabled()
         ? t("toolbarStatusCounts", [
             t("toolbarHitCount", counts.hit),
             t("toolbarRisingCount", counts.rising),
@@ -187,10 +193,10 @@ export function startContentRuntime(
         : t("toolbarStatusStopped");
     }
     if (toggle) {
-      toggle.textContent = settings.enabled
+      toggle.textContent = filteringEnabled()
         ? t("toolbarFilterOn")
         : t("toolbarFilterOff");
-      toggle.dataset.active = String(settings.enabled);
+      toggle.dataset.active = String(filteringEnabled());
     }
     if (reveal) {
       reveal.textContent = showAllTemporarily
@@ -221,7 +227,7 @@ export function startContentRuntime(
       // までなのは、そこまでしか読まないから。
       const cell = adapter.findPostCell(postCard) as HTMLElement;
 
-      if (!settings.enabled) {
+      if (!filteringEnabled()) {
         clearCellState(cell);
         continue;
       }
@@ -335,7 +341,15 @@ export function startContentRuntime(
     }
 
     if (button.dataset.action === "toggle-enabled") {
-      saveSettings({ enabled: !settings.enabled });
+      const nextSettings = withSiteEnabled(
+        settings,
+        location.hostname,
+        !filteringEnabled(),
+      );
+      void settingsItem.setValue(nextSettings).catch(() => {
+        // content script からはこれを報告する先が無い。保管庫を監視しているので、
+        // 保存に成功した場合は実際の値がここへ戻る。
+      });
     } else if (button.dataset.action === "toggle-show-all") {
       showAllTemporarily = !showAllTemporarily;
       scheduleFilter();

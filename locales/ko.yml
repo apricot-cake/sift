@@ -1,11 +1,10 @@
 extensionDescription: "X, Bluesky, Misskey의 게시물 타임라인을 미디어, 반응 수, 게시 후 경과 시간으로 필터링합니다."
 
-popupEnabled: "필터링 켜기"
 popupOpenOptions: "설정 열기"
 
-optionsTagline: "화면의 게시물을 하나의 공통 규칙으로 필터링합니다"
+optionsTagline: "공통 규칙과 사이트별 스위치로 화면의 게시물을 필터링합니다"
 optionsSectionFilter: "필터"
-optionsEnabled: "필터링 켜기"
+optionsSiteListLabel: "사이트"
 optionsSectionStandard: "표준"
 optionsMinLikes: "최소 좋아요 수"
 optionsMinReactions: "최소 리액션 수(Misskey)"
