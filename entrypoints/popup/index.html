@@ -9,8 +9,8 @@
     <title>Sift</title>
     <link rel="stylesheet" href="./style.css">
   </head>
-  <!-- The one switch worth reaching from the toolbar icon, and the way to the
-       rest. Everything else is on the settings page: adding a Misskey instance
+  <!-- The settings page is the single place for site switches and every other
+       preference. Adding a Misskey instance
        asks Chrome for a permission, and Chrome tears a popup down the instant
        that dialog appears (#28) — a tab does not go anywhere. The thresholds
        are on the timeline's own toolbar as well, which is where a reader is
@@ -18,12 +18,7 @@
   <body>
     <main class="popup">
       <h1>Sift</h1>
-      <label class="setting-row">
-        <span class="setting-label" data-i18n="popupEnabled">Turn filtering on</span>
-        <input data-setting="enabled" type="checkbox">
-      </label>
       <button type="button" data-role="open-options" data-i18n="popupOpenOptions">Open settings</button>
-      <p class="status" data-role="status" role="status" aria-live="polite"></p>
     </main>
     <script type="module" src="./main.js"></script>
   </body>

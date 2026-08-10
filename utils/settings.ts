@@ -10,7 +10,14 @@ import { normalizeInstanceHost } from "./instances.ts";
 // リテラル型に推論してしまい、normalizeSettings() がそこへ戻れなくなる
 // （計算した `boolean` は `true` ではありえない）。
 export const defaults = Object.freeze({
-  enabled: true as boolean,
+  // 抽出の有効・無効はサイト単位。既定値は新しく見るホストにも使い、hosts は
+  // 利用者がその既定を変えたホストだけを持つ。以前の全体スイッチが OFF だった
+  // 設定は defaultEnabled: false に移行するので、追加済み・後から追加するサイトを
+  // どちらも意図に反して有効化しない。
+  siteEnabled: Object.freeze({
+    defaultEnabled: true as boolean,
+    hosts: Object.freeze({}) as Readonly<Record<string, boolean>>,
+  }),
   minLikes: 500 as number,
   risingEnabled: true as boolean,
   risingMinLikes: 100 as number,
@@ -65,12 +72,49 @@ function normalizeInstanceList(value: unknown): string[] {
   return hosts;
 }
 
+function normalizeSiteEnabled(
+  value: unknown,
+  legacyEnabled: boolean,
+): Settings["siteEnabled"] {
+  const source = value && typeof value === "object" ? value : {};
+  const rawHosts =
+    "hosts" in source && source.hosts && typeof source.hosts === "object"
+      ? source.hosts
+      : {};
+  const hosts: Record<string, boolean> = {};
+
+  for (const [entry, enabled] of Object.entries(rawHosts)) {
+    const host = normalizeInstanceHost(entry);
+    if (host !== null && typeof enabled === "boolean") {
+      hosts[host] = enabled;
+    }
+  }
+
+  return {
+    defaultEnabled:
+      "defaultEnabled" in source && source.defaultEnabled === false
+        ? false
+        : legacyEnabled,
+    hosts,
+  };
+}
+
 export function normalizeSettings(value: unknown): Settings {
   const source: Partial<Record<keyof Settings, unknown>> =
     value && typeof value === "object" ? value : {};
+  // `enabled` は 0.3.0 までの全サイト共通スイッチ。新しい形を持たない既存の
+  // 設定だけがここを通るので、旧版で OFF にしていた人のすべてのサイトを OFF の
+  // まま引き継げる。新規設定には siteEnabled の既定値だけが残る。
+  const migratedDefaultEnabled = !(
+    !Object.hasOwn(source, "siteEnabled") &&
+    (value as { enabled?: unknown } | null)?.enabled === false
+  );
 
   return {
-    enabled: source.enabled !== false,
+    siteEnabled: normalizeSiteEnabled(
+      source.siteEnabled,
+      migratedDefaultEnabled,
+    ),
     minLikes: clampInteger(source.minLikes, defaults.minLikes, 0, 1000000000),
     risingEnabled: source.risingEnabled !== false,
     risingMinLikes: clampInteger(
@@ -101,6 +145,35 @@ export function normalizeSettings(value: unknown): Settings {
       1000000000,
     ),
   };
+}
+
+export function isSiteEnabled(settings: Settings, hostname: string): boolean {
+  const host = normalizeInstanceHost(hostname);
+  if (host === null) {
+    return settings.siteEnabled.defaultEnabled;
+  }
+  return (
+    settings.siteEnabled.hosts[host] ?? settings.siteEnabled.defaultEnabled
+  );
+}
+
+export function withSiteEnabled(
+  settings: Settings,
+  hostname: string,
+  enabled: boolean,
+): Settings {
+  const host = normalizeInstanceHost(hostname);
+  if (host === null) {
+    return settings;
+  }
+
+  return normalizeSettings({
+    ...settings,
+    siteEnabled: {
+      defaultEnabled: settings.siteEnabled.defaultEnabled,
+      hosts: { ...settings.siteEnabled.hosts, [host]: enabled },
+    },
+  });
 }
 
 // あるサービスの反応数を、保管してある2つの数のどちらの組と比べるか。組に

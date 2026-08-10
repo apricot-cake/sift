@@ -27,14 +27,11 @@
     <main class="settings">
       <header class="app-header">
         <h1>Sift</h1>
-        <p data-i18n="optionsTagline">Filters the posts on screen by one shared set of rules</p>
+        <p data-i18n="optionsTagline">Filters the posts on screen with shared rules and site-specific switches</p>
       </header>
       <section aria-labelledby="filter-heading">
         <h2 id="filter-heading" data-i18n="optionsSectionFilter">Filter</h2>
-        <label class="setting-row">
-          <span class="setting-label" data-i18n="optionsEnabled">Turn filtering on</span>
-          <input data-setting="enabled" type="checkbox">
-        </label>
+        <ul class="site-list" data-role="site-list" aria-label="Sites" data-i18n-aria-label="optionsSiteListLabel"></ul>
       </section>
       <section aria-labelledby="standard-heading">
         <h2 id="standard-heading" data-i18n="optionsSectionStandard">Standard</h2>
