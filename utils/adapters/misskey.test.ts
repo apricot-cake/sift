@@ -217,6 +217,16 @@ describe("メディアを読む", () => {
   });
 });
 
+describe("投稿本文を読む", () => {
+  it("投稿本文とハッシュタグだけを読む", () => {
+    const note = renderNote({
+      body: '<span class="_selectable">New trailer <a>#Spoiler</a></span><button>Like</button>',
+    });
+
+    expect(misskeyAdapter.readText(note)).toBe("New trailer #Spoiler");
+  });
+});
+
 // リノートのヘッダは article の上、同じ根の内側に座っている。フッターの
 // リノートボタンも同じアイコンを着ているので、数えるのは article より前に
 // あるものだけ＝そうしないと全部のノートがリノートとして読まれる。

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   defaults,
+  excludedKeywordsFrom,
   isSiteEnabled,
   LIKE_THRESHOLDS,
   MISSKEY_REACTION_THRESHOLDS,
@@ -46,6 +47,18 @@ describe("normalizeSettings", () => {
     expect(defaults.misskeyInstances).toEqual([]);
   });
 
+  it("除外キーワードの空行と大文字小文字だけの重複を取り除く", () => {
+    const settings = normalizeSettings({
+      excludedKeywords: " spoiler \n\nSPOILER\nNew release ",
+    });
+
+    expect(settings.excludedKeywords).toBe("spoiler\nNew release");
+    expect(excludedKeywordsFrom(settings.excludedKeywords)).toEqual([
+      "spoiler",
+      "new release",
+    ]);
+  });
+
   it("旧版の全体OFFをサイトごとの既定OFFへ移行する", () => {
     const settings = normalizeSettings({ enabled: false });
 
@@ -71,10 +84,12 @@ describe("thresholdsFor", () => {
     misskeyRisingMinReactions: 5,
     risingMaxAgeHours: 6,
     hideReposts: true,
+    excludedKeywords: "spoiler",
   });
 
   it("いいねのしきい値から判定を埋める", () => {
     expect(thresholdsFor(stored, LIKE_THRESHOLDS)).toEqual({
+      excludedKeywords: ["spoiler"],
       hideReposts: true,
       minLikes: 500,
       risingEnabled: true,
@@ -85,6 +100,7 @@ describe("thresholdsFor", () => {
 
   it("Misskey 自身の組から埋め、残りは共通のままにする", () => {
     expect(thresholdsFor(stored, MISSKEY_REACTION_THRESHOLDS)).toEqual({
+      excludedKeywords: ["spoiler"],
       hideReposts: true,
       minLikes: 20,
       risingEnabled: true,

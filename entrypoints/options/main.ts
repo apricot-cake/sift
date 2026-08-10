@@ -95,7 +95,7 @@ function main(): void {
 
   function syncForm(): void {
     for (const element of document.querySelectorAll<
-      HTMLInputElement | HTMLSelectElement
+      HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement
     >("[data-setting]")) {
       const key = element.dataset.setting as keyof Settings;
       if (element instanceof HTMLInputElement && element.type === "checkbox") {
@@ -275,7 +275,8 @@ function main(): void {
       !element ||
       !(
         element instanceof HTMLInputElement ||
-        element instanceof HTMLSelectElement
+        element instanceof HTMLSelectElement ||
+        element instanceof HTMLTextAreaElement
       )
     ) {
       return;

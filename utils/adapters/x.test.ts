@@ -168,6 +168,16 @@ describe("メディアを読む", () => {
   });
 });
 
+describe("投稿本文を読む", () => {
+  it("投稿本文とハッシュタグだけを読む", () => {
+    const card = renderPost(
+      '<div data-testid="tweetText">New trailer <a>#Spoiler</a></div><button>Like</button>',
+    );
+
+    expect(xAdapter.readText(card)).toBe("New trailer #Spoiler");
+  });
+});
+
 describe("リポストを読む", () => {
   it("X が投稿の上に描くリポストのヘッダを読む", () => {
     const card = renderPost(

@@ -251,6 +251,16 @@ describe("メディアを読む", () => {
   });
 });
 
+describe("投稿本文を読む", () => {
+  it("投稿本文とハッシュタグだけを読む", () => {
+    const card = renderPost(
+      '<div data-testid="postText">New trailer <a>#Spoiler</a></div><button>Like</button>',
+    );
+
+    expect(blueskyAdapter.readText(card)).toBe("New trailer #Spoiler");
+  });
+});
+
 // リポストを示す testid も決まった語も無い＝ヘッダは読者の言語で「◯◯が
 // リポストしました」と出る。言語をまたいで変わらないのは形の方＝リポストの
 // ヘッダのプロフィールリンクはアイコンを包み、投稿者のプロフィールリンクは

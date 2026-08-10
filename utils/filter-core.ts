@@ -114,9 +114,11 @@ export interface Post {
   likeCount: number;
   createdAtMs: number;
   isRepost: boolean;
+  text?: string;
 }
 
 export interface ClassifyThresholds {
+  excludedKeywords: readonly string[];
   hideReposts: boolean;
   minLikes: number;
   risingEnabled: boolean;
@@ -127,6 +129,7 @@ export interface ClassifyThresholds {
 export type ClassifyState = "hit" | "rising" | "hidden";
 export type ClassifyReason =
   | "no-media"
+  | "excluded-keyword"
   | "repost"
   | "indeterminate-metric"
   | "minimum-likes"
@@ -145,6 +148,15 @@ export function classifyPost(
 ): ClassifyResult {
   if (!post.hasMedia) {
     return { state: "hidden", reason: "no-media" };
+  }
+
+  const normalizedText = (post.text ?? "").toLowerCase();
+  if (
+    settings.excludedKeywords.some((keyword) =>
+      normalizedText.includes(keyword),
+    )
+  ) {
+    return { state: "hidden", reason: "excluded-keyword" };
   }
 
   if (settings.hideReposts && post.isRepost) {
