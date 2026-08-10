@@ -9,15 +9,12 @@
     <title>Sift</title>
     <link rel="stylesheet" href="./style.css">
   </head>
-  <!-- The settings page is the single place for site switches and every other
-       preference. Adding a Misskey instance
-       asks Chrome for a permission, and Chrome tears a popup down the instant
-       that dialog appears (#28) — a tab does not go anywhere. The thresholds
-       are on the timeline's own toolbar as well, which is where a reader is
-       already looking when they want to move one. -->
   <body>
     <main class="popup">
       <h1>Sift</h1>
+      <p data-role="status" aria-live="polite" data-i18n="popupStatusLoading">Checking this site…</p>
+      <button type="button" data-role="toggle-filtering" disabled data-i18n="popupEnableFiltering">Turn filtering on</button>
+      <button type="button" data-role="toggle-show-all" disabled data-i18n="popupShowAll">Show all posts</button>
       <button type="button" data-role="open-options" data-i18n="popupOpenOptions">Open settings</button>
     </main>
     <script type="module" src="./main.js"></script>

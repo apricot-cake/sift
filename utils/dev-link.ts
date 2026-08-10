@@ -35,8 +35,8 @@ export const DEV_CONTENT_STARTED = "sift:dev-content-started";
 
 // content script がページ上で最初に完了させたフィルタの一巡。「スクリプトが
 // 読み込まれた」と「スクリプトが仕事をした」は別の主張で、拡張機能が動いて
-// いるかに答えるのは後者だけ＝だから数と、ツールバーが載ったかどうかも一緒に
-// 出す。実行環境につき1回＝一巡自体はタイムラインを変える描画のたびに走る。
+// いるかに答えるのは後者だけ＝だから数を一緒に出す。実行環境につき1回＝一巡
+// 自体はタイムラインを変える描画のたびに走る。
 export const DEV_FILTER_PASS = "sift:dev-filter-pass";
 
 // content script が browser.runtime.sendMessage で background の worker へ送る
@@ -48,7 +48,6 @@ export interface DevContentStartedMessage {
 export interface DevFilterPassMessage {
   type: typeof DEV_FILTER_PASS;
   counts: { hit: number; rising: number; hidden: number };
-  toolbar: boolean;
 }
 export type DevLinkMessage = DevContentStartedMessage | DevFilterPassMessage;
 

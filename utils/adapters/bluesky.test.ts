@@ -301,11 +301,10 @@ describe("リポストを読む", () => {
   });
 });
 
-// Bluesky のいいねは X のいいねなので、しきい値とそれを名指しするメッセージは
-// サービスごとに複製せず共有する。
+// Bluesky のいいねは X のいいねなので、しきい値を共有する。
 describe("しきい値が数えるもの", () => {
   it("X が数えるいいねと同じもの＝同じ2つの数と比べる", () => {
-    expect(blueskyAdapter.reactionLabels).toBe(xAdapter.reactionLabels);
+    expect(blueskyAdapter.thresholdKeys).toBe(xAdapter.thresholdKeys);
     expect(blueskyAdapter.thresholdKeys).toBe(LIKE_THRESHOLDS);
   });
 });

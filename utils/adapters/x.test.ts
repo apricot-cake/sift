@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { render } from "../../test/dom.ts";
 import { LIKE_THRESHOLDS } from "../settings.ts";
-import { LIKE_LABELS } from "./types.ts";
 import { xAdapter } from "./x.ts";
 
 // X は投稿を、区切り線と周囲の余白も持つセルで包んでいて、投稿そのものはその
@@ -201,11 +200,8 @@ describe("リポストを読む", () => {
   });
 });
 
-// ツールバーとその設定パネルは、X の反応を自分で名指しせず、アダプターから
-// これを受け取る。
 describe("しきい値が数えるもの", () => {
-  it("いいね＝いいねを名指しするメッセージの下にある", () => {
-    expect(xAdapter.reactionLabels).toBe(LIKE_LABELS);
+  it("いいねのしきい値を使う", () => {
     expect(xAdapter.thresholdKeys).toBe(LIKE_THRESHOLDS);
   });
 });

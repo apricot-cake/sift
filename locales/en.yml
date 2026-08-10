@@ -2,15 +2,17 @@
 # 新しいキーはまずここへ足す。他の言語ファイルはこのキー集合と揃っているかを
 # locales/locales.test.ts が検査する。
 #
-# toolbarHitCount・toolbarRisingCount・toolbarHiddenCount の3つが複数形分岐
-# （1 / n）を持つのは、モジュールの複数形機構が1メッセージにつき1つの数しか
-# 取れないため＝もともと3つの数を1つの文へ詰めていた toolbarStatusCounts では
-# es / pt-BR の名詞・形容詞を数に一致させられない。3つへ分けたうえで、
-# toolbarStatusCounts はそれらを並べる側（$1 / $2 / $3）へ役目を変えている。
-
 extensionDescription: "Filters posts on X, Bluesky, and Misskey by media, reaction count, and time since posting."
 
 popupOpenOptions: "Open settings"
+popupStatusLoading: "Checking this site…"
+popupStatusUnavailable: "Open a supported timeline to use Sift."
+popupFilterOn: "Filtering: on"
+popupFilterOff: "Filtering: off"
+popupEnableFiltering: "Turn filtering on"
+popupDisableFiltering: "Turn filtering off"
+popupShowAll: "Show all posts"
+popupShowFiltered: "Show filtered posts"
 
 optionsTagline: "Filter posts on screen with shared rules and site-specific settings."
 optionsSectionFilter: "Filter"
@@ -47,39 +49,3 @@ optionsErrorSaveFailed: "Could not save settings."
 optionsErrorBadHost: "Check the hostname. Enter only the hostname, for example misskey.io."
 optionsErrorPermissionDenied: "Permission was not granted. The instance was not added."
 optionsErrorAlreadyDefault: "misskey.io is already included."
-
-toolbarPanelLabel: "Sift settings"
-toolbarPanelTitle: "Filter settings"
-toolbarAutosave: "Saved automatically"
-toolbarMinLikes: "Standard: minimum likes"
-toolbarMinReactions: "Standard: minimum reactions"
-toolbarRisingEnabled: "Show rising"
-toolbarRisingMinLikes: "Rising: minimum likes"
-toolbarRisingMinReactions: "Rising: minimum reactions"
-toolbarMaxAge: "Time since posting"
-toolbarUnitHours: "hours"
-toolbarMedia: "Media"
-toolbarMediaAny: "Images and video"
-toolbarMediaImages: "Images only"
-toolbarMediaVideo: "Video only"
-toolbarExcludedKeywords: "Excluded keywords"
-toolbarExcludedKeywordsPlaceholder: "One word or phrase per line"
-toolbarHideReposts: "Exclude reposts"
-toolbarHint: "Blue marks standard posts. Orange marks rising posts."
-toolbarStatusChecking: "Checking…"
-toolbarHitCount:
-  1: "1 hit"
-  n: "$1 hits"
-toolbarRisingCount:
-  1: "1 rising"
-  n: "$1 rising"
-toolbarHiddenCount:
-  1: "1 hidden"
-  n: "$1 hidden"
-toolbarStatusCounts: "$1 · $2 · $3"
-toolbarStatusStopped: "Filtering is off"
-toolbarFilterOn: "Filtering: on"
-toolbarFilterOff: "Filtering: off"
-toolbarShowAll: "Show all posts"
-toolbarShowFiltered: "Show filtered posts"
-toolbarSettings: "Settings"
