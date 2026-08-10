@@ -60,10 +60,10 @@ Misskeyの制約。**Misskeyの画面は、判定に使える目印をほとん�
 
 ## 新しい言語の足し方
 
-拡張の文言は `locales/<言語>.yml` にあります。現在の対象7言語（`en` / `ja` / `ko` / `zh-TW` / `zh-CN` / `es` / `pt-BR`）は、Siftのもう1つの拡張であるHologramの対応言語（hologram#222・hologram#250）に合わせた意図的な選択で、ファイルを追加するだけでは増えません＝`locales/locales.test.ts` の `TARGET_LOCALES` がその宣言そのものです。
+拡張の文言は `locales/<言語>.yml` にあります。現在の対象は7言語（`en` / `ja` / `ko` / `zh-TW` / `zh-CN` / `es` / `pt-BR`）です。言語を追加する場合は、`locales/<言語>.yml` の追加に加え、`locales/locales.test.ts` の `TARGET_LOCALES` も更新します。
 
 - **既存の対象言語の訳を直す・補う** PRはいつでも歓迎します。`locales/<言語>.yml` を編集し、`npm test` を通してから送ってください。
-- **対象言語を増やす**提案は、まず Issue で起票してください。判定基準は上記のHologram側のIssueが正本です。承認後、`locales/<言語>.yml` の追加と `locales/locales.test.ts` の `TARGET_LOCALES` への追記をセットで行います。
+- **対象言語を増やす**提案は、まず Issue で起票してください。承認後、`locales/<言語>.yml` の追加と `locales/locales.test.ts` の `TARGET_LOCALES` への追記をセットで行います。
 
 日本語以外の現在の訳はAIによる初期訳で、メンテナーは内容を確認していません。各言語の話者による修正・置換PRを特に歓迎します。
 
