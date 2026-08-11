@@ -56,6 +56,7 @@ export function startContentRuntime(
   let observer: MutationObserver | null = null;
   let routeTimer: number | null = null;
   let filterFrame: number | null = null;
+  let keepViewportOnNextFilter = false;
   let showAllTemporarily = false;
   let disposed = false;
   let reportedFilterPass = false;
@@ -91,6 +92,52 @@ export function startContentRuntime(
     delete cell.dataset.siftFilterReason;
   }
 
+  // CSS の scroll anchoring はページ側がどの投稿をアンカーにするかで結果が変わる。
+  // 抽出の切替は投稿をまとめて display:none にするので、ここでは読んでいた投稿を
+  // 明示的に選ぶ。切替後にも残る、画面上端に最も近い投稿をその位置へ戻す。
+  function findViewportAnchor(
+    updates: readonly { cell: HTMLElement; state: ClassifyState | null }[],
+  ): { cell: HTMLElement; top: number } | null {
+    let beforeViewport: { cell: HTMLElement; top: number } | null = null;
+    let afterViewport: { cell: HTMLElement; top: number } | null = null;
+
+    for (const update of updates) {
+      if (update.state === "hidden" && !showAllTemporarily) {
+        continue;
+      }
+
+      const { top, bottom } = update.cell.getBoundingClientRect();
+      if (bottom <= 0 || top >= window.innerHeight) {
+        continue;
+      }
+      if (top <= 0 && (!beforeViewport || top > beforeViewport.top)) {
+        beforeViewport = { cell: update.cell, top };
+      } else if (top > 0 && (!afterViewport || top < afterViewport.top)) {
+        afterViewport = { cell: update.cell, top };
+      }
+    }
+
+    return beforeViewport ?? afterViewport;
+  }
+
+  function restoreViewportAnchor(
+    anchor: { cell: HTMLElement; top: number } | null,
+  ): void {
+    if (!anchor) {
+      return;
+    }
+
+    window.requestAnimationFrame(() => {
+      if (disposed || !anchor.cell.isConnected) {
+        return;
+      }
+      const offset = anchor.cell.getBoundingClientRect().top - anchor.top;
+      if (offset !== 0) {
+        window.scrollBy({ top: offset, behavior: "instant" });
+      }
+    });
+  }
+
   function filterVisiblePosts(): void {
     filterFrame = null;
     if (disposed) {
@@ -106,6 +153,11 @@ export function startContentRuntime(
     document.body.classList.toggle("sift-show-all", showAllTemporarily);
 
     const counts = { hit: 0, rising: 0, hidden: 0 };
+    const updates: {
+      cell: HTMLElement;
+      state: ClassifyState | null;
+      reason: ClassifyReason | null;
+    }[] = [];
 
     for (const postCard of postCards) {
       // 生きたページ上の投稿は必ず HTMLElement。アダプターの約束が Element
@@ -113,7 +165,7 @@ export function startContentRuntime(
       const cell = adapter.findPostCell(postCard) as HTMLElement;
 
       if (!filteringEnabled()) {
-        clearCellState(cell);
+        updates.push({ cell, state: null, reason: null });
         continue;
       }
 
@@ -130,9 +182,23 @@ export function startContentRuntime(
         thresholdsFor(settings, adapter.thresholdKeys),
       );
 
-      setCellState(cell, result.state, result.reason);
+      updates.push({ cell, state: result.state, reason: result.reason });
       counts[result.state] += 1;
     }
+
+    const viewportAnchor = keepViewportOnNextFilter
+      ? findViewportAnchor(updates)
+      : null;
+    keepViewportOnNextFilter = false;
+
+    for (const update of updates) {
+      if (update.state === null || update.reason === null) {
+        clearCellState(update.cell);
+      } else {
+        setCellState(update.cell, update.state, update.reason);
+      }
+    }
+    restoreViewportAnchor(viewportAnchor);
 
     // 実行環境につき1回、最初の一巡が何をしたかを開発時の worker へ伝える。
     // utils/dev-link.ts を参照＝門と一緒にリリースから落とされる。
@@ -189,11 +255,13 @@ export function startContentRuntime(
       return timelineState();
     }
 
+    const wasFilteringEnabled = filteringEnabled();
     settings = withSiteEnabled(
       settings,
       location.hostname,
-      !filteringEnabled(),
+      !wasFilteringEnabled,
     );
+    keepViewportOnNextFilter = true;
     if (!filteringEnabled()) {
       showAllTemporarily = false;
     }
@@ -232,7 +300,9 @@ export function startContentRuntime(
       return;
     }
 
+    const wasFilteringEnabled = filteringEnabled();
     settings = normalizeSettings(storedSettings);
+    keepViewportOnNextFilter ||= wasFilteringEnabled !== filteringEnabled();
     scheduleFilter();
   }
 
