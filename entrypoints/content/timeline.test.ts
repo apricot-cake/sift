@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fakeBrowser } from "wxt/testing/fake-browser";
 import { ContentScriptContext } from "wxt/utils/content-script-context";
 import { xAdapter } from "../../utils/adapters/x.ts";
+import { TIMELINE_CONTROL } from "../../utils/timeline-controls.ts";
 import { startContentRuntime } from "./index.ts";
 
 const timelineMarkup = `
@@ -49,6 +50,48 @@ describe("タイムラインのフィルター", () => {
     });
     expect(document.body.children).toHaveLength(1);
     expect(document.querySelector("[data-sift-filter-state]")).toBeNull();
+
+    runtime.dispose();
+  });
+
+  it("抽出の切替後も、表示に残る投稿を同じ位置に保つ", async () => {
+    document.body.innerHTML = timelineMarkup;
+    const runtime = startContentRuntime(
+      new ContentScriptContext("sift-test"),
+      xAdapter,
+    );
+    await vi.waitFor(() => {
+      expect(
+        document.querySelector<HTMLElement>("[data-sift-filter-state]"),
+      ).not.toBeNull();
+    });
+
+    const cell = document.querySelector<HTMLElement>(
+      "[data-testid=cellInnerDiv]",
+    );
+    if (!cell) {
+      throw new Error("テスト用の投稿セルが見つからない");
+    }
+    vi.spyOn(cell, "getBoundingClientRect").mockImplementation(() => {
+      // 抽出を外すと、前に隠れていた投稿がこの投稿の上に加わる想定。
+      const top = cell.dataset.siftFilterState ? 48 : 248;
+      return new DOMRect(0, top, 600, 180);
+    });
+    const scrollBy = vi
+      .spyOn(window, "scrollBy")
+      .mockImplementation(() => undefined);
+
+    await fakeBrowser.runtime.onMessage.trigger(
+      {
+        type: TIMELINE_CONTROL.toggleFiltering,
+      },
+      {},
+      () => {},
+    );
+
+    await vi.waitFor(() => {
+      expect(scrollBy).toHaveBeenCalledWith({ top: 200, behavior: "instant" });
+    });
 
     runtime.dispose();
   });
