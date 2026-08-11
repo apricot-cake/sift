@@ -32,9 +32,15 @@ const DAILY = path.join(ROOT, ".output", "chrome-mv3");
 //
 // `.git` は主の作業ツリーではディレクトリ、繋いだ方ではファイル＝git 自身が同じ
 // ことを言っている。
-function isMainWorkingTree() {
+function isDeployableMainWorkingTree() {
   try {
-    return fs.statSync(path.join(ROOT, ".git")).isDirectory();
+    return (
+      fs.statSync(path.join(ROOT, ".git")).isDirectory() &&
+      execSync("git branch --show-current", {
+        cwd: ROOT,
+        encoding: "utf8",
+      }).trim() === "main"
+    );
   } catch {
     return true; // そもそも git の作業コピーではない＝守るものが無い
   }
@@ -77,9 +83,9 @@ function swapIn(source: string, destination: string): void {
   }
 }
 
-if (!isMainWorkingTree()) {
+if (!isDeployableMainWorkingTree()) {
   console.log(
-    "[sift] 主の作業ツリーではない＝配布を飛ばす（この出力先を読み込んでいるブラウザは無い）",
+    "[sift] main の主作業ツリーではない＝配布を飛ばす（この出力先を読み込んでいるブラウザは無い）",
   );
   process.exit(0);
 }
