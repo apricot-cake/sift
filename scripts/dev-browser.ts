@@ -66,6 +66,12 @@ function chromePath() {
 }
 
 const chrome = process.env.SIFT_CHROME || chromePath();
+// 専用プロファイルの起動時に必ず開く、識別用のページ。ブラウザのプロファイル名は
+// 外から読めないので、検証を自動操作する側はこの URL が開いている接続だけを選ぶ。
+// ネットワークや開発サーバーに依存しない data: URL にして、初回の起動でも残す。
+const DEVELOPMENT_PROFILE_MARKER = `data:text/html;charset=utf-8,${encodeURIComponent(
+  "<title>Sift 開発プロファイル</title><main>Sift 開発プロファイル</main>",
+)}`;
 
 // `--print` は全部を解決して何も開かない。ブラウザの窓を開くことは、その機械を
 // 使っている人から画面とキーボードを奪うので、経路が正しいかを確かめるのにそれを
@@ -83,10 +89,14 @@ fs.mkdirSync(PROFILE, { recursive: true });
 
 // 切り離す＝このコマンドはブラウザを開いて戻る。立っている間ずっとそれを抱える
 // のではない。端末を閉じたことでブラウザが閉じてはならない。
-const child = spawn(chrome, [`--user-data-dir=${PROFILE}`], {
-  detached: true,
-  stdio: "ignore",
-});
+const child = spawn(
+  chrome,
+  [`--user-data-dir=${PROFILE}`, DEVELOPMENT_PROFILE_MARKER],
+  {
+    detached: true,
+    stdio: "ignore",
+  },
+);
 child.unref();
 
 console.log(`[sift] 開発用の Chrome プロファイルを開いた: ${PROFILE}`);
