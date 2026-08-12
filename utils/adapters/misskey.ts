@@ -122,6 +122,10 @@ export const misskeyAdapter = Object.freeze({
     return noteCards(root).length > 0;
   },
 
+  isTimelineAvailable(root: ParentNode) {
+    return this.hasPostCards(root);
+  },
+
   // 隠される単位は article ではなくノートの root＝リノートのヘッダと返信先の
   // ノートは article の外に描かれるので、article だけを隠すとそれらが残る。
   findPostCell(postCard: Element) {

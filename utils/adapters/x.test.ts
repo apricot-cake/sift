@@ -41,6 +41,22 @@ describe("投稿を見つける", () => {
     expect(xAdapter.getPostCards(page)).toEqual([]);
     expect(xAdapter.hasPostCards(page)).toBe(false);
   });
+
+  it("Home は投稿の描き直し中でも操作できる", () => {
+    const page = render('<div data-testid="primaryColumn"></div>');
+
+    expect(xAdapter.isTimelineAvailable(page, { pathname: "/home" })).toBe(
+      true,
+    );
+  });
+
+  it("投稿のない他の画面は操作できない", () => {
+    const page = render('<div data-testid="primaryColumn">settings</div>');
+
+    expect(xAdapter.isTimelineAvailable(page, { pathname: "/settings" })).toBe(
+      false,
+    );
+  });
 });
 
 describe("隠される単位", () => {

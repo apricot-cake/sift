@@ -19,6 +19,11 @@ export interface ServiceAdapter {
 
   getPostCards(root: ParentNode): Element[];
   hasPostCards(root: ParentNode): boolean;
+  // 投稿が一時的にまだ描かれていない画面でも、操作できるタイムラインなら true。
+  isTimelineAvailable(
+    root: ParentNode,
+    page: Pick<Location, "pathname">,
+  ): boolean;
   // 隠される単位＝投稿カードそのものとは限らない。
   findPostCell(postCard: Element): Element;
   readReactionCount(postCard: Element): number;

@@ -244,14 +244,14 @@ export function startContentRuntime(
 
   function timelineState(): TimelineControlState {
     return {
-      timelineAvailable: adapter.hasPostCards(document),
+      timelineAvailable: adapter.isTimelineAvailable(document, location),
       filteringEnabled: filteringEnabled(),
       showAllTemporarily,
     };
   }
 
   function toggleFiltering(): TimelineControlState {
-    if (!adapter.hasPostCards(document)) {
+    if (!adapter.isTimelineAvailable(document, location)) {
       return timelineState();
     }
 
