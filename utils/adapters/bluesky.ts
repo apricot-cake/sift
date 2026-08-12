@@ -102,6 +102,10 @@ export const blueskyAdapter = Object.freeze({
     return readablePostCards(root).length > 0;
   },
 
+  isTimelineAvailable(root: ParentNode) {
+    return this.hasPostCards(root);
+  },
+
   // 隠される単位。X と違い Bluesky は区切り線と余白をカードの内側に持つので、
   // 外側のセルを探しに行く必要が無い。
   findPostCell(postCard: Element) {

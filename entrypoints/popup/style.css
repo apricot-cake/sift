@@ -29,3 +29,13 @@
   padding: 7px 12px;
   width: 100%;
 }
+
+/* 現在のタブで content script が動いていない間は操作を受け付けない。通常の
+   ボタンと同じ青のままだと押せるように見えるため、操作不能な状態を明示する。 */
+.popup button:disabled {
+  background: var(--subtle-background);
+  border-color: var(--border);
+  color: var(--muted);
+  cursor: not-allowed;
+  opacity: 1;
+}

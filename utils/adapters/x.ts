@@ -36,6 +36,12 @@ export const xAdapter = Object.freeze({
     return Boolean(root.querySelector(X_SELECTORS.postCard));
   },
 
+  // Home は投稿を仮想化していて、描き直し中は一時的にカードが無くなる。それでも
+  // 抽出の切替は受け付け、次に届いた投稿へ設定を適用する。
+  isTimelineAvailable(root: ParentNode, page: Pick<Location, "pathname">) {
+    return page.pathname === "/home" || this.hasPostCards(root);
+  },
+
   // 隠される単位。X は投稿を、区切り線と周囲の余白も持つセルで包んでいるので、
   // カードだけを隠すと隙間が残る。
   findPostCell(postCard: Element) {

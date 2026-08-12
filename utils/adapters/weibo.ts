@@ -103,6 +103,10 @@ export const weiboAdapter = Object.freeze({
     return postCards(root).length > 0;
   },
 
+  isTimelineAvailable(root: ParentNode) {
+    return this.hasPostCards(root);
+  },
+
   // 隠される単位は投稿カードそのもの＝外側の `.wbpro-scroller-item` ではない。
   // 仮想スクローラーは自分の非表示を `display: none` で行い、高さの計算はその器
   // が居る前提で組まれているので、器ごと消すとスクロール位置が飛ぶ。
