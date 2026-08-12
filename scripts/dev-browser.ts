@@ -1,4 +1,4 @@
-// `npm run dev:browser`＝開発用の Chrome プロファイルを開く。
+// `npm run dev:browser` / `npm run dev:marker`＝開発用の Chrome プロファイルを開く。
 //
 // プロファイルを分けること自体が目的＝日常のブラウザが載せるのはリリース
 // ビルドだけで他は載せないので、拡張機能の開発に関わること（開発サーバーの
@@ -21,6 +21,11 @@ const PROFILE =
 const OUTPUT =
   process.env.SIFT_DEV_OUTPUT ||
   path.join(homedir(), ".sift-dev", "chrome-mv3-dev");
+const marker = process.argv.includes("--marker")
+  ? `data:text/html;charset=utf-8,${encodeURIComponent(
+      "<title>Sift 開発プロファイル</title><main>Sift 開発プロファイル</main>",
+    )}`
+  : null;
 
 // Chrome が実際にどこにあるか。当てずっぽうではなく Windows に訊く＝32bit の
 // 導入先を持つ機械はいくらでもあり、64bit の経路を埋め込むと、そこでは見当違いの
@@ -83,13 +88,21 @@ fs.mkdirSync(PROFILE, { recursive: true });
 
 // 切り離す＝このコマンドはブラウザを開いて戻る。立っている間ずっとそれを抱える
 // のではない。端末を閉じたことでブラウザが閉じてはならない。
-const child = spawn(chrome, [`--user-data-dir=${PROFILE}`], {
-  detached: true,
-  stdio: "ignore",
-});
+const child = spawn(
+  chrome,
+  [`--user-data-dir=${PROFILE}`, ...(marker ? [marker] : [])],
+  {
+    detached: true,
+    stdio: "ignore",
+  },
+);
 child.unref();
 
-console.log(`[sift] 開発用の Chrome プロファイルを開いた: ${PROFILE}`);
+console.log(
+  marker
+    ? `[sift] 開発用プロファイルに識別ページを開いた: ${PROFILE}`
+    : `[sift] 開発用の Chrome プロファイルを開いた: ${PROFILE}`,
+);
 if (fs.existsSync(path.join(OUTPUT, "manifest.json"))) {
   console.log(`[sift] 読み込む開発ビルド: ${OUTPUT}`);
 } else {
