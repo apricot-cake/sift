@@ -78,11 +78,15 @@ export const xAdapter = Object.freeze({
   },
 
   readIsRepost(postCard: Element) {
-    const socialContext = postCard.querySelector(X_SELECTORS.socialContext);
-    if (!socialContext) {
-      return false;
-    }
-
-    return /repost|retweeted|リポスト/i.test(socialContext.textContent ?? "");
+    // 表示文言は読者の言語で変わる。リポストの socialContext だけは、リポスト
+    // した人のプロフィールへの相対リンクに入る。固定ポストの socialContext は
+    // リンク外なので、文言ではなくこの構造で区別する。
+    return Array.from(
+      postCard.querySelectorAll(X_SELECTORS.socialContext),
+    ).some(
+      (socialContext) =>
+        socialContext.closest(X_SELECTORS.postCard) === postCard &&
+        Boolean(socialContext.closest('a[href^="/"]')),
+    );
   },
 }) satisfies ServiceAdapter;
