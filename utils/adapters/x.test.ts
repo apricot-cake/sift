@@ -178,19 +178,25 @@ describe("投稿本文を読む", () => {
 });
 
 describe("リポストを読む", () => {
-  it("X が投稿の上に描くリポストのヘッダを読む", () => {
-    const card = renderPost(
-      '<div data-testid="socialContext">さんがリポストしました</div>',
-    );
+  // リポストの矢印は socialContext の前にあり、文言はリポストした人のプロフィール
+  // へのリンクの中に入る。表示言語が違っても、この構造は変わらない。
+  it.each([
+    ["韓国語", "사용자님이 재게시했습니다"],
+    ["中国語", "用户转帖了"],
+  ])("%s のリポストを文言に依存せず読む", (_language, text) => {
+    const card = renderPost(`
+      <div>
+        <div><svg aria-hidden="true"><path></path></svg></div>
+        <div><a href="/reposter"><span data-testid="socialContext">${text}</span></a></div>
+      </div>
+    `);
 
     expect(xAdapter.readIsRepost(card)).toBe(true);
   });
 
-  // 同じヘッダには別の文言も入る＝固定されていることはリポストではない。
+  // 固定ポストも socialContext を使うが、これはプロフィールへのリンクには入らない。
   it("固定された投稿をリポストとして読まない", () => {
-    const card = renderPost(
-      '<div data-testid="socialContext">固定されたポスト</div>',
-    );
+    const card = renderPost('<div data-testid="socialContext">固定</div>');
 
     expect(xAdapter.readIsRepost(card)).toBe(false);
   });
