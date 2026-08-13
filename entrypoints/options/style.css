@@ -166,26 +166,6 @@ input[type="checkbox"]:focus-visible {
   padding: 0;
 }
 
-.site-list {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  list-style: none;
-  margin: 0 0 8px;
-  padding: 0;
-}
-
-.site-row {
-  align-items: center;
-  background: var(--control-background);
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  display: flex;
-  font-size: 13px;
-  justify-content: space-between;
-  padding: 6px 8px;
-}
-
 .instance-row {
   align-items: center;
   background: var(--control-background);

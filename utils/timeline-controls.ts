@@ -1,10 +1,7 @@
-// ポップアップとショートカットがタイムラインの content script へ渡す操作。
-// どちらも同じ意味のメッセージを使うので、入口が増えてもページ側の状態遷移は
-// 1つに保てる。
+// ショートカットがタイムラインの content script へ渡す操作。ポップアップは
+// 保存済みの設定を直接切り替えるため、content script の起動状態に依存しない。
 export const TIMELINE_CONTROL = {
-  getState: "sift:timeline-get-state",
   toggleFiltering: "sift:timeline-toggle-filtering",
-  toggleShowAll: "sift:timeline-toggle-show-all",
 } as const;
 
 export type TimelineControlMessage =
@@ -12,27 +9,6 @@ export type TimelineControlMessage =
 
 export interface TimelineControlRequest {
   readonly type: TimelineControlMessage;
-}
-
-export interface TimelineControlState {
-  readonly timelineAvailable: boolean;
-  readonly filteringEnabled: boolean;
-  readonly showAllTemporarily: boolean;
-}
-
-export function isTimelineControlState(
-  value: unknown,
-): value is TimelineControlState {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    "timelineAvailable" in value &&
-    "filteringEnabled" in value &&
-    "showAllTemporarily" in value &&
-    typeof (value as TimelineControlState).timelineAvailable === "boolean" &&
-    typeof (value as TimelineControlState).filteringEnabled === "boolean" &&
-    typeof (value as TimelineControlState).showAllTemporarily === "boolean"
-  );
 }
 
 export function isTimelineControlRequest(

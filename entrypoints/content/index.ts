@@ -23,7 +23,6 @@ import { SITE_MATCHES } from "../../utils/site-matches.ts";
 import {
   isTimelineControlRequest,
   TIMELINE_CONTROL,
-  type TimelineControlState,
 } from "../../utils/timeline-controls.ts";
 import "./style.css";
 
@@ -57,7 +56,6 @@ export function startContentRuntime(
   let routeTimer: number | null = null;
   let filterFrame: number | null = null;
   let keepViewportOnNextFilter = false;
-  let showAllTemporarily = false;
   let disposed = false;
   let reportedFilterPass = false;
 
@@ -102,7 +100,7 @@ export function startContentRuntime(
     let afterViewport: { cell: HTMLElement; top: number } | null = null;
 
     for (const update of updates) {
-      if (update.state === "hidden" && !showAllTemporarily) {
+      if (update.state === "hidden") {
         continue;
       }
 
@@ -149,8 +147,6 @@ export function startContentRuntime(
       clearTimelineState();
       return;
     }
-
-    document.body.classList.toggle("sift-show-all", showAllTemporarily);
 
     const counts = { hit: 0, rising: 0, hidden: 0 };
     const updates: {
@@ -221,7 +217,6 @@ export function startContentRuntime(
   }
 
   function clearAllFiltering(): void {
-    document.body.classList.remove("sift-show-all");
     for (const cell of document.querySelectorAll<HTMLElement>(
       "[data-sift-filter-state]",
     )) {
@@ -230,7 +225,6 @@ export function startContentRuntime(
   }
 
   function clearTimelineState(): void {
-    showAllTemporarily = false;
     clearAllFiltering();
   }
 
@@ -242,17 +236,9 @@ export function startContentRuntime(
     }
   }
 
-  function timelineState(): TimelineControlState {
-    return {
-      timelineAvailable: adapter.isTimelineAvailable(document, location),
-      filteringEnabled: filteringEnabled(),
-      showAllTemporarily,
-    };
-  }
-
-  function toggleFiltering(): TimelineControlState {
+  function toggleFiltering(): void {
     if (!adapter.isTimelineAvailable(document, location)) {
-      return timelineState();
+      return;
     }
 
     const wasFilteringEnabled = filteringEnabled();
@@ -262,35 +248,18 @@ export function startContentRuntime(
       !wasFilteringEnabled,
     );
     keepViewportOnNextFilter = true;
-    if (!filteringEnabled()) {
-      showAllTemporarily = false;
-    }
     scheduleFilter();
     void settingsItem.setValue(settings).catch(() => {});
-    return timelineState();
   }
 
-  function toggleShowAll(): TimelineControlState {
-    if (adapter.hasPostCards(document) && filteringEnabled()) {
-      showAllTemporarily = !showAllTemporarily;
-      scheduleFilter();
-    }
-    return timelineState();
-  }
-
-  function handleTimelineControlMessage(
-    message: unknown,
-  ): TimelineControlState | undefined {
+  function handleTimelineControlMessage(message: unknown): undefined {
     if (!isTimelineControlRequest(message)) {
       return undefined;
     }
     if (message.type === TIMELINE_CONTROL.toggleFiltering) {
-      return toggleFiltering();
+      toggleFiltering();
     }
-    if (message.type === TIMELINE_CONTROL.toggleShowAll) {
-      return toggleShowAll();
-    }
-    return timelineState();
+    return undefined;
   }
 
   // 設定は1つの値として保管されているので、丸ごと来る＝この実行環境が既に
