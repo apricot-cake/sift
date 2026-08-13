@@ -1,0 +1,19 @@
+{
+  "description": "Prepare and verify the Sift development Chrome profile before Codex uses Chrome.",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "mcp__node_repl__js",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$(git rev-parse --show-toplevel)/.codex/hooks/prepare-dev-chrome.mjs\"",
+            "commandWindows": "pwsh -NoProfile -Command \"& node (Join-Path (git rev-parse --show-toplevel) '.codex\\hooks\\prepare-dev-chrome.mjs')\"",
+            "timeout": 30,
+            "statusMessage": "Preparing Sift development Chrome"
+          }
+        ]
+      }
+    ]
+  }
+}
