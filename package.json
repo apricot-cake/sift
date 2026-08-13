@@ -9,7 +9,6 @@
   "scripts": {
     "dev": "node scripts/dev.ts",
     "dev:browser": "node scripts/dev-browser.ts",
-    "dev:marker": "node scripts/dev-browser.ts --marker",
     "build": "wxt build -b chrome && npm run verify:manifest",
     "build:firefox": "wxt build -b firefox && npm run verify:manifest -- firefox",
     "deploy": "node scripts/deploy-extension.ts",

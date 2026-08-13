@@ -1,4 +1,4 @@
-// `npm run dev:browser` / `npm run dev:marker`＝開発用の Chrome プロファイルを開く。
+// `npm run dev:browser`＝開発用の Chrome プロファイルを、CDP で接続できる形で開く。
 //
 // プロファイルを分けること自体が目的＝日常のブラウザが載せるのはリリース
 // ビルドだけで他は載せないので、拡張機能の開発に関わること（開発サーバーの
@@ -21,11 +21,41 @@ const PROFILE =
 const OUTPUT =
   process.env.SIFT_DEV_OUTPUT ||
   path.join(homedir(), ".sift-dev", "chrome-mv3-dev");
-const marker = process.argv.includes("--marker")
-  ? `data:text/html;charset=utf-8,${encodeURIComponent(
-      "<title>Sift 開発プロファイル</title><main>Sift 開発プロファイル</main>",
-    )}`
-  : null;
+const CDP_HOST = "127.0.0.1";
+const CDP_PORT = Number.parseInt(process.env.SIFT_DEV_CDP_PORT || "9222", 10);
+const CDP_URL = `http://${CDP_HOST}:${CDP_PORT}`;
+
+if (!Number.isInteger(CDP_PORT) || CDP_PORT < 1024 || CDP_PORT > 65535) {
+  throw new Error("SIFT_DEV_CDP_PORT は 1024〜65535 のポート番号にすること。");
+}
+
+async function cdpReady(): Promise<boolean> {
+  try {
+    const response = await fetch(`${CDP_URL}/json/version`, {
+      signal: AbortSignal.timeout(500),
+    });
+    const value: unknown = await response.json();
+    return (
+      response.ok &&
+      typeof value === "object" &&
+      value !== null &&
+      "webSocketDebuggerUrl" in value &&
+      typeof value.webSocketDebuggerUrl === "string"
+    );
+  } catch {
+    return false;
+  }
+}
+
+async function waitForCdp(): Promise<boolean> {
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    if (await cdpReady()) {
+      return true;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 150));
+  }
+  return false;
+}
 
 // Chrome が実際にどこにあるか。当てずっぽうではなく Windows に訊く＝32bit の
 // 導入先を持つ機械はいくらでもあり、64bit の経路を埋め込むと、そこでは見当違いの
@@ -78,6 +108,7 @@ const chrome = process.env.SIFT_CHROME || chromePath();
 if (process.argv.includes("--print")) {
   console.log(`chrome:      ${chrome}`);
   console.log(`プロファイル: ${PROFILE}`);
+  console.log(`CDP:         ${CDP_URL}`);
   console.log(
     `ビルド:      ${OUTPUT}${fs.existsSync(path.join(OUTPUT, "manifest.json")) ? "" : "  (まだビルドされていない)"}`,
   );
@@ -86,11 +117,20 @@ if (process.argv.includes("--print")) {
 
 fs.mkdirSync(PROFILE, { recursive: true });
 
+if (await cdpReady()) {
+  console.log(`[sift] 開発用プロファイルは CDP で接続済み: ${CDP_URL}`);
+  process.exit(0);
+}
+
 // 切り離す＝このコマンドはブラウザを開いて戻る。立っている間ずっとそれを抱える
 // のではない。端末を閉じたことでブラウザが閉じてはならない。
 const child = spawn(
   chrome,
-  [`--user-data-dir=${PROFILE}`, ...(marker ? [marker] : [])],
+  [
+    `--user-data-dir=${PROFILE}`,
+    `--remote-debugging-address=${CDP_HOST}`,
+    `--remote-debugging-port=${CDP_PORT}`,
+  ],
   {
     detached: true,
     stdio: "ignore",
@@ -98,11 +138,16 @@ const child = spawn(
 );
 child.unref();
 
+if (!(await waitForCdp())) {
+  throw new Error(
+    `[sift] ${CDP_URL} へ接続できない。開発用 Chrome が既に開いているなら閉じてから、もう一度 npm run dev:browser を実行すること。`,
+  );
+}
+
 console.log(
-  marker
-    ? `[sift] 開発用プロファイルに識別ページを開いた: ${PROFILE}`
-    : `[sift] 開発用の Chrome プロファイルを開いた: ${PROFILE}`,
+  `[sift] CDP を有効にした開発用 Chrome プロファイルを開いた: ${PROFILE}`,
 );
+console.log(`[sift] CDP 接続先: ${CDP_URL}`);
 if (fs.existsSync(path.join(OUTPUT, "manifest.json"))) {
   console.log(`[sift] 読み込む開発ビルド: ${OUTPUT}`);
 } else {
@@ -114,5 +159,5 @@ console.log(
   "[sift] 最初の1回だけ: chrome://extensions → デベロッパーモード → パッケージ化されていない拡張機能を読み込む → 上の置き場。",
 );
 console.log(
-  "[sift] 日常のプロファイルへは読み込まないこと＝どちらのビルドも同じ拡張機能 id を持っている。",
+  "[sift] 日常のプロファイルへは読み込まないこと＝どちらのビルドも同じ拡張機能 id を持っている。検証は CDP でこの接続先だけを使う。",
 );
