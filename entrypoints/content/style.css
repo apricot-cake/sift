@@ -2,11 +2,6 @@
   display: none !important;
 }
 
-body.sift-show-all [data-sift-filter-state="hidden"] {
-  display: block !important;
-  opacity: 0.35 !important;
-}
-
 /* 線を引く相手は状態を持つ要素＝アダプターの findPostCell() が返すセルであって、
    その中の投稿カードではない。ここでどれかのサービスの投稿カードを名指しすると、
    線はそのサービスにだけ引かれることになるし、画面の作りを抱えさせるために

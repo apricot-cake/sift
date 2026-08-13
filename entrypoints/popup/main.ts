@@ -2,11 +2,13 @@ import { browser } from "wxt/browser";
 import { startUncaughtReporting } from "../../utils/error-log.ts";
 import { localizeDocument, t } from "../../utils/i18n.ts";
 import {
-  isTimelineControlState,
-  TIMELINE_CONTROL,
-  type TimelineControlMessage,
-  type TimelineControlState,
-} from "../../utils/timeline-controls.ts";
+  isSiteEnabled,
+  normalizeSettings,
+  type Settings,
+  withSiteEnabled,
+} from "../../utils/settings.ts";
+import { settingsItem } from "../../utils/settings-storage.ts";
+import { isSiteControlAvailable } from "../../utils/site-controls.ts";
 
 // このページで動いているものは全部が拡張機能自身のものなので、何も除かない。
 // 購読は popup と同じだけ生きる。
@@ -30,19 +32,25 @@ function main(): void {
   const toggleFiltering = document.querySelector<HTMLButtonElement>(
     '[data-role="toggle-filtering"]',
   );
-  const toggleShowAll = document.querySelector<HTMLButtonElement>(
-    '[data-role="toggle-show-all"]',
-  );
   const openOptions = document.querySelector<HTMLButtonElement>(
     '[data-role="open-options"]',
   );
-  if (!status || !toggleFiltering || !toggleShowAll || !openOptions) {
+  if (!status || !toggleFiltering || !openOptions) {
     return;
   }
 
-  const renderState = (state: TimelineControlState | null) => {
-    const available = state?.timelineAvailable === true;
-    const filteringEnabled = state?.filteringEnabled === true;
+  let activeHost: string | null = null;
+  let currentSettings: Settings | null = null;
+
+  const renderState = (settings: Settings | null, hostname: string | null) => {
+    const available =
+      hostname !== null &&
+      settings !== null &&
+      isSiteControlAvailable(hostname, settings);
+    const filteringEnabled =
+      available && settings !== null && hostname !== null
+        ? isSiteEnabled(settings, hostname)
+        : false;
     status.textContent = available
       ? filteringEnabled
         ? t("popupFilterOn")
@@ -52,35 +60,42 @@ function main(): void {
     toggleFiltering.textContent = filteringEnabled
       ? t("popupDisableFiltering")
       : t("popupEnableFiltering");
-    toggleShowAll.disabled = !available || !filteringEnabled;
-    toggleShowAll.textContent = state?.showAllTemporarily
-      ? t("popupShowFiltered")
-      : t("popupShowAll");
   };
 
-  const sendToTimeline = async (type: TimelineControlMessage) => {
+  const refresh = async () => {
     const [tab] = await browser.tabs.query({
       active: true,
       currentWindow: true,
     });
-    if (tab?.id === undefined) {
-      return null;
+    const settings = normalizeSettings(await settingsItem.getValue());
+    let hostname: string | null = null;
+    try {
+      hostname = tab?.url ? new URL(tab.url).hostname : null;
+    } catch {
+      hostname = null;
     }
-    const response = await browser.tabs.sendMessage(tab.id, { type });
-    return isTimelineControlState(response) ? response : null;
+
+    activeHost = hostname;
+    currentSettings = settings;
+    renderState(settings, hostname);
   };
 
-  const updateTimeline = (type: TimelineControlMessage) => {
-    void sendToTimeline(type)
-      .then(renderState)
-      .catch(() => renderState(null));
+  const toggle = async () => {
+    if (activeHost === null || currentSettings === null) {
+      return;
+    }
+    const updated = withSiteEnabled(
+      currentSettings,
+      activeHost,
+      !isSiteEnabled(currentSettings, activeHost),
+    );
+    await settingsItem.setValue(updated);
+    currentSettings = updated;
+    renderState(updated, activeHost);
   };
 
   toggleFiltering.addEventListener("click", () => {
-    updateTimeline(TIMELINE_CONTROL.toggleFiltering);
-  });
-  toggleShowAll.addEventListener("click", () => {
-    updateTimeline(TIMELINE_CONTROL.toggleShowAll);
+    void toggle().catch(() => refresh().catch(() => renderState(null, null)));
   });
   openOptions.addEventListener("click", () => {
     // ページが開けば Chrome が自分で popup を閉じる。そのページがタブなのか
@@ -89,7 +104,7 @@ function main(): void {
     void browser.runtime.openOptionsPage();
   });
 
-  updateTimeline(TIMELINE_CONTROL.getState);
+  void refresh().catch(() => renderState(null, null));
 }
 
 main();
