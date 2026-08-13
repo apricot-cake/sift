@@ -35,7 +35,9 @@ function runNpm(root, script) {
 function isChromeSelection(code) {
   return (
     /agent\.browsers\.getForUrl\s*\(/.test(code) ||
-    /agent\.browsers\.get\s*\(\s*["'](?:chrome|extension)["']\s*\)/.test(code) ||
+    /agent\.browsers\.get\s*\(\s*["'](?:chrome|extension)["']\s*\)/.test(
+      code,
+    ) ||
     /agent\.browsers\.getDefault\s*\(\s*\)/.test(code)
   );
 }
