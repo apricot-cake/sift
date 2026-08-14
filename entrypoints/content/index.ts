@@ -9,6 +9,7 @@ import {
   type ClassifyState,
   classifyPost,
 } from "../../utils/filter-core.ts";
+import { t } from "../../utils/i18n.ts";
 import { CONTENT_RUNTIME_KEY } from "../../utils/runtime-key.ts";
 import {
   defaults,
@@ -58,6 +59,8 @@ export function startContentRuntime(
   let keepViewportOnNextFilter = false;
   let disposed = false;
   let reportedFilterPass = false;
+  let showAllTemporarily = false;
+  let routeUrl = location.href;
 
   function filteringEnabled(): boolean {
     return isSiteEnabled(settings, location.hostname);
@@ -88,6 +91,43 @@ export function startContentRuntime(
   function clearCellState(cell: HTMLElement): void {
     delete cell.dataset.siftFilterState;
     delete cell.dataset.siftFilterReason;
+  }
+
+  function clearEmptyState(): void {
+    document.querySelector("[data-sift-empty-state]")?.remove();
+  }
+
+  function showAllPostsTemporarily(): void {
+    showAllTemporarily = true;
+    scheduleFilter();
+  }
+
+  function showEmptyState(cells: readonly HTMLElement[]): void {
+    const current = document.querySelector<HTMLElement>(
+      "[data-sift-empty-state]",
+    );
+    const container = cells[0]?.parentElement ?? document.body;
+    if (current?.parentElement === container) {
+      return;
+    }
+
+    current?.remove();
+
+    const state = document.createElement("section");
+    state.dataset.siftEmptyState = "";
+    state.setAttribute("role", "status");
+
+    const message = document.createElement("p");
+    message.textContent = t("timelineEmptyState");
+
+    const showAll = document.createElement("button");
+    showAll.type = "button";
+    showAll.dataset.siftShowAll = "";
+    showAll.textContent = t("timelineShowAllTemporarily");
+    showAll.addEventListener("click", showAllPostsTemporarily);
+
+    state.append(message, showAll);
+    container.append(state);
   }
 
   // CSS の scroll anchoring はページ側がどの投稿をアンカーにするかで結果が変わる。
@@ -187,12 +227,24 @@ export function startContentRuntime(
       : null;
     keepViewportOnNextFilter = false;
 
+    const allPostsAreHidden = updates.every(
+      (update) => update.state === "hidden",
+    );
     for (const update of updates) {
-      if (update.state === null || update.reason === null) {
+      if (
+        showAllTemporarily ||
+        update.state === null ||
+        update.reason === null
+      ) {
         clearCellState(update.cell);
       } else {
         setCellState(update.cell, update.state, update.reason);
       }
+    }
+    if (filteringEnabled() && allPostsAreHidden && !showAllTemporarily) {
+      showEmptyState(updates.map(({ cell }) => cell));
+    } else {
+      clearEmptyState();
     }
     restoreViewportAnchor(viewportAnchor);
 
@@ -226,9 +278,16 @@ export function startContentRuntime(
 
   function clearTimelineState(): void {
     clearAllFiltering();
+    clearEmptyState();
+    showAllTemporarily = false;
   }
 
   function handleRoute(): void {
+    if (location.href !== routeUrl) {
+      routeUrl = location.href;
+      showAllTemporarily = false;
+      clearEmptyState();
+    }
     if (adapter.hasPostCards(document)) {
       scheduleFilter();
     } else {
@@ -247,6 +306,7 @@ export function startContentRuntime(
       location.hostname,
       !wasFilteringEnabled,
     );
+    showAllTemporarily = false;
     keepViewportOnNextFilter = true;
     scheduleFilter();
     void settingsItem.setValue(settings).catch(() => {});
@@ -271,6 +331,9 @@ export function startContentRuntime(
 
     const wasFilteringEnabled = filteringEnabled();
     settings = normalizeSettings(storedSettings);
+    if (!filteringEnabled()) {
+      showAllTemporarily = false;
+    }
     keepViewportOnNextFilter ||= wasFilteringEnabled !== filteringEnabled();
     scheduleFilter();
   }

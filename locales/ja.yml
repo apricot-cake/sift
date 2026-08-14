@@ -7,6 +7,8 @@ popupFilterOn: "フィルター: ON"
 popupFilterOff: "フィルター: OFF"
 popupEnableFiltering: "フィルターを有効にする"
 popupDisableFiltering: "フィルターを無効にする"
+timelineEmptyState: "条件に合う投稿はありません"
+timelineShowAllTemporarily: "すべての投稿を一時的に表示"
 
 optionsTagline: "共通の条件で、表示中の投稿を絞り込みます。"
 optionsSectionStandard: "通常"

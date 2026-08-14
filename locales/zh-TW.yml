@@ -7,6 +7,8 @@ popupFilterOn: "篩選：開啟"
 popupFilterOff: "篩選：關閉"
 popupEnableFiltering: "開啟篩選"
 popupDisableFiltering: "關閉篩選"
+timelineEmptyState: "沒有符合條件的貼文。"
+timelineShowAllTemporarily: "暫時顯示所有貼文"
 
 optionsTagline: "以共用規則篩選畫面上的貼文"
 optionsSectionStandard: "標準"

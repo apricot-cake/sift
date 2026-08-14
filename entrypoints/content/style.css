@@ -2,6 +2,34 @@
   display: none !important;
 }
 
+[data-sift-empty-state] {
+  display: grid;
+  gap: 12px;
+  justify-items: center;
+  margin: 16px;
+  padding: 24px;
+  border: 1px solid color-mix(in srgb, currentcolor 25%, transparent);
+  border-radius: 12px;
+  color: canvastext;
+  background: canvas;
+  font: inherit;
+  text-align: center;
+}
+
+[data-sift-empty-state] p {
+  margin: 0;
+}
+
+[data-sift-show-all] {
+  padding: 8px 12px;
+  border: 1px solid currentcolor;
+  border-radius: 6px;
+  color: inherit;
+  background: transparent;
+  font: inherit;
+  cursor: pointer;
+}
+
 /* 線を引く相手は状態を持つ要素＝アダプターの findPostCell() が返すセルであって、
    その中の投稿カードではない。ここでどれかのサービスの投稿カードを名指しすると、
    線はそのサービスにだけ引かれることになるし、画面の作りを抱えさせるために

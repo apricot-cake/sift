@@ -15,10 +15,11 @@ describe("抽出の操作入口", () => {
     expect(options).not.toContain('data-role="site-list"');
   });
 
-  it("一時的な全件表示を持たない", () => {
-    const popup = readEntrypoint("entrypoints/popup/index.html");
+  it("一時的な全件表示はタイムライン内の空状態から行う", () => {
+    const content = readEntrypoint("entrypoints/content/index.ts");
 
-    expect(popup).not.toContain('data-role="toggle-show-all"');
+    expect(content).toContain("siftShowAll");
+    expect(content).not.toContain('data-role="toggle-show-all"');
   });
 
   it("ポップアップは content script の応答を待たずに状態を読む", () => {
