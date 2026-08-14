@@ -1,0 +1,25 @@
+version = 1
+name = "ローカル"
+
+[setup]
+script = "npm ci"
+
+[[actions]]
+name = "開発"
+icon = "run"
+command = "npm run dev"
+
+[[actions]]
+name = "ブラウザーで開発"
+icon = "debug"
+command = "npm run dev:browser"
+
+[[actions]]
+name = "検証"
+icon = "test"
+command = "npm run check"
+
+[[actions]]
+name = "ビルド"
+icon = "tool"
+command = "npm run build"
