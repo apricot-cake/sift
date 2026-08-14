@@ -10,6 +10,7 @@ import {
   classifyPost,
 } from "../../utils/filter-core.ts";
 import { t } from "../../utils/i18n.ts";
+import { OPEN_OPTIONS_PAGE } from "../../utils/options-page.ts";
 import { CONTENT_RUNTIME_KEY } from "../../utils/runtime-key.ts";
 import {
   defaults,
@@ -59,8 +60,6 @@ export function startContentRuntime(
   let keepViewportOnNextFilter = false;
   let disposed = false;
   let reportedFilterPass = false;
-  let showAllTemporarily = false;
-  let routeUrl = location.href;
 
   function filteringEnabled(): boolean {
     return isSiteEnabled(settings, location.hostname);
@@ -97,11 +96,6 @@ export function startContentRuntime(
     document.querySelector("[data-sift-empty-state]")?.remove();
   }
 
-  function showAllPostsTemporarily(): void {
-    showAllTemporarily = true;
-    scheduleFilter();
-  }
-
   function showEmptyState(cells: readonly HTMLElement[]): void {
     const current = document.querySelector<HTMLElement>(
       "[data-sift-empty-state]",
@@ -120,13 +114,19 @@ export function startContentRuntime(
     const message = document.createElement("p");
     message.textContent = t("timelineEmptyState");
 
-    const showAll = document.createElement("button");
-    showAll.type = "button";
-    showAll.dataset.siftShowAll = "";
-    showAll.textContent = t("timelineShowAllTemporarily");
-    showAll.addEventListener("click", showAllPostsTemporarily);
+    const openSettings = document.createElement("button");
+    openSettings.type = "button";
+    openSettings.dataset.siftOpenSettings = "";
+    openSettings.textContent = t("timelineOpenSettings");
+    openSettings.addEventListener("click", () => {
+      void browser.runtime
+        .sendMessage({ type: OPEN_OPTIONS_PAGE })
+        .catch(() => {
+          // 設定ページを開けない場合も、タイムライン上の抽出状態は変えない。
+        });
+    });
 
-    state.append(message, showAll);
+    state.append(message, openSettings);
     container.append(state);
   }
 
@@ -231,17 +231,13 @@ export function startContentRuntime(
       (update) => update.state === "hidden",
     );
     for (const update of updates) {
-      if (
-        showAllTemporarily ||
-        update.state === null ||
-        update.reason === null
-      ) {
+      if (update.state === null || update.reason === null) {
         clearCellState(update.cell);
       } else {
         setCellState(update.cell, update.state, update.reason);
       }
     }
-    if (filteringEnabled() && allPostsAreHidden && !showAllTemporarily) {
+    if (filteringEnabled() && allPostsAreHidden) {
       showEmptyState(updates.map(({ cell }) => cell));
     } else {
       clearEmptyState();
@@ -279,15 +275,9 @@ export function startContentRuntime(
   function clearTimelineState(): void {
     clearAllFiltering();
     clearEmptyState();
-    showAllTemporarily = false;
   }
 
   function handleRoute(): void {
-    if (location.href !== routeUrl) {
-      routeUrl = location.href;
-      showAllTemporarily = false;
-      clearEmptyState();
-    }
     if (adapter.hasPostCards(document)) {
       scheduleFilter();
     } else {
@@ -306,7 +296,6 @@ export function startContentRuntime(
       location.hostname,
       !wasFilteringEnabled,
     );
-    showAllTemporarily = false;
     keepViewportOnNextFilter = true;
     scheduleFilter();
     void settingsItem.setValue(settings).catch(() => {});
@@ -331,9 +320,6 @@ export function startContentRuntime(
 
     const wasFilteringEnabled = filteringEnabled();
     settings = normalizeSettings(storedSettings);
-    if (!filteringEnabled()) {
-      showAllTemporarily = false;
-    }
     keepViewportOnNextFilter ||= wasFilteringEnabled !== filteringEnabled();
     scheduleFilter();
   }

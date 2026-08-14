@@ -8,7 +8,7 @@ popupFilterOff: "필터: 꺼짐"
 popupEnableFiltering: "필터 켜기"
 popupDisableFiltering: "필터 끄기"
 timelineEmptyState: "조건에 맞는 게시물이 없습니다."
-timelineShowAllTemporarily: "모든 게시물 일시적으로 보기"
+timelineOpenSettings: "설정 열기"
 
 optionsTagline: "공통 규칙으로 화면의 게시물을 필터링합니다"
 optionsSectionStandard: "표준"

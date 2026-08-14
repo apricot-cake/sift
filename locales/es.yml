@@ -8,7 +8,7 @@ popupFilterOff: "Filtro desactivado"
 popupEnableFiltering: "Activar filtro"
 popupDisableFiltering: "Desactivar filtro"
 timelineEmptyState: "No hay publicaciones que coincidan con tus filtros."
-timelineShowAllTemporarily: "Mostrar temporalmente todas las publicaciones"
+timelineOpenSettings: "Abrir configuración"
 
 optionsTagline: "Filtra las publicaciones en pantalla con reglas compartidas"
 optionsSectionStandard: "Estándar"

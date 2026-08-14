@@ -15,10 +15,10 @@ describe("抽出の操作入口", () => {
     expect(options).not.toContain('data-role="site-list"');
   });
 
-  it("一時的な全件表示はタイムライン内の空状態から行う", () => {
+  it("タイムライン内の空状態から設定を開ける", () => {
     const content = readEntrypoint("entrypoints/content/index.ts");
 
-    expect(content).toContain("siftShowAll");
+    expect(content).toContain("OPEN_OPTIONS_PAGE");
     expect(content).not.toContain('data-role="toggle-show-all"');
   });
 

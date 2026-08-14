@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fakeBrowser } from "wxt/testing/fake-browser";
 import { ContentScriptContext } from "wxt/utils/content-script-context";
 import { xAdapter } from "../../utils/adapters/x.ts";
+import { OPEN_OPTIONS_PAGE } from "../../utils/options-page.ts";
 import { TIMELINE_CONTROL } from "../../utils/timeline-controls.ts";
 import { startContentRuntime } from "./index.ts";
 
@@ -64,7 +65,7 @@ describe("タイムラインのフィルター", () => {
     runtime.dispose();
   });
 
-  it("すべての投稿が隠れたときは空状態から一時的に全件を表示できる", async () => {
+  it("すべての投稿が隠れたときは空状態から設定を開ける", async () => {
     document.body.innerHTML = hiddenTimelineMarkup;
     const runtime = startContentRuntime(
       new ContentScriptContext("sift-test"),
@@ -80,12 +81,15 @@ describe("タイムラインのフィルター", () => {
         ?.getAttribute("data-sift-filter-state"),
     ).toBe("hidden");
 
-    document.querySelector<HTMLButtonElement>("[data-sift-show-all]")?.click();
+    const sendMessage = vi
+      .spyOn(fakeBrowser.runtime, "sendMessage")
+      .mockResolvedValue();
 
-    await vi.waitFor(() => {
-      expect(document.querySelector("[data-sift-empty-state]")).toBeNull();
-      expect(document.querySelector("[data-sift-filter-state]")).toBeNull();
-    });
+    document
+      .querySelector<HTMLButtonElement>("[data-sift-open-settings]")
+      ?.click();
+
+    expect(sendMessage).toHaveBeenCalledWith({ type: OPEN_OPTIONS_PAGE });
 
     runtime.dispose();
   });
