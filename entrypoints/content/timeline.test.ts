@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fakeBrowser } from "wxt/testing/fake-browser";
 import { ContentScriptContext } from "wxt/utils/content-script-context";
 import { xAdapter } from "../../utils/adapters/x.ts";
+import { OPEN_OPTIONS_PAGE } from "../../utils/options-page.ts";
 import { TIMELINE_CONTROL } from "../../utils/timeline-controls.ts";
 import { startContentRuntime } from "./index.ts";
 
@@ -10,6 +11,15 @@ const timelineMarkup = `
     <article data-testid="tweet">
       <div data-testid="tweetPhoto"></div>
       <button data-testid="like" aria-label="900 件のいいね"></button>
+      <time datetime="2026-08-01T12:00:00.000Z"></time>
+    </article>
+  </div>
+`;
+
+const hiddenTimelineMarkup = `
+  <div data-testid="cellInnerDiv">
+    <article data-testid="tweet">
+      <button data-testid="like" aria-label="0 likes"></button>
       <time datetime="2026-08-01T12:00:00.000Z"></time>
     </article>
   </div>
@@ -50,6 +60,105 @@ describe("タイムラインのフィルター", () => {
     });
     expect(document.body.children).toHaveLength(1);
     expect(document.querySelector("[data-sift-filter-state]")).toBeNull();
+    expect(document.querySelector("[data-sift-empty-state]")).toBeNull();
+
+    runtime.dispose();
+  });
+
+  it("すべての投稿が隠れたときは空状態から設定を開ける", async () => {
+    document.body.innerHTML = hiddenTimelineMarkup;
+    const runtime = startContentRuntime(
+      new ContentScriptContext("sift-test"),
+      xAdapter,
+    );
+
+    await vi.waitFor(() => {
+      expect(document.querySelector("[data-sift-empty-state]")).not.toBeNull();
+    });
+    expect(
+      document
+        .querySelector<HTMLElement>("[data-sift-filter-state]")
+        ?.getAttribute("data-sift-filter-state"),
+    ).toBe("hidden");
+
+    const sendMessage = vi
+      .spyOn(fakeBrowser.runtime, "sendMessage")
+      .mockResolvedValue();
+
+    document
+      .querySelector<HTMLButtonElement>("[data-sift-open-settings]")
+      ?.click();
+
+    expect(sendMessage).toHaveBeenCalledWith({ type: OPEN_OPTIONS_PAGE });
+
+    runtime.dispose();
+  });
+
+  it("表示対象の投稿が加わると空状態を消す", async () => {
+    document.body.innerHTML = hiddenTimelineMarkup;
+    const runtime = startContentRuntime(
+      new ContentScriptContext("sift-test"),
+      xAdapter,
+    );
+
+    await vi.waitFor(() => {
+      expect(document.querySelector("[data-sift-empty-state]")).not.toBeNull();
+    });
+
+    document.body.insertAdjacentHTML("beforeend", timelineMarkup);
+
+    await vi.waitFor(() => {
+      expect(document.querySelector("[data-sift-empty-state]")).toBeNull();
+      expect(
+        document.querySelector<HTMLElement>('[data-sift-filter-state="hit"]'),
+      ).not.toBeNull();
+    });
+
+    runtime.dispose();
+  });
+
+  it("フィルターを無効にすると空状態を消す", async () => {
+    document.body.innerHTML = hiddenTimelineMarkup;
+    const runtime = startContentRuntime(
+      new ContentScriptContext("sift-test"),
+      xAdapter,
+    );
+
+    await vi.waitFor(() => {
+      expect(document.querySelector("[data-sift-empty-state]")).not.toBeNull();
+    });
+
+    await fakeBrowser.runtime.onMessage.trigger(
+      { type: TIMELINE_CONTROL.toggleFiltering },
+      {},
+      () => {},
+    );
+
+    await vi.waitFor(() => {
+      expect(document.querySelector("[data-sift-empty-state]")).toBeNull();
+      expect(document.querySelector("[data-sift-filter-state]")).toBeNull();
+    });
+
+    runtime.dispose();
+  });
+
+  it("投稿のない画面へ移ると空状態を消す", async () => {
+    document.body.innerHTML = hiddenTimelineMarkup;
+    const runtime = startContentRuntime(
+      new ContentScriptContext("sift-test"),
+      xAdapter,
+    );
+
+    await vi.waitFor(() => {
+      expect(document.querySelector("[data-sift-empty-state]")).not.toBeNull();
+    });
+
+    document.body.innerHTML = '<div data-testid="primaryColumn">settings</div>';
+
+    await vi.waitFor(() => {
+      expect(document.querySelector("[data-sift-empty-state]")).toBeNull();
+      expect(document.querySelector("[data-sift-filter-state]")).toBeNull();
+    });
 
     runtime.dispose();
   });

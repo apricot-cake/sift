@@ -7,6 +7,8 @@ popupFilterOn: "筛选：开启"
 popupFilterOff: "筛选：关闭"
 popupEnableFiltering: "开启筛选"
 popupDisableFiltering: "关闭筛选"
+timelineEmptyState: "没有符合条件的帖子。"
+timelineOpenSettings: "打开设置"
 
 optionsTagline: "使用共享规则筛选屏幕上的帖子"
 optionsSectionStandard: "标准"

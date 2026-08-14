@@ -11,6 +11,8 @@ popupFilterOn: "Filtering: on"
 popupFilterOff: "Filtering: off"
 popupEnableFiltering: "Turn filtering on"
 popupDisableFiltering: "Turn filtering off"
+timelineEmptyState: "No posts match your filters."
+timelineOpenSettings: "Open settings"
 
 optionsTagline: "Filter posts on screen with shared rules."
 optionsSectionStandard: "Standard"

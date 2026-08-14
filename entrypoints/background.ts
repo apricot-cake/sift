@@ -21,6 +21,7 @@ import {
   type InstanceDeps,
   reconcileInstances,
 } from "../utils/instances.ts";
+import { isOpenOptionsPageRequest } from "../utils/options-page.ts";
 import { instanceStorage } from "../utils/settings-storage.ts";
 import { TIMELINE_CONTROL } from "../utils/timeline-controls.ts";
 
@@ -107,6 +108,12 @@ export default defineBackground(() => {
     void browser.tabs
       .sendMessage(tab.id, { type: TIMELINE_CONTROL.toggleFiltering })
       .catch(() => {});
+  });
+
+  browser.runtime.onMessage.addListener((message: unknown) => {
+    if (isOpenOptionsPageRequest(message)) {
+      void browser.runtime.openOptionsPage();
+    }
   });
 
   if (!__SIFT_DEV__) {
