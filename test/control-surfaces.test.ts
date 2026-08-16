@@ -28,4 +28,10 @@ describe("抽出の操作入口", () => {
     expect(popup).toContain("settingsItem.getValue()");
     expect(popup).not.toContain("browser.tabs.sendMessage");
   });
+
+  it("ポップアップを開いた現在タブの URL を読める", () => {
+    const config = readEntrypoint("wxt.config.ts");
+
+    expect(config).toContain('"activeTab"');
+  });
 });
