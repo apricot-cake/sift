@@ -21,7 +21,7 @@
 //
 // 拡張機能の id はリリースビルドと同じなので（署名鍵が固定されている）、両方を
 // 同じプロファイルへ読み込まないこと＝プロファイルを分けてあるのはそのため。
-import { execFileSync, spawn } from "node:child_process";
+import { spawn } from "node:child_process";
 import net from "node:net";
 import { homedir } from "node:os";
 import path from "node:path";
@@ -93,7 +93,7 @@ console.log(
 // 自分で `npm run dev` と打った人には切り離しは起きない＝サーバーはその人の目の前
 // で動き、そこでは Ctrl+C も WXT のキー割り当ても効く。
 //
-// 窓を開くときの決まり（コマンドは1つの文字列・`cmd /k` を使わない・下の pause）は
+// 窓を開くときの決まり（コマンドは1つの文字列・`cmd /k` を使わない）は
 // sift のものではなく Windows 全体のもの＝スキル `windows-scripting`。
 if (
   process.platform === "win32" &&
@@ -146,28 +146,5 @@ for (const signal of forwardedSignals) {
 }
 
 child.on("exit", (code, signal) => {
-  // 状態表示の窓では、0 以外の終了はその理由を道連れにする＝ポートの衝突も、
-  // ビルドの失敗も、入れ忘れも、表示された端から窓が閉じて消える。だから読まれる
-  // まで留める。ただし失敗したときだけ＝意図して止めたサーバーは、今までどおり
-  // タスクバーから自分を消す。
-  //
-  // Ctrl+C は失敗ではない＝Windows はそれを専用の終了状態として報告するし、
-  // 手で止めたときは、窓を閉じたときと同じように窓が閉じるべき。
-  const CONTROL_C_EXIT = 3221225786; // 0xC000013A
-  if (
-    process.env.SIFT_DEV_WINDOW &&
-    !signal &&
-    code &&
-    code !== CONTROL_C_EXIT
-  ) {
-    console.error(
-      "\n[sift] 開発サーバーが終了した。上の理由を読めるように窓は開いたままにする。",
-    );
-    try {
-      execFileSync("cmd", ["/c", "pause"], { stdio: "inherit" });
-    } catch {
-      // pause はコンソールを要る。無いのなら、そもそも開いたままにするものが無い。
-    }
-  }
   process.exit(signal ? 1 : (code ?? 0));
 });
