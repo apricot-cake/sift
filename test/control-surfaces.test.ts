@@ -15,10 +15,11 @@ describe("抽出の操作入口", () => {
     expect(options).not.toContain('data-role="site-list"');
   });
 
-  it("タイムライン内の空状態から設定を開ける", () => {
+  it("タイムライン内の空状態からライブ調整を開ける", () => {
     const content = readEntrypoint("entrypoints/content/index.ts");
 
-    expect(content).toContain("OPEN_OPTIONS_PAGE");
+    expect(content).toContain("OPEN_LIVE_CONTROLS");
+    expect(content).toContain("siftOpenLiveControls");
     expect(content).not.toContain('data-role="toggle-show-all"');
   });
 

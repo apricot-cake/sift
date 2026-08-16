@@ -35,7 +35,10 @@ function main(): void {
   const openOptions = document.querySelector<HTMLButtonElement>(
     '[data-role="open-options"]',
   );
-  if (!status || !toggleFiltering || !openOptions) {
+  const openLiveControls = document.querySelector<HTMLButtonElement>(
+    '[data-role="open-live-controls"]',
+  );
+  if (!status || !toggleFiltering || !openOptions || !openLiveControls) {
     return;
   }
 
@@ -102,6 +105,20 @@ function main(): void {
     // 埋め込みの枠なのかを決めるのは options_ui で、
     // entrypoints/options/index.html はタブを求めている。
     void browser.runtime.openOptionsPage();
+  });
+  openLiveControls.addEventListener("click", () => {
+    // sidePanel.open() と sidebarAction.open() はどちらもユーザー操作からしか
+    // 呼べない。popup の click ハンドラーで直に呼ぶことで、その条件を保つ。
+    const sidePanel = (browser as { sidePanel?: typeof browser.sidePanel })
+      .sidePanel;
+    if (sidePanel) {
+      void sidePanel.open({ windowId: browser.windows.WINDOW_ID_CURRENT });
+      return;
+    }
+    const sidebarAction = (
+      browser as unknown as { sidebarAction?: { open: () => Promise<void> } }
+    ).sidebarAction;
+    void sidebarAction?.open();
   });
 
   void refresh().catch(() => renderState(null, null));

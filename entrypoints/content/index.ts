@@ -10,7 +10,7 @@ import {
   classifyPost,
 } from "../../utils/filter-core.ts";
 import { t } from "../../utils/i18n.ts";
-import { OPEN_OPTIONS_PAGE } from "../../utils/options-page.ts";
+import { OPEN_LIVE_CONTROLS } from "../../utils/live-controls.ts";
 import { CONTENT_RUNTIME_KEY } from "../../utils/runtime-key.ts";
 import {
   defaults,
@@ -114,19 +114,19 @@ export function startContentRuntime(
     const message = document.createElement("p");
     message.textContent = t("timelineEmptyState");
 
-    const openSettings = document.createElement("button");
-    openSettings.type = "button";
-    openSettings.dataset.siftOpenSettings = "";
-    openSettings.textContent = t("timelineOpenSettings");
-    openSettings.addEventListener("click", () => {
+    const openLiveControls = document.createElement("button");
+    openLiveControls.type = "button";
+    openLiveControls.dataset.siftOpenLiveControls = "";
+    openLiveControls.textContent = t("timelineOpenSettings");
+    openLiveControls.addEventListener("click", () => {
       void browser.runtime
-        .sendMessage({ type: OPEN_OPTIONS_PAGE })
+        .sendMessage({ type: OPEN_LIVE_CONTROLS })
         .catch(() => {
-          // 設定ページを開けない場合も、タイムライン上の抽出状態は変えない。
+          // サイドパネルを開けない場合も、タイムライン上の抽出状態は変えない。
         });
     });
 
-    state.append(message, openSettings);
+    state.append(message, openLiveControls);
     container.append(state);
   }
 

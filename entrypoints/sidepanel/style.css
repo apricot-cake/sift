@@ -1,0 +1,5 @@
+@import "../options/style.css";
+
+body {
+  min-width: 0;
+}
