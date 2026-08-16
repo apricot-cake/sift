@@ -109,7 +109,10 @@ export default defineConfig({
     // 足すものでもある。ここで宣言することはもう開発時だけの話ではない＝リリース
     // ビルドも、読み手が追加した Misskey インスタンスを同じやり方で登録する
     // ようになったから（utils/instances.ts）。
-    permissions: ["storage", "scripting"],
+    // action を開いた瞬間だけ現在のタブの URL を読む。popup はホスト名ごとの
+    // 設定を切り替えるので、この権限が無いと URL が伏せられ、対応する
+    // タイムラインでも操作不能と表示される。常時のサイト権限にはしない。
+    permissions: ["activeTab", "storage", "scripting"],
     // misskey.io だけはビルド時に確定した既定ホスト（#41）。利用者数が突出して
     // いるため、インストール直後から追加操作なしに content script が動く方を
     // 選んだ＝#28 の「どのインスタンスも対等」という前提とは非対称になるが、
