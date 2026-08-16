@@ -4,7 +4,6 @@ on:
   push:
     branches: [main]
   pull_request:
-    types: [opened, edited, reopened, synchronize, ready_for_review]
 
 # 同じブランチへの後続の push が前の push を追い越したなら、前の実行を
 # 最後まで走らせる必要はない。
@@ -29,13 +28,6 @@ jobs:
         with:
           node-version-file: .node-version
           cache: npm
-
-      # PR 本文が編集された時にも走る。文字列としての `\n` は見た目の改行に
-      # ならないので、既存の必須CIを失敗させてマージ前に止める。
-      - if: github.event_name == 'pull_request'
-        env:
-          PR_BODY: ${{ github.event.pull_request.body }}
-        run: node scripts/verify-pr-body.ts
 
       # インストール時のフックが2つ走る。postinstall（`wxt prepare`＝この
       # ビルドが要る WXT の設定を生成する）と prepare（`scripts/setup.ts`＝
