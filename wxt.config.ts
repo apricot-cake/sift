@@ -1,6 +1,7 @@
 import { existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, dirname, resolve } from "node:path";
+import tailwindcss from "@tailwindcss/vite";
 import { defineConfig } from "wxt";
 import { devErrorLog } from "./plugins/dev-error-log.ts";
 import { DEFAULT_MISSKEY_HOSTS } from "./utils/default-instances.ts";
@@ -35,7 +36,7 @@ export default defineConfig({
   // ビルド時に _locales/<言語>/messages.json を生成する。型（#i18n の
   // GeneratedI18nStructure）は locales/<default_locale>.yml から作られる＝
   // manifest.default_locale の設定が要る（下の manifest 節）。
-  modules: ["@wxt-dev/i18n/module"],
+  modules: ["@wxt-dev/i18n/module", "@wxt-dev/module-react"],
   // Firefox も対象。WXT は Firefox を既定で MV2 にするが、manifest の版を1つに
   // 揃えておけばリリース時の確認も1組で済む。
   manifestVersion: 3,
@@ -151,7 +152,7 @@ export default defineConfig({
     // 開発時の worker がエラーのバッファを送る先のエンドポイントに答える。
     // このプラグインが当たるのは `serve` だけなので、リリースビルドは一度も
     // これを持たない。
-    plugins: [devErrorLog({ isBuilt: developmentBuildIsReady })],
+    plugins: [tailwindcss(), devErrorLog({ isBuilt: developmentBuildIsReady })],
     define: {
       // このバンドルがどちらのビルドであるか。command で分けているのは意図的で、
       // `import.meta.env.DEV` は NODE_ENV に従うため、テストの実行環境から

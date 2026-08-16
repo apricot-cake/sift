@@ -25,12 +25,9 @@ function parseEntrypoint(path: string): Document {
   return new DOMParser().parseFromString(html, "text/html");
 }
 
-// 静的なマークアップを持つ画面2つ。ツールバーのものはコードで組み立てられて
-// いて、名前はコンパイラが既に見ている。
-const STATIC_PAGES = [
-  "entrypoints/options/index.html",
-  "entrypoints/popup/index.html",
-];
+// 静的なマークアップを持つ画面。設定画面は React で組み立てるので、表示文言は
+// TypeScript から t() を通して型検査される。
+const STATIC_PAGES = ["entrypoints/popup/index.html"];
 
 // マークアップの中の名前は、コンパイラから見ればただの文字＝属性の値を型で
 // 見るものは何も無いので、名前の変更を捕まえるのはこれ。index.html は英語の
@@ -68,18 +65,6 @@ describe.each(STATIC_PAGES)("%s", (path) => {
       }
     }
   });
-});
-
-// 2つのページで属性の形を全部使い切っていないと、壊れたものが、それを使わなく
-// なった方のページで気付かれないまま残りうる。
-it("翻訳される属性はどれか一方のページに出ている", () => {
-  const pages = STATIC_PAGES.map(parseEntrypoint);
-  for (const attribute of Object.keys(I18N_ATTRIBUTES)) {
-    const found = pages.some(
-      (page) => page.querySelectorAll(`[${attribute}]`).length > 0,
-    );
-    expect({ attribute, found }).toEqual({ attribute, found: true });
-  }
 });
 
 describe("t()", () => {

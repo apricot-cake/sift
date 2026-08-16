@@ -1,0 +1,21 @@
+{
+  "$schema": "https://ui.shadcn.com/schema.json",
+  "style": "nova",
+  "rsc": false,
+  "tsx": true,
+  "tailwind": {
+    "config": "",
+    "css": "entrypoints/options/style.css",
+    "baseColor": "neutral",
+    "cssVariables": true,
+    "prefix": ""
+  },
+  "aliases": {
+    "components": "@/entrypoints/options/components",
+    "utils": "@/entrypoints/options/lib/utils",
+    "ui": "@/entrypoints/options/components/ui",
+    "lib": "@/entrypoints/options/lib",
+    "hooks": "@/entrypoints/options/hooks"
+  },
+  "iconLibrary": "lucide"
+}

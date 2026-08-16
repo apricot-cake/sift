@@ -1,254 +1,86 @@
+@import "tailwindcss";
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --font-sans: "Segoe UI Variable", "Segoe UI", system-ui, sans-serif;
+}
+
 :root {
   color-scheme: light dark;
-  font-family: "Segoe UI Variable", "Segoe UI", system-ui, sans-serif;
-  --accent: #0f6cbd;
-  --background: #ffffff;
-  --border: #d1d5db;
-  --control-background: #ffffff;
-  --foreground: #1f2328;
-  --muted: #656d76;
-  --subtle-background: #eef1f4;
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.18 0.01 265);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.18 0.01 265);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.18 0.01 265);
+  --primary: oklch(0.55 0.19 255);
+  --primary-foreground: oklch(0.99 0 0);
+  --secondary: oklch(0.96 0.01 265);
+  --secondary-foreground: oklch(0.23 0.01 265);
+  --muted: oklch(0.96 0.01 265);
+  --muted-foreground: oklch(0.47 0.02 265);
+  --accent: oklch(0.95 0.02 255);
+  --accent-foreground: oklch(0.28 0.07 255);
+  --destructive: oklch(0.58 0.22 27);
+  --border: oklch(0.9 0.01 265);
+  --input: oklch(0.88 0.01 265);
+  --ring: oklch(0.55 0.19 255);
+  --radius: 0.65rem;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --accent: #4c9ee8;
-    --background: #202020;
-    --border: #484848;
-    --control-background: #292929;
-    --foreground: #f3f3f3;
-    --muted: #b7b7b7;
-    --subtle-background: #3a3a3a;
+    --background: oklch(0.16 0.01 265);
+    --foreground: oklch(0.97 0.01 265);
+    --card: oklch(0.2 0.01 265);
+    --card-foreground: oklch(0.97 0.01 265);
+    --popover: oklch(0.2 0.01 265);
+    --popover-foreground: oklch(0.97 0.01 265);
+    --primary: oklch(0.7 0.16 255);
+    --primary-foreground: oklch(0.2 0.03 255);
+    --secondary: oklch(0.27 0.01 265);
+    --secondary-foreground: oklch(0.97 0.01 265);
+    --muted: oklch(0.27 0.01 265);
+    --muted-foreground: oklch(0.7 0.02 265);
+    --accent: oklch(0.29 0.04 255);
+    --accent-foreground: oklch(0.91 0.04 255);
+    --destructive: oklch(0.7 0.19 25);
+    --border: oklch(0.31 0.01 265);
+    --input: oklch(0.34 0.01 265);
+    --ring: oklch(0.7 0.16 255);
   }
 }
 
 * {
-  box-sizing: border-box;
+  border-color: var(--border);
+}
+
+html {
+  scroll-behavior: smooth;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
   margin: 0;
   min-width: 340px;
-}
-
-.settings {
-  /* このページは自分のタブとして開くので、幅は窓のものをそのまま受け取る。
-     埋めるに任せると、設定の行はラベルを 1280px の画面の片端に、操作をもう片端に
-     置くことになる。popup はこのスタイルシートを共有するがこの規則は共有しない＝
-     そもそも上限より狭い。 */
-  margin: 0 auto;
-  max-width: 520px;
-  padding: 18px;
-}
-
-.app-header {
-  padding-bottom: 14px;
-}
-
-h1 {
-  font-size: 18px;
-  font-weight: 600;
-  line-height: 1.25;
-  margin: 0;
-}
-
-.app-header p {
-  color: var(--muted);
-  font-size: 12px;
-  line-height: 1.45;
-  margin: 4px 0 0;
-}
-
-section {
-  border-top: 1px solid var(--border);
-  padding: 14px 0 4px;
-}
-
-h2 {
-  color: var(--muted);
-  font-size: 12px;
-  font-weight: 600;
-  line-height: 1.3;
-  margin: 0 0 7px;
-}
-
-.setting-row {
-  align-items: center;
-  display: flex;
-  font-size: 13px;
-  gap: 16px;
-  justify-content: space-between;
-  min-height: 38px;
-}
-
-.setting-label {
-  line-height: 1.35;
-}
-
-.setting-row.keyword-filter {
-  align-items: start;
-  padding: 6px 0;
-}
-
-input,
-select,
-textarea {
-  font: inherit;
-}
-
-input[type="number"],
-select {
-  background: var(--control-background);
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  color: var(--foreground);
-  height: 32px;
-  padding: 4px 8px;
-  width: 116px;
-}
-
-textarea {
-  background: var(--control-background);
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  color: var(--foreground);
-  min-height: 68px;
-  padding: 6px 8px;
-  resize: vertical;
-  width: 220px;
-}
-
-select {
-  cursor: pointer;
-}
-
-input:focus-visible,
-select:focus-visible,
-textarea:focus-visible {
-  border-color: var(--accent);
-  outline: 2px solid color-mix(in srgb, var(--accent) 35%, transparent);
-  outline-offset: 1px;
-}
-
-input[type="checkbox"] {
-  accent-color: var(--accent);
-  cursor: pointer;
-  height: 17px;
-  margin: 0;
-  width: 17px;
-}
-
-input[type="checkbox"]:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--accent) 45%, transparent);
-  outline-offset: 2px;
-}
-
-.input-with-unit {
-  align-items: center;
-  color: var(--muted);
-  display: flex;
-  font-size: 12px;
-  gap: 6px;
-}
-
-.input-with-unit input {
-  width: 78px;
-}
-
-.instance-list {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  list-style: none;
-  margin: 0 0 8px;
-  padding: 0;
-}
-
-.instance-row {
-  align-items: center;
-  background: var(--control-background);
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  display: flex;
-  font-size: 13px;
-  gap: 8px;
-  justify-content: space-between;
-  padding: 6px 8px;
-}
-
-.instance-row button {
-  background: none;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  color: inherit;
-  cursor: pointer;
-  font: inherit;
-  font-size: 12px;
-  padding: 3px 8px;
-}
-
-.instance-badge {
-  background: var(--subtle-background);
-  border-radius: 999px;
-  color: var(--muted);
-  font-size: 11px;
-  font-weight: 600;
-  padding: 3px 9px;
-  white-space: nowrap;
-}
-
-.instance-form {
-  display: flex;
-  gap: 6px;
-}
-
-.instance-form input {
-  background: var(--control-background);
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  color: var(--foreground);
-  flex: 1;
-  height: 32px;
-  padding: 4px 8px;
-}
-
-.instance-form button {
-  background: var(--accent);
-  border: 1px solid var(--accent);
-  border-radius: 6px;
-  color: #ffffff;
-  cursor: pointer;
-  font: inherit;
-  font-size: 13px;
-  font-weight: 600;
-  padding: 4px 12px;
-}
-
-.instance-error {
-  color: #c4314b;
-  font-size: 12px;
-  margin: 6px 0 0;
-  min-height: 1.3em;
-}
-
-footer {
-  border-top: 1px solid var(--border);
-  margin-top: 10px;
-  padding-top: 12px;
-}
-
-.status {
-  color: var(--accent);
-  font-size: 12px;
-  min-height: 1.3em;
-  margin: 0;
-}
-
-.note {
-  color: var(--muted);
-  font-size: 11px;
-  line-height: 1.45;
-  margin: 3px 0 0;
 }
