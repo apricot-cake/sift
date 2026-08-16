@@ -55,7 +55,12 @@ assert.equal(generatedManifest.description, declaredManifest.description);
 // 固定の署名鍵＝それに伴い、どのプロファイルも既に入れてある拡張機能の id。
 // これを失ったビルドは、別の拡張機能として入ることになる。
 assert.equal(generatedManifest.key, declaredManifest.key);
-assert.deepEqual(generatedManifest.permissions, declaredManifest.permissions);
+const declaredPermissions = declaredManifest.permissions ?? [];
+const expectedPermissions =
+  target === "chrome"
+    ? [...declaredPermissions, "sidePanel"]
+    : declaredPermissions;
+assert.deepEqual(generatedManifest.permissions, expectedPermissions);
 // misskey.io はビルド時に確定した既定ホスト（#41）＝ここが静的な
 // host_permissions と一致しなければ、インストール直後から追加操作なしに動く
 // という受け入れ条件を検査するものが無い。
@@ -104,6 +109,21 @@ assert.equal(
   declaredManifest.action?.default_title,
 );
 assert.equal(generatedManifest.action.default_popup, "popup.html");
+
+// WXT の sidepanel エントリポイントは対象ブラウザごとに API の異なる manifest
+// 項目へ変換する。Chrome は side_panel と sidePanel 権限、Firefox は
+// sidebar_action を持つ。entrypoint がページを出力しただけでは、ブラウザの
+// サイドバーから開けることは保証されないため、生成物で両方を確かめる。
+if (target === "firefox") {
+  assert.equal(
+    generatedManifest.sidebar_action.default_panel,
+    "sidepanel.html",
+  );
+  assert.equal(generatedManifest.sidebar_action.open_at_install, false);
+} else {
+  assert.equal(generatedManifest.side_panel.default_path, "sidepanel.html");
+  assert.ok(generatedManifest.permissions.includes("sidePanel"));
+}
 
 // 設定のページと、そこで結果ではなく決定にあたる唯一のもの＝`open_in_tab`。
 // 代わりに chrome://extensions へ埋め込むと、ホスト権限のダイアログが出たときに

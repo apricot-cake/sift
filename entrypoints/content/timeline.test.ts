@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fakeBrowser } from "wxt/testing/fake-browser";
 import { ContentScriptContext } from "wxt/utils/content-script-context";
 import { xAdapter } from "../../utils/adapters/x.ts";
-import { OPEN_OPTIONS_PAGE } from "../../utils/options-page.ts";
+import { OPEN_LIVE_CONTROLS } from "../../utils/live-controls.ts";
 import { TIMELINE_CONTROL } from "../../utils/timeline-controls.ts";
 import { startContentRuntime } from "./index.ts";
 
@@ -65,7 +65,7 @@ describe("タイムラインのフィルター", () => {
     runtime.dispose();
   });
 
-  it("すべての投稿が隠れたときは空状態から設定を開ける", async () => {
+  it("すべての投稿が隠れたときは空状態からライブ調整を開ける", async () => {
     document.body.innerHTML = hiddenTimelineMarkup;
     const runtime = startContentRuntime(
       new ContentScriptContext("sift-test"),
@@ -86,10 +86,10 @@ describe("タイムラインのフィルター", () => {
       .mockResolvedValue();
 
     document
-      .querySelector<HTMLButtonElement>("[data-sift-open-settings]")
+      .querySelector<HTMLButtonElement>("[data-sift-open-live-controls]")
       ?.click();
 
-    expect(sendMessage).toHaveBeenCalledWith({ type: OPEN_OPTIONS_PAGE });
+    expect(sendMessage).toHaveBeenCalledWith({ type: OPEN_LIVE_CONTROLS });
 
     runtime.dispose();
   });

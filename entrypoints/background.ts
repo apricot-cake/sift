@@ -21,6 +21,7 @@ import {
   type InstanceDeps,
   reconcileInstances,
 } from "../utils/instances.ts";
+import { isOpenLiveControlsRequest } from "../utils/live-controls.ts";
 import { isOpenOptionsPageRequest } from "../utils/options-page.ts";
 import { instanceStorage } from "../utils/settings-storage.ts";
 import { TIMELINE_CONTROL } from "../utils/timeline-controls.ts";
@@ -110,9 +111,21 @@ export default defineBackground(() => {
       .catch(() => {});
   });
 
-  browser.runtime.onMessage.addListener((message: unknown) => {
+  browser.runtime.onMessage.addListener((message: unknown, sender) => {
     if (isOpenOptionsPageRequest(message)) {
       void browser.runtime.openOptionsPage();
+    }
+    if (isOpenLiveControlsRequest(message)) {
+      const sidePanel = (browser as { sidePanel?: typeof browser.sidePanel })
+        .sidePanel;
+      if (sidePanel && sender.tab?.id !== undefined) {
+        void sidePanel.open({ tabId: sender.tab.id });
+        return;
+      }
+      const sidebarAction = (
+        browser as unknown as { sidebarAction?: { open: () => Promise<void> } }
+      ).sidebarAction;
+      void sidebarAction?.open();
     }
   });
 
