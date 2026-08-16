@@ -1,6 +1,7 @@
 {
   "extends": "./.wxt/tsconfig.json",
   "compilerOptions": {
+    "jsx": "react-jsx",
     // Node's built-in type stripping — which is how scripts/*.ts run at all
     // (`npm run dev`, `npm run deploy`, `npm run verify:manifest`) — cannot
     // erase enums, runtime namespaces, parameter properties or decorators; it
