@@ -15,12 +15,20 @@ describe("抽出の操作入口", () => {
     expect(options).not.toContain('data-role="site-list"');
   });
 
-  it("タイムライン内の空状態からライブ調整を開ける", () => {
+  it("タイムライン内の空状態からフィルターを調整できる", () => {
     const content = readEntrypoint("entrypoints/content/index.ts");
 
     expect(content).toContain("OPEN_LIVE_CONTROLS");
     expect(content).toContain("siftOpenLiveControls");
     expect(content).not.toContain('data-role="toggle-show-all"');
+  });
+
+  it("しきい値は直接打ち替えられる", () => {
+    const sidepanel = readEntrypoint("entrypoints/sidepanel/sidepanel-app.tsx");
+
+    expect(sidepanel).toContain('inputMode="numeric"');
+    expect(sidepanel).toContain("event.currentTarget.select()");
+    expect(sidepanel).not.toContain('type="number"');
   });
 
   it("ポップアップは content script の応答を待たずに状態を読む", () => {

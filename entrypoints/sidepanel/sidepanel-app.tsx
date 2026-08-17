@@ -122,7 +122,6 @@ function SidepanelApp(): React.JSX.Element {
             label={t("optionsMinLikes")}
             min={0}
             onValueChange={(value) => updateSetting("minLikes", value)}
-            step={10}
             value={settings.minLikes}
           />
           <NumberSetting
@@ -131,7 +130,6 @@ function SidepanelApp(): React.JSX.Element {
             onValueChange={(value) =>
               updateSetting("misskeyMinReactions", value)
             }
-            step={1}
             value={settings.misskeyMinReactions}
           />
         </SettingsGroup>
@@ -151,7 +149,6 @@ function SidepanelApp(): React.JSX.Element {
                 onValueChange={(value) =>
                   updateSetting("risingMinLikes", value)
                 }
-                step={10}
                 value={settings.risingMinLikes}
               />
               <NumberSetting
@@ -160,7 +157,6 @@ function SidepanelApp(): React.JSX.Element {
                 onValueChange={(value) =>
                   updateSetting("misskeyRisingMinReactions", value)
                 }
-                step={1}
                 value={settings.misskeyRisingMinReactions}
               />
               <NumberSetting
@@ -169,7 +165,6 @@ function SidepanelApp(): React.JSX.Element {
                 onValueChange={(value) =>
                   updateSetting("risingMaxAgeHours", value)
                 }
-                step={1}
                 suffix={t("optionsUnitHours")}
                 value={settings.risingMaxAgeHours}
               />
@@ -253,14 +248,12 @@ function NumberSetting({
   label,
   min,
   onValueChange,
-  step,
   suffix,
   value,
 }: {
   label: string;
   min: number;
   onValueChange: (value: number) => void;
-  step: number;
   suffix?: string;
   value: number;
 }): React.JSX.Element {
@@ -269,11 +262,17 @@ function NumberSetting({
       <div className="flex items-center gap-2">
         <Input
           className="w-24 text-right tabular-nums"
-          type="number"
-          min={min}
-          step={step}
+          type="text"
+          inputMode="numeric"
+          pattern="[0-9]*"
           value={value}
-          onChange={(event) => onValueChange(Number(event.currentTarget.value))}
+          onFocus={(event) => event.currentTarget.select()}
+          onChange={(event) => {
+            const nextValue = Number(event.currentTarget.value);
+            if (Number.isSafeInteger(nextValue)) {
+              onValueChange(Math.max(min, nextValue));
+            }
+          }}
         />
         {suffix && (
           <span className="text-sm text-muted-foreground">{suffix}</span>
