@@ -65,7 +65,7 @@ describe("タイムラインのフィルター", () => {
     runtime.dispose();
   });
 
-  it("すべての投稿が隠れたときは空状態からライブ調整を開ける", async () => {
+  it("すべての投稿が隠れたときは空状態からフィルターを調整できる", async () => {
     document.body.innerHTML = hiddenTimelineMarkup;
     const runtime = startContentRuntime(
       new ContentScriptContext("sift-test"),

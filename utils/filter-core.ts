@@ -110,7 +110,7 @@ export function parseMetric(value: unknown): number {
 }
 
 export interface Post {
-  hasMedia: boolean;
+  mediaMatches: boolean;
   likeCount: number;
   createdAtMs: number;
   isRepost: boolean;
@@ -146,7 +146,7 @@ export function classifyPost(
   settings: ClassifyThresholds,
   nowMs = Date.now(),
 ): ClassifyResult {
-  if (!post.hasMedia) {
+  if (!post.mediaMatches) {
     return { state: "hidden", reason: "no-media" };
   }
 

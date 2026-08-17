@@ -29,6 +29,12 @@ describe("normalizeSettings", () => {
     ).toBe(defaults.misskeyRisingMinReactions);
   });
 
+  it("メディアを指定しない既定値は本文だけの投稿も含める", () => {
+    expect(defaults.mediaMode).toBe("all");
+    expect(normalizeSettings({}).mediaMode).toBe("all");
+    expect(normalizeSettings({ mediaMode: "any" }).mediaMode).toBe("any");
+  });
+
   // utils/instances.ts が当てるのと同じ正規化＝正しくないものと重複は落とし、
   // 無い値や配列でない値は例外ではなく空の一覧になる。
   it("インスタンスの一覧から、正しくないホストと重複を落とす", () => {

@@ -22,7 +22,6 @@ import {
   reconcileInstances,
 } from "../utils/instances.ts";
 import { isOpenLiveControlsRequest } from "../utils/live-controls.ts";
-import { isOpenOptionsPageRequest } from "../utils/options-page.ts";
 import { instanceStorage } from "../utils/settings-storage.ts";
 import { TIMELINE_CONTROL } from "../utils/timeline-controls.ts";
 
@@ -36,7 +35,7 @@ import { TIMELINE_CONTROL } from "../utils/timeline-controls.ts";
 //     起動時に Misskey インスタンスの登録を実際の許可へ合わせ直し、動いている
 //     間は permissions.onRemoved を聞き続ける（下の、__SIFT_DEV__ の外側の
 //     コード）。permissions.onAdded も聞くが、これは見た目ほど鏡像ではない＝
-//     addInstance() が途中で自分の popup を失った場合の受け皿
+//     addInstance() がページの終了で完了処理を失った場合の受け皿
 //     （utils/instances.ts）。
 //   - 捕まえ損ねた例外が届く先は chrome://extensions のエラー欄だけで、そこは
 //     Chrome の外からは誰にも読めない。どの画面もそれを
@@ -84,6 +83,10 @@ export default defineBackground(() => {
   // しても次の起動でもう一度機会がある。
   reconcileInstances(instanceDeps).catch(() => {});
 
+  const sidePanel = (browser as { sidePanel?: typeof browser.sidePanel })
+    .sidePanel;
+  void sidePanel?.setPanelBehavior({ openPanelOnActionClick: true });
+
   // 読み手は removeInstance() を丸ごと迂回して、chrome://extensions から直接
   // Misskey のオリジンを取り消せる。動いている間にそれを Sift が聞く、ビルドに
   // 依らない唯一の経路がこれ。聞けるだけ動いていなかった場合は、上の
@@ -92,12 +95,10 @@ export default defineBackground(() => {
     handlePermissionsRemoved(removed, instanceDeps).catch(() => {});
   });
 
-  // addInstance() の受け皿＝Chrome は権限のダイアログが出た瞬間に popup を
-  // 壊すので、許可そのものは既に通っているのに、content script を登録する前
-  // やホストを保管する前に addInstance() が黙って中断されることがある
-  // （2026-08-04 に確認・#28）。このリスナーが反応するのは Chrome が実際に
-  // 行った許可であって、popup の呼び出しが自分の答えを聞くまで生き延びたか
-  // どうかではない。
+  // addInstance() の受け皿。権限を許可した後に拡張機能の画面が終了しても、
+  // content script の登録とホストの保管を取りこぼさない。このリスナーが反応
+  // するのは Chrome が実際に行った許可であって、呼び出し元が答えを聞くまで
+  // 生き延びたかどうかではない。
   browser.permissions.onAdded.addListener((added) => {
     handlePermissionsAdded(added, instanceDeps).catch(() => {});
   });
@@ -112,12 +113,7 @@ export default defineBackground(() => {
   });
 
   browser.runtime.onMessage.addListener((message: unknown, sender) => {
-    if (isOpenOptionsPageRequest(message)) {
-      void browser.runtime.openOptionsPage();
-    }
     if (isOpenLiveControlsRequest(message)) {
-      const sidePanel = (browser as { sidePanel?: typeof browser.sidePanel })
-        .sidePanel;
       if (sidePanel && sender.tab?.id !== undefined) {
         void sidePanel.open({ tabId: sender.tab.id });
         return;

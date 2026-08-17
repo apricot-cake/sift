@@ -60,7 +60,7 @@ describe("保管された設定", () => {
   });
 });
 
-// utils/instances.ts はこれを通してホストの一覧へ届き、popup は同じ値の同じ
+// utils/instances.ts はこれを通してホストの一覧へ届き、サイドパネルは同じ値の同じ
 // フィールドを描く。
 describe("instanceStorage", () => {
   it("空から始まる", async () => {
