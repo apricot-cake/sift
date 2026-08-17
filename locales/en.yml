@@ -47,6 +47,7 @@ optionsInstanceNote: "Chrome asks for permission to access this host when you ad
 optionsStatusLoading: "Loading…"
 optionsStatusSaved: "Saved"
 optionsAutosaveNote: "Settings are saved automatically and apply to all supported timelines."
+optionsRepository: "GitHub"
 optionsErrorLoadFailed: "Could not load settings."
 optionsErrorSaveFailed: "Could not save settings."
 optionsErrorBadHost: "Check the hostname. Enter only the hostname, for example misskey.io."

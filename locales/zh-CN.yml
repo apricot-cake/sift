@@ -43,6 +43,7 @@ optionsInstanceNote: "添加后，Chrome 只会请求访问该主机的权限。
 optionsStatusLoading: "加载中…"
 optionsStatusSaved: "已保存"
 optionsAutosaveNote: "设置会自动保存，并应用于所有受支持的时间线。"
+optionsRepository: "GitHub"
 optionsErrorLoadFailed: "无法读取设置。"
 optionsErrorSaveFailed: "无法保存设置。"
 optionsErrorBadHost: "请检查主机名（例如 misskey.io，不含路径、查询字符串和 http）。"
