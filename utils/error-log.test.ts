@@ -182,9 +182,11 @@ describe("appendErrorEntry", () => {
 
   it("既に保管されているものから番号を継ぐ", () => {
     expect(
-      appendErrorEntry([{ source: "popup", seq: 4 }], { source: "content" }),
+      appendErrorEntry([{ source: "sidepanel", seq: 4 }], {
+        source: "content",
+      }),
     ).toEqual([
-      { source: "popup", seq: 4 },
+      { source: "sidepanel", seq: 4 },
       { source: "content", seq: 5 },
     ]);
   });
@@ -233,11 +235,11 @@ describe("recordErrorEntry", () => {
 
   it("保管庫のバッファへ書き足す", async () => {
     await recordErrorEntry({ source: "content", message: "first" });
-    await recordErrorEntry({ source: "popup", message: "second" });
+    await recordErrorEntry({ source: "sidepanel", message: "second" });
 
     expect(await errorLogItem.getValue()).toEqual([
       { source: "content", message: "first", seq: 1 },
-      { source: "popup", message: "second", seq: 2 },
+      { source: "sidepanel", message: "second", seq: 2 },
     ]);
   });
 
@@ -330,11 +332,11 @@ describe("installUncaughtReporting", () => {
   // 拡張機能のページで動いているものは全部が拡張機能自身のものなので、そこでは
   // 何も除かない。
   it("拡張機能のページでは全部を記録する", () => {
-    const target = createFakeTarget("chrome-extension://abc/popup.html");
+    const target = createFakeTarget("chrome-extension://abc/sidepanel.html");
     const recorded: Omit<ErrorLogEntry, "seq">[] = [];
     installUncaughtReporting({
       target,
-      source: "popup",
+      source: "sidepanel",
       record: (entry) => {
         recorded.push(entry);
       },
@@ -346,7 +348,7 @@ describe("installUncaughtReporting", () => {
     });
 
     expect(recorded).toHaveLength(1);
-    expect(recorded[0]?.source).toBe("popup");
+    expect(recorded[0]?.source).toBe("sidepanel");
   });
 
   // 記録役が失敗しても、見られている側のコードを道連れにしてはならない。
@@ -354,7 +356,7 @@ describe("installUncaughtReporting", () => {
     const target = createFakeTarget();
     installUncaughtReporting({
       target,
-      source: "popup",
+      source: "sidepanel",
       record: () => {
         throw new Error("保管庫が消えている");
       },
@@ -368,7 +370,7 @@ describe("installUncaughtReporting", () => {
     const target = createFakeTarget();
     installUncaughtReporting({
       target,
-      source: "popup",
+      source: "sidepanel",
       record: () => Promise.reject(new Error("保管庫が消えている")),
     });
 

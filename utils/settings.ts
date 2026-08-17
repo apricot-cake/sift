@@ -22,7 +22,7 @@ export const defaults = Object.freeze({
   risingEnabled: true as boolean,
   risingMinLikes: 100 as number,
   risingMaxAgeHours: 6 as number,
-  mediaMode: "any" as "any" | "images" | "video",
+  mediaMode: "all" as "all" | "any" | "images" | "video",
   excludedKeywords: "" as string,
   hideReposts: true as boolean,
   misskeyInstances: Object.freeze([]) as readonly string[],
@@ -154,9 +154,11 @@ export function normalizeSettings(value: unknown): Settings {
       168,
     ),
     mediaMode:
-      source.mediaMode === "images" || source.mediaMode === "video"
+      source.mediaMode === "any" ||
+      source.mediaMode === "images" ||
+      source.mediaMode === "video"
         ? source.mediaMode
-        : "any",
+        : "all",
     excludedKeywords: normalizeExcludedKeywords(source.excludedKeywords),
     hideReposts: source.hideReposts !== false,
     misskeyInstances: normalizeInstanceList(source.misskeyInstances),

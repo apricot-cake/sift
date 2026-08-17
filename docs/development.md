@@ -79,7 +79,7 @@ npm run deploy
 
 拡張機能は未捕捉例外を `browser.storage.local` の環状バッファに最大 50 件保存します。この処理はリリースビルドにも含まれます。開発ビルドでは、service worker がバッファを開発サーバーへ送信し、`~\.sift\extension-errors.log` に JSON Lines 形式で追記します。
 
-日常用プロファイルのバッファを読み出す手段はありません。content script は拡張機能が発生元と分かる例外だけを記録します。popup、設定画面、service worker はすべての未捕捉例外を記録します。
+日常用プロファイルのバッファを読み出す手段はありません。content script は拡張機能が発生元と分かる例外だけを記録します。サイドパネルと service worker はすべての未捕捉例外を記録します。
 
 ## 文言
 
@@ -88,7 +88,7 @@ npm run deploy
 文言は次の 3 つの経路で使用します。
 
 - コードでは `t("name")` を使います。`utils/i18n.ts` は `#i18n` の `i18n.t` を公開します。メッセージ名は `locales/en.yml` から型を生成するため、存在しない名前はコンパイルできません。複数形を持つメッセージは `t("name", 件数)` の形で呼びます。
-- `entrypoints/options/index.html` と `entrypoints/popup/index.html` の静的な文言には、`data-i18n`、`data-i18n-placeholder`、`data-i18n-aria-label` を使います。`localizeDocument()` が文言を置き換えます。
+- React で組み立てる画面では `t()` を使います。静的な文書で `data-i18n`、`data-i18n-placeholder`、`data-i18n-aria-label` を使う場合は、`localizeDocument()` が文言を置き換えます。
 - `wxt.config.ts` の manifest では `__MSG_name__` を使います。これは manifest の対応フィールドだけで展開されます。
 
 静的 HTML には、起動前にも読めるように英語の既定文言を書きます。`utils/i18n.test.ts` は、この文言が `locales/en.yml` と一致することを検証します。manifest の説明文は `verify-manifest.ts` が検証します。
@@ -140,7 +140,7 @@ npm test
 コミットの件名には Conventional Commits の type と日本語の要約を使います。
 
 ```text
-feat: 設定を options ページへ移し、popup は入口だけにする
+feat: サイドパネルに抽出の操作をまとめる
 ```
 
 利用できる type は `feat`、`fix`、`refactor`、`chore`、`docs`、`test`、`perf` です。対象を絞る意味がある場合は、`chore(ci):` のようにスコープを付けます。

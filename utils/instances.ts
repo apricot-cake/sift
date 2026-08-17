@@ -147,8 +147,8 @@ function contentScriptDefinition(host: string): RegisteredContentScript {
 // そのホストが要るオリジン1つを要求し、利用者が許可した場合に限って content
 // script を登録し、ホストを保管庫へ足す。利用者の操作の中（クリックのハンドラ）
 // から呼ばなければならない＝そうでないと browser.permissions.request() が拒む。
-// だから background へメッセージで中継するとその操作が失われる＝popup が直接
-// 呼んでいる。
+// だから background へメッセージで中継するとその操作が失われる＝サイドパネルが
+// 直接呼んでいる。
 export async function addInstance(
   host: string,
   { permissions, scripting, storage }: InstanceDeps,
@@ -173,15 +173,11 @@ export async function addInstance(
     return { added: false, reason: "permission-denied" };
   }
 
-  // Chrome は権限のダイアログが出た瞬間に popup を壊す（2026-08-04 に確認・
-  // sift #28）＝許可そのものは Chrome 側で通るが、この `await` より後ろに
-  // 並んだものは、捕まえる先もログに残す先も無いまま、黙って一度も走らないこと
-  // がありうる。background のエントリポイントで browser.permissions.onAdded に
-  // 繋いである handlePermissionsAdded が受け皿＝この popup が自分の答えを
-  // 聞くまで生き延びたかどうかとは無関係に、Chrome が実際に行った許可へ反応
-  // する。その受け皿がこの行より先にこのホストを登録しうるので、下の検査は
-  // 最適化ではない＝これが無いと、重複した script の id でこの呼び出しが例外に
-  // なる。
+  // 権限を許可した後に画面が終了しても、background の
+  // browser.permissions.onAdded に繋いだ handlePermissionsAdded が登録を
+  // 引き受ける。その受け皿がこの行より先にこのホストを登録しうるので、下の
+  // 検査は最適化ではない＝これが無いと、重複した script の id でこの呼び出しが
+  // 例外になる。
   const registrationId = registrationIdForHost(normalizedHost);
   const alreadyRegistered = (
     await scripting.getRegisteredContentScripts()
@@ -221,11 +217,11 @@ export async function removeInstance(
 // background のエントリポイントで browser.permissions.onAdded に繋いである。
 // これは下の handlePermissionsRemoved の鏡というより、addInstance() 自身の
 // 受け皿＝Chrome は許可が下りた瞬間にこれを発火させる。permissions.request()
-// を呼んだ popup が自分の答えに反応できるまで生きているかどうかとは無関係に
+// を呼んだサイドパネルが自分の答えに反応できるまで生きているかどうかとは無関係に
 // （addInstance() の中のコメントを参照）。発火するのは service worker が
 // それを聞けるだけ生きている間だけだが、Sift が動いていない間に許可が下りる
 // ことは起きない＝これらのオリジンを要求するのは addInstance() だけで、
-// その呼び出しは popup のメッセージポートを保つ service worker が既に立って
+// その呼び出しはサイドパネルのメッセージポートを保つ service worker が既に立って
 // いなければ走れないから。
 export async function handlePermissionsAdded(
   addedPermissions: { origins?: string[] } | undefined,

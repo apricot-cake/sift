@@ -65,10 +65,13 @@ export function startContentRuntime(
     return isSiteEnabled(settings, location.hostname);
   }
 
-  // 画像と動画のどちらをメディアと数えるかは読み手の設定なので、2つは
-  // アダプターから別々に届き、ここで畳み合わされる。
-  function hasMedia(postCard: Element): boolean {
+  // 画像と動画のどちらを絞り込むかは読み手の設定なので、2つはアダプターから
+  // 別々に届き、ここで畳み合わされる。`all` は本文だけの投稿も通す。
+  function matchesMediaFilter(postCard: Element): boolean {
     const { hasImage, hasVideo } = adapter.readMedia(postCard);
+    if (settings.mediaMode === "all") {
+      return true;
+    }
     if (settings.mediaMode === "images") {
       return hasImage;
     }
@@ -207,7 +210,7 @@ export function startContentRuntime(
 
       const result = classifyPost(
         {
-          hasMedia: hasMedia(postCard),
+          mediaMatches: matchesMediaFilter(postCard),
           likeCount: adapter.readReactionCount(postCard),
           createdAtMs: adapter.readCreatedAt(postCard),
           isRepost: adapter.readIsRepost(postCard),

@@ -102,13 +102,13 @@ assert.ok(
   `manifest の説明文が ${descriptionKey} を名指ししているが、${generatedManifest.default_locale} のメッセージファイルはそれを持っていない`,
 );
 
-// `action` は両側が書き込む唯一の項目＝題は wxt.config.ts から来て、popup は
-// エントリポイントが存在すること自体から来る。
+// `action` の題は wxt.config.ts から来る。サイドパネルだけを入口にするので、
+// 生成物に popup は含めない。
 assert.equal(
   generatedManifest.action.default_title,
   declaredManifest.action?.default_title,
 );
-assert.equal(generatedManifest.action.default_popup, "popup.html");
+assert.equal(generatedManifest.action.default_popup, undefined);
 
 // WXT の sidepanel エントリポイントは対象ブラウザごとに API の異なる manifest
 // 項目へ変換する。Chrome は side_panel と sidePanel 権限、Firefox は
@@ -125,13 +125,9 @@ if (target === "firefox") {
   assert.ok(generatedManifest.permissions.includes("sidePanel"));
 }
 
-// 設定のページと、そこで結果ではなく決定にあたる唯一のもの＝`open_in_tab`。
-// 代わりに chrome://extensions へ埋め込むと、ホスト権限のダイアログが出たときに
-// Chrome が壊せる画面になる＝Misskey インスタンスの追加がかつてぶつかっていた
-// 失敗がそれ（#28）。これらを wxt.config.ts は1つも宣言していない＝出所は
-// entrypoints/options/index.html の meta タグで、それを読み戻すものは他に無い。
-assert.equal(generatedManifest.options_ui.page, "options.html");
-assert.equal(generatedManifest.options_ui.open_in_tab, true);
+// 設定専用のページは持たない。インスタンスの追加を含む操作はサイドパネルに
+// まとめている。
+assert.equal(generatedManifest.options_ui, undefined);
 
 // 2つの対象が本当に違う唯一の項目＝Chrome MV3 は service worker を取り、
 // Firefox MV3 はスクリプトの一覧を取る。どちらも同じ entrypoints/background.ts

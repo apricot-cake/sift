@@ -33,7 +33,7 @@ export const settingsItem = storage.defineItem<Settings>("sync:settings", {
 });
 
 // utils/instances.ts がホストの一覧へ届く経路＝専用のキーではなく設定値の
-// フィールド1つにしてあるので、popup の一覧とそれが動かす登録は同じものを
+// フィールド1つにしてあるので、サイドパネルの一覧とそれが動かす登録は同じものを
 // 読んでいる。
 export const instanceStorage: InstanceStorage = {
   async getInstances() {

@@ -83,7 +83,7 @@ describe("classifyPost", () => {
     expect(
       classifyPost(
         {
-          hasMedia: true,
+          mediaMatches: true,
           likeCount: 500,
           createdAtMs: now - 24 * 3600000,
           isRepost: false,
@@ -98,7 +98,7 @@ describe("classifyPost", () => {
     expect(
       classifyPost(
         {
-          hasMedia: true,
+          mediaMatches: true,
           likeCount: 120,
           createdAtMs: now - 2 * 3600000,
           isRepost: false,
@@ -113,7 +113,7 @@ describe("classifyPost", () => {
     expect(
       classifyPost(
         {
-          hasMedia: true,
+          mediaMatches: true,
           likeCount: 120,
           createdAtMs: now - 7 * 3600000,
           isRepost: false,
@@ -124,10 +124,15 @@ describe("classifyPost", () => {
     ).toEqual({ state: "hidden", reason: "below-threshold" });
   });
 
-  it("メディアの無い投稿は、数がいくつでも隠す", () => {
+  it("メディアの条件を満たさない投稿は、数がいくつでも隠す", () => {
     expect(
       classifyPost(
-        { hasMedia: false, likeCount: 1000, createdAtMs: now, isRepost: false },
+        {
+          mediaMatches: false,
+          likeCount: 1000,
+          createdAtMs: now,
+          isRepost: false,
+        },
         settings,
         now,
       ),
@@ -137,7 +142,12 @@ describe("classifyPost", () => {
   it("設定が入っている間、リポストは隠す", () => {
     expect(
       classifyPost(
-        { hasMedia: true, likeCount: 1000, createdAtMs: now, isRepost: true },
+        {
+          mediaMatches: true,
+          likeCount: 1000,
+          createdAtMs: now,
+          isRepost: true,
+        },
         settings,
         now,
       ),
@@ -148,7 +158,7 @@ describe("classifyPost", () => {
     expect(
       classifyPost(
         {
-          hasMedia: true,
+          mediaMatches: true,
           likeCount: 1000,
           createdAtMs: now,
           isRepost: false,
@@ -164,7 +174,7 @@ describe("classifyPost", () => {
     expect(
       classifyPost(
         {
-          hasMedia: true,
+          mediaMatches: true,
           likeCount: Number.NaN,
           createdAtMs: now,
           isRepost: false,
@@ -175,11 +185,11 @@ describe("classifyPost", () => {
     ).toEqual({ state: "hit", reason: "indeterminate-metric" });
   });
 
-  it("反応数が判定不能でも、メディアが無い投稿は隠す", () => {
+  it("反応数が判定不能でも、メディアの条件を満たさない投稿は隠す", () => {
     expect(
       classifyPost(
         {
-          hasMedia: false,
+          mediaMatches: false,
           likeCount: Number.NaN,
           createdAtMs: now,
           isRepost: false,
@@ -194,7 +204,7 @@ describe("classifyPost", () => {
     expect(
       classifyPost(
         {
-          hasMedia: true,
+          mediaMatches: true,
           likeCount: Number.NaN,
           createdAtMs: now,
           isRepost: true,

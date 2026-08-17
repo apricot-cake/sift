@@ -7,12 +7,11 @@ function readEntrypoint(path: string): string {
 }
 
 describe("抽出の操作入口", () => {
-  it("有効・無効はポップアップだけで切り替える", () => {
-    const popup = readEntrypoint("entrypoints/popup/index.html");
-    const options = readEntrypoint("entrypoints/options/index.html");
+  it("アイコンのクリックでサイドパネルを開く", () => {
+    const background = readEntrypoint("entrypoints/background.ts");
 
-    expect(popup).toContain('data-role="toggle-filtering"');
-    expect(options).not.toContain('data-role="site-list"');
+    expect(background).toContain("openPanelOnActionClick: true");
+    expect(background).not.toContain("openOptionsPage");
   });
 
   it("タイムライン内の空状態からフィルターを調整できる", () => {
@@ -31,14 +30,14 @@ describe("抽出の操作入口", () => {
     expect(sidepanel).not.toContain('type="number"');
   });
 
-  it("ポップアップは content script の応答を待たずに状態を読む", () => {
-    const popup = readEntrypoint("entrypoints/popup/main.ts");
+  it("サイドパネルで現在サイトの有効・無効を切り替える", () => {
+    const sidepanel = readEntrypoint("entrypoints/sidepanel/sidepanel-app.tsx");
 
-    expect(popup).toContain("settingsItem.getValue()");
-    expect(popup).not.toContain("browser.tabs.sendMessage");
+    expect(sidepanel).toContain("withSiteEnabled");
+    expect(sidepanel).toContain("isSiteControlAvailable");
   });
 
-  it("ポップアップを開いた現在タブの URL を読める", () => {
+  it("サイドパネルで現在タブの URL を読める", () => {
     const config = readEntrypoint("wxt.config.ts");
 
     expect(config).toContain('"activeTab"');

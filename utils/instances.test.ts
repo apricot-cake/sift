@@ -219,10 +219,9 @@ describe("addInstance", () => {
     expect(storage.hosts).toEqual(["misskey.io"]);
   });
 
-  // Chrome は権限のダイアログが出た瞬間に popup を壊すので、permissions.onAdded
-  // に繋いである handlePermissionsAdded が競争に勝ち、この呼び出しが再開する前に
-  // ホストを登録しうる。負けた側は、重複することになる script の id で例外に
-  // なってはならないし、保管したホストを二重にしてもならない。
+  // permissions.onAdded に繋いである handlePermissionsAdded が先にホストを
+  // 登録しても、再開した呼び出しは重複する script の id で例外にならず、保管した
+  // ホストを二重にしてもならない。
   it("自分の onAdded の受け皿に競争で負けても壊れない", async () => {
     const permissions = createFakePermissions();
     const scripting = createFakeScripting([
@@ -302,7 +301,7 @@ describe("handlePermissionsRemoved", () => {
   });
 });
 
-// addInstance() が途中で popup を失った場合の受け皿。
+// addInstance() が画面の終了で完了処理を失った場合の受け皿。
 describe("handlePermissionsAdded", () => {
   it("他の誰も捕まえなかった許可を登録して保管する", async () => {
     const scripting = createFakeScripting();
