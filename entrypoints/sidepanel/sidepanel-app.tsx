@@ -33,6 +33,8 @@ import {
 import { Switch } from "../options/components/ui/switch.tsx";
 import { Textarea } from "../options/components/ui/textarea.tsx";
 
+const REPOSITORY_URL = "https://github.com/apricot-cake/sift";
+
 function SidepanelApp(): React.JSX.Element {
   const [settings, setSettings] = useState<Settings>(
     normalizeSettings(defaults),
@@ -372,6 +374,17 @@ function SidepanelApp(): React.JSX.Element {
             </form>
           </CardContent>
         </SettingsGroup>
+
+        <footer className="mt-7 text-sm">
+          <a
+            className="text-muted-foreground underline-offset-4 hover:text-foreground hover:underline focus-visible:text-foreground focus-visible:underline"
+            href={REPOSITORY_URL}
+            rel="noreferrer"
+            target="_blank"
+          >
+            {t("optionsRepository")}
+          </a>
+        </footer>
       </div>
     </main>
   );

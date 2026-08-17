@@ -43,6 +43,7 @@ optionsInstanceNote: "Ao adicionar uma, o Chrome pedirá permissão para acessar
 optionsStatusLoading: "Carregando…"
 optionsStatusSaved: "Salvo"
 optionsAutosaveNote: "As configurações são salvas automaticamente e chegam a todas as linhas do tempo compatíveis."
+optionsRepository: "GitHub"
 optionsErrorLoadFailed: "Não foi possível ler as configurações."
 optionsErrorSaveFailed: "Não foi possível salvar as configurações."
 optionsErrorBadHost: "Verifique o nome do host (por exemplo, misskey.io — sem caminho, sem consulta, sem http)."

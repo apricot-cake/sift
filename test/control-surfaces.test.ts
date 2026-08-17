@@ -42,4 +42,12 @@ describe("抽出の操作入口", () => {
 
     expect(config).toContain('"activeTab"');
   });
+
+  it("サイドパネルのフッターからリポジトリを開ける", () => {
+    const sidepanel = readEntrypoint("entrypoints/sidepanel/sidepanel-app.tsx");
+
+    expect(sidepanel).toContain("href={REPOSITORY_URL}");
+    expect(sidepanel).toContain('rel="noreferrer"');
+    expect(sidepanel).toContain('target="_blank"');
+  });
 });

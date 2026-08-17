@@ -43,6 +43,7 @@ optionsInstanceNote: "인스턴스를 추가하면 Chrome이 해당 호스트에
 optionsStatusLoading: "불러오는 중…"
 optionsStatusSaved: "저장됨"
 optionsAutosaveNote: "설정은 자동으로 저장되며 지원되는 모든 타임라인에 적용됩니다."
+optionsRepository: "GitHub"
 optionsErrorLoadFailed: "설정을 읽을 수 없습니다."
 optionsErrorSaveFailed: "설정을 저장할 수 없습니다."
 optionsErrorBadHost: "호스트 이름을 확인하세요(예: misskey.io — 경로, 쿼리, http는 포함할 수 없습니다)."
