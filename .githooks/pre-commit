@@ -1,0 +1,11 @@
+#!/bin/sh
+
+set -u
+
+if ! command -v gitleaks >/dev/null 2>&1; then
+  echo "[sift] Gitleaks が見つからないため、ローカルの秘密情報検査をスキップします。" >&2
+  echo "[sift] https://github.com/gitleaks/gitleaks/releases から導入してください。CI では検査を強制します。" >&2
+  exit 0
+fi
+
+exec gitleaks git --pre-commit --redact --staged --verbose
