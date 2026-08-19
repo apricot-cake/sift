@@ -81,7 +81,7 @@ node scripts/dev-browser.ts --print
 
 ## 日常用 Chrome に反映する
 
-`main` へマージすると、`post-merge` フックが `npm run deploy` を実行し、検証済みのリリースビルドを `.output\chrome-mv3` に配置します。フックは `npm install` 時に `scripts/setup.ts` が設定します。手動で反映する場合は、次のコマンドを実行します。
+日常用 Chrome へ反映するときは、`main` の主作業ツリーで次のコマンドを実行します。検証済みのリリースビルドを `.output\chrome-mv3` に配置します。
 
 ```powershell
 npm run deploy
@@ -167,7 +167,7 @@ feat: サイドパネルに抽出の操作をまとめる
 
 バージョンは `package.json` だけで管理します。WXT が生成した manifest にバージョンを反映し、`verify-manifest.ts` が検証します。
 
-`main` へのマージは `post-merge` フックにより日常用 Chrome へ反映されます。バージョンは、利用中のビルドを識別し、タグから同じ状態を取り出すために使います。機能、利用者に見える UI、参照する価値がある修正を加えたときに更新します。マージごとには更新しません。
+日常用 Chrome への反映は、必要なときに `npm run deploy` で行います。バージョンは、利用中のビルドを識別し、タグから同じ状態を取り出すために使います。機能、利用者に見える UI、参照する価値がある修正を加えたときに更新します。マージごとには更新しません。
 
 ```powershell
 npm version minor --no-git-tag-version
