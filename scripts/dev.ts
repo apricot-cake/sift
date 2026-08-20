@@ -93,8 +93,7 @@ console.log(
 // 自分で `npm run dev` と打った人には切り離しは起きない＝サーバーはその人の目の前
 // で動き、そこでは Ctrl+C も WXT のキー割り当ても効く。
 //
-// 窓を開くときの決まり（コマンドは1つの文字列・`cmd /k` を使わない）は
-// sift のものではなく Windows 全体のもの＝スキル `windows-scripting`。
+// 窓を開くときは、コマンドを1つの文字列にして `cmd /k` を使わない。
 if (
   process.platform === "win32" &&
   !process.stdout.isTTY &&
