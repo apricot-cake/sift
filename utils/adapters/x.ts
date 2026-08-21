@@ -2,7 +2,6 @@
 // 要素が投稿で、判定の入力がそれぞれどこに書かれているか。判定そのものは
 // filter-core.ts にあり、全サービスで共有している。
 import { parseMetric } from "../filter-core.ts";
-import { LIKE_THRESHOLDS } from "../settings.ts";
 import type { ServiceAdapter } from "./types.ts";
 
 // X の画面の作りを1箇所に集めてあるので、X 側の描き直しはここ1箇所の修正で
@@ -26,7 +25,7 @@ const X_SELECTORS = Object.freeze({
 export const xAdapter = Object.freeze({
   id: "x",
   matches: Object.freeze(["https://x.com/*", "https://twitter.com/*"]),
-  thresholdKeys: LIKE_THRESHOLDS,
+  settingsKey: "x",
 
   getPostCards(root: ParentNode) {
     return Array.from(root.querySelectorAll(X_SELECTORS.postCard));

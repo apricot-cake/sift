@@ -1,7 +1,7 @@
 // サービスごとのアダプターが満たす契約。どれか1つのアダプターから推論させず
 // ここに置いてあるのは、x.ts・bluesky.ts・misskey.ts が互いを基準にするのでは
 // なく、同じ形に対して検査されるようにするため。
-import type { ThresholdKeys } from "../settings.ts";
+import type { SiteSettingsKey } from "../settings.ts";
 
 export interface PostMedia {
   hasImage: boolean;
@@ -14,8 +14,8 @@ export interface ServiceAdapter {
   // 登録されないサービスでは空＝Misskey がそれで、ホストは利用者が1つずつ
   // 追加する（utils/instances.ts）。
   readonly matches: readonly string[];
-  // その反応の数を、保存されているどのしきい値と比べるか。
-  readonly thresholdKeys: ThresholdKeys;
+  // このサービスが読むサイト別設定。
+  readonly settingsKey: SiteSettingsKey;
 
   getPostCards(root: ParentNode): Element[];
   hasPostCards(root: ParentNode): boolean;

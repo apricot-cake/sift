@@ -1,8 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { render } from "../../test/dom.ts";
-import { LIKE_THRESHOLDS } from "../settings.ts";
 import { blueskyAdapter, timestampFromRecordKey } from "./bluesky.ts";
-import { xAdapter } from "./x.ts";
 
 const postHref = "/profile/example.bsky.social/post/3mqcze2d6k23e";
 const recordKeyTime = Date.parse("2026-07-10T20:46:00.000Z");
@@ -138,7 +136,7 @@ describe("投稿時刻を読む", () => {
     expect(blueskyAdapter.readCreatedAt(card)).toBe(recordKeyTime);
   });
 
-  // どちらの読み方もできない場合＝投稿の判定自体は動き、「上昇中」だけが落ちる。
+  // どちらの読み方もできない場合＝投稿の判定自体は動き、「急上昇」だけが落ちる。
   it("キーがレコードキーでないリンクには NaN を返す", () => {
     const card = renderPost(
       '<a href="/profile/example.bsky.social/post/self"></a>',
@@ -301,10 +299,9 @@ describe("リポストを読む", () => {
   });
 });
 
-// Bluesky のいいねは X のいいねなので、しきい値を共有する。
+// 反応の名前は同じでも母集団と分布が違うため、値はサイト別に持つ。
 describe("しきい値が数えるもの", () => {
-  it("X が数えるいいねと同じもの＝同じ2つの数と比べる", () => {
-    expect(blueskyAdapter.thresholdKeys).toBe(xAdapter.thresholdKeys);
-    expect(blueskyAdapter.thresholdKeys).toBe(LIKE_THRESHOLDS);
+  it("Bluesky専用の2つの数と比べる", () => {
+    expect(blueskyAdapter.settingsKey).toBe("bluesky");
   });
 });

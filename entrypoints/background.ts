@@ -189,7 +189,7 @@ export default defineBackground(() => {
       }
       if (message?.type === DEV_FILTER_PASS) {
         const { hit, rising, hidden } = message.counts;
-        note(`フィルタ一巡: 表示 ${hit}・上昇中 ${rising}・非表示 ${hidden}`);
+        note(`フィルタ一巡: 表示 ${hit}・急上昇 ${rising}・非表示 ${hidden}`);
       }
     },
   );

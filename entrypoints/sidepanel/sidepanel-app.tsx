@@ -1,4 +1,4 @@
-import { SlidersHorizontal } from "lucide-react";
+import { ChevronDown, SlidersHorizontal } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { browser } from "wxt/browser";
 import { DEFAULT_MISSKEY_HOSTS } from "../../utils/default-instances.ts";
@@ -15,10 +15,14 @@ import {
   isSiteEnabled,
   normalizeSettings,
   type Settings,
+  type SiteSettings,
+  type SiteSettingsKey,
+  settingsFor,
   withSiteEnabled,
+  withSiteSettings,
 } from "../../utils/settings.ts";
 import { instanceStorage, settingsItem } from "../../utils/settings-storage.ts";
-import { isSiteControlAvailable } from "../../utils/site-controls.ts";
+import { siteSettingsKeyForControl } from "../../utils/site-controls.ts";
 import { Badge } from "../options/components/ui/badge.tsx";
 import { Button } from "../options/components/ui/button.tsx";
 import { Card, CardContent } from "../options/components/ui/card.tsx";
@@ -34,6 +38,11 @@ import { Switch } from "../options/components/ui/switch.tsx";
 import { Textarea } from "../options/components/ui/textarea.tsx";
 
 const REPOSITORY_URL = "https://github.com/apricot-cake/sift";
+const SITE_LABELS: Readonly<Record<SiteSettingsKey, string>> = Object.freeze({
+  x: "X",
+  bluesky: "Bluesky",
+  misskey: "Misskey",
+});
 
 function SidepanelApp(): React.JSX.Element {
   const [settings, setSettings] = useState<Settings>(
@@ -41,10 +50,16 @@ function SidepanelApp(): React.JSX.Element {
   );
   const [status, setStatus] = useState(t("optionsStatusLoading"));
   const [activeHost, setActiveHost] = useState<string | null>(null);
+  const [selectedSite, setSelectedSite] = useState<SiteSettingsKey>("x");
   const [instanceHost, setInstanceHost] = useState("");
   const [instanceError, setInstanceError] = useState("");
   const [isSubmittingInstance, setIsSubmittingInstance] = useState(false);
   const statusTimer = useRef<number | null>(null);
+  const settingsRef = useRef(settings);
+
+  useEffect(() => {
+    settingsRef.current = settings;
+  }, [settings]);
 
   useEffect(() => {
     startUncaughtReporting({
@@ -90,10 +105,16 @@ function SidepanelApp(): React.JSX.Element {
       .catch(() => setStatus(t("optionsErrorSaveFailed")));
   };
 
-  const updateSetting = <Key extends keyof Settings>(
+  const updateSiteSetting = <Key extends keyof SiteSettings>(
     key: Key,
-    value: Settings[Key],
-  ): void => saveSettings({ ...settings, [key]: value });
+    value: SiteSettings[Key],
+  ): void =>
+    saveSettings(
+      withSiteSettings(settings, selectedSite, {
+        ...settingsFor(settings, selectedSite),
+        [key]: value,
+      }),
+    );
 
   useEffect(() => {
     const refreshActiveHost = async (): Promise<void> => {
@@ -102,7 +123,14 @@ function SidepanelApp(): React.JSX.Element {
         currentWindow: true,
       });
       try {
-        setActiveHost(tab?.url ? new URL(tab.url).hostname : null);
+        const host = tab?.url ? new URL(tab.url).hostname : null;
+        setActiveHost(host);
+        if (host !== null) {
+          const site = siteSettingsKeyForControl(host, settingsRef.current);
+          if (site !== null) {
+            setSelectedSite(site);
+          }
+        }
       } catch {
         setActiveHost(null);
       }
@@ -132,16 +160,28 @@ function SidepanelApp(): React.JSX.Element {
     };
   }, []);
 
-  const siteAvailable =
-    activeHost !== null && isSiteControlAvailable(activeHost, settings);
-  const filteringEnabled =
-    siteAvailable && activeHost !== null && isSiteEnabled(settings, activeHost);
+  const selectedSettings = settingsFor(settings, selectedSite);
+  const activeSite =
+    activeHost === null
+      ? null
+      : siteSettingsKeyForControl(activeHost, settings);
+  const selectedHost =
+    selectedSite === "x"
+      ? "x.com"
+      : selectedSite === "bluesky"
+        ? "bsky.app"
+        : activeSite === "misskey" && activeHost !== null
+          ? activeHost
+          : (DEFAULT_MISSKEY_HOSTS[0] ?? "misskey.io");
+  const filteringEnabled = isSiteEnabled(settings, selectedHost);
+  const customMisskeyInstances = settings.misskeyInstances.filter(
+    (host) => !DEFAULT_MISSKEY_HOSTS.includes(host),
+  );
+  const misskeyInstanceCount =
+    DEFAULT_MISSKEY_HOSTS.length + customMisskeyInstances.length;
 
   const updateFiltering = (enabled: boolean): void => {
-    if (activeHost === null) {
-      return;
-    }
-    saveSettings(withSiteEnabled(settings, activeHost, enabled));
+    saveSettings(withSiteEnabled(settings, selectedHost, enabled));
   };
 
   const instanceDeps: InstanceDeps = {
@@ -193,27 +233,46 @@ function SidepanelApp(): React.JSX.Element {
           </p>
         </header>
 
-        <SettingsGroup title={t("sidepanelSectionCurrentSite")}>
+        <SettingsGroup
+          title={t("sidepanelSectionCurrentSite")}
+          description={t("sidepanelSiteNote")}
+        >
+          <SettingRow label={t("sidepanelSite")}>
+            <Select
+              value={selectedSite}
+              onValueChange={(value) =>
+                setSelectedSite(value as SiteSettingsKey)
+              }
+            >
+              <SelectTrigger className="w-40">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {(Object.keys(SITE_LABELS) as SiteSettingsKey[]).map((site) => (
+                  <SelectItem key={site} value={site}>
+                    {SITE_LABELS[site]}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </SettingRow>
           <SettingRow label={t("sidepanelFiltering")}>
             <Switch
               checked={filteringEnabled}
-              disabled={!siteAvailable}
               onCheckedChange={updateFiltering}
             />
           </SettingRow>
-          {!siteAvailable && (
-            <p className="border-t p-5 text-sm text-muted-foreground sm:px-6">
-              {t("sidepanelStatusUnavailable")}
-            </p>
-          )}
         </SettingsGroup>
 
         <SettingsGroup title={t("optionsSectionVisible")}>
           <SettingRow label={t("optionsMedia")}>
             <Select
-              value={settings.mediaMode}
+              value={selectedSettings.mediaMode}
               onValueChange={(value) =>
-                updateSetting("mediaMode", value as Settings["mediaMode"])
+                updateSiteSetting(
+                  "mediaMode",
+                  value as SiteSettings["mediaMode"],
+                )
               }
             >
               <SelectTrigger className="w-40">
@@ -233,21 +292,21 @@ function SidepanelApp(): React.JSX.Element {
 
         <SettingsGroup
           title={t("optionsSectionStandard")}
-          description={t("optionsStandardNote")}
+          description={
+            selectedSite === "misskey"
+              ? t("optionsStandardReactionsNote")
+              : t("optionsStandardLikesNote")
+          }
         >
           <NumberSetting
-            label={t("optionsMinLikes")}
-            min={0}
-            onValueChange={(value) => updateSetting("minLikes", value)}
-            value={settings.minLikes}
-          />
-          <NumberSetting
-            label={t("optionsMinReactions")}
-            min={0}
-            onValueChange={(value) =>
-              updateSetting("misskeyMinReactions", value)
+            label={
+              selectedSite === "misskey"
+                ? t("optionsMinReactions")
+                : t("optionsMinLikes")
             }
-            value={settings.misskeyMinReactions}
+            min={0}
+            onValueChange={(value) => updateSiteSetting("minReactions", value)}
+            value={selectedSettings.minReactions}
           />
         </SettingsGroup>
 
@@ -257,36 +316,34 @@ function SidepanelApp(): React.JSX.Element {
         >
           <SettingRow label={t("optionsRisingEnabled")}>
             <Switch
-              checked={settings.risingEnabled}
-              onCheckedChange={(value) => updateSetting("risingEnabled", value)}
+              checked={selectedSettings.risingEnabled}
+              onCheckedChange={(value) =>
+                updateSiteSetting("risingEnabled", value)
+              }
             />
           </SettingRow>
-          {settings.risingEnabled && (
+          {selectedSettings.risingEnabled && (
             <>
-              <NumberSetting
-                label={t("optionsMinLikes")}
-                min={0}
-                onValueChange={(value) =>
-                  updateSetting("risingMinLikes", value)
-                }
-                value={settings.risingMinLikes}
-              />
-              <NumberSetting
-                label={t("optionsMinReactions")}
-                min={0}
-                onValueChange={(value) =>
-                  updateSetting("misskeyRisingMinReactions", value)
-                }
-                value={settings.misskeyRisingMinReactions}
-              />
               <NumberSetting
                 label={t("optionsMaxAge")}
                 min={1}
                 onValueChange={(value) =>
-                  updateSetting("risingMaxAgeHours", value)
+                  updateSiteSetting("risingMaxAgeHours", value)
                 }
                 suffix={t("optionsUnitHours")}
-                value={settings.risingMaxAgeHours}
+                value={selectedSettings.risingMaxAgeHours}
+              />
+              <NumberSetting
+                label={
+                  selectedSite === "misskey"
+                    ? t("optionsRisingMinReactions")
+                    : t("optionsRisingMinLikes")
+                }
+                min={0}
+                onValueChange={(value) =>
+                  updateSiteSetting("risingMinReactions", value)
+                }
+                value={selectedSettings.risingMinReactions}
               />
             </>
           )}
@@ -301,16 +358,18 @@ function SidepanelApp(): React.JSX.Element {
               id="excluded-keywords"
               className="mt-3"
               placeholder={t("optionsExcludedKeywordsPlaceholder")}
-              value={settings.excludedKeywords}
+              value={selectedSettings.excludedKeywords}
               onChange={(event) =>
-                updateSetting("excludedKeywords", event.currentTarget.value)
+                updateSiteSetting("excludedKeywords", event.currentTarget.value)
               }
             />
           </div>
           <SettingRow label={t("optionsHideReposts")}>
             <Switch
-              checked={settings.hideReposts}
-              onCheckedChange={(value) => updateSetting("hideReposts", value)}
+              checked={selectedSettings.hideReposts}
+              onCheckedChange={(value) =>
+                updateSiteSetting("hideReposts", value)
+              }
             />
           </SettingRow>
         </SettingsGroup>
@@ -318,7 +377,10 @@ function SidepanelApp(): React.JSX.Element {
         <p className="mt-5 text-sm text-muted-foreground" aria-live="polite">
           {status || t("optionsAutosaveNote")}
         </p>
-        <SettingsGroup title={t("optionsSectionInstances")}>
+        <SettingsDisclosure
+          count={misskeyInstanceCount}
+          title={t("optionsSectionInstances")}
+        >
           <CardContent className="divide-y p-0">
             {DEFAULT_MISSKEY_HOSTS.map((host) => (
               <div
@@ -329,23 +391,21 @@ function SidepanelApp(): React.JSX.Element {
                 <Badge>{t("optionsInstanceDefault")}</Badge>
               </div>
             ))}
-            {settings.misskeyInstances
-              .filter((host) => !DEFAULT_MISSKEY_HOSTS.includes(host))
-              .map((host) => (
-                <div
-                  className="flex items-center justify-between gap-4 p-5 sm:px-6"
-                  key={host}
+            {customMisskeyInstances.map((host) => (
+              <div
+                className="flex items-center justify-between gap-4 p-5 sm:px-6"
+                key={host}
+              >
+                <span className="text-sm font-medium">{host}</span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => void removeInstance(host, instanceDeps)}
                 >
-                  <span className="text-sm font-medium">{host}</span>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => void removeInstance(host, instanceDeps)}
-                  >
-                    {t("optionsInstanceRemove")}
-                  </Button>
-                </div>
-              ))}
+                  {t("optionsInstanceRemove")}
+                </Button>
+              </div>
+            ))}
             <form
               className="p-5 sm:p-6"
               onSubmit={(event) => void addMisskeyInstance(event)}
@@ -373,7 +433,7 @@ function SidepanelApp(): React.JSX.Element {
               </p>
             </form>
           </CardContent>
-        </SettingsGroup>
+        </SettingsDisclosure>
 
         <footer className="mt-7 text-sm">
           <a
@@ -413,6 +473,32 @@ function SettingsGroup({
         <CardContent className="divide-y p-0">{children}</CardContent>
       </Card>
     </section>
+  );
+}
+
+function SettingsDisclosure({
+  children,
+  count,
+  title,
+}: {
+  children: React.ReactNode;
+  count: number;
+  title: string;
+}): React.JSX.Element {
+  return (
+    <details className="group mt-7">
+      <summary className="flex min-h-12 cursor-pointer list-none items-center justify-between gap-3 rounded-lg px-1 text-sm font-medium text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/30 [&::-webkit-details-marker]:hidden">
+        <span className="flex items-center gap-2">
+          {title}
+          <Badge>{count}</Badge>
+        </span>
+        <ChevronDown
+          className="size-4 shrink-0 transition-transform group-open:rotate-180"
+          aria-hidden="true"
+        />
+      </summary>
+      <Card className="mt-3">{children}</Card>
+    </details>
   );
 }
 

@@ -94,7 +94,7 @@ describe("classifyPost", () => {
     ).toEqual({ state: "hit", reason: "minimum-likes" });
   });
 
-  it("新しい投稿は、低い方の上昇中の数に届けば残す", () => {
+  it("新しい投稿は、低い方の急上昇の数に届けば残す", () => {
     expect(
       classifyPost(
         {
@@ -109,7 +109,7 @@ describe("classifyPost", () => {
     ).toEqual({ state: "rising", reason: "rising" });
   });
 
-  it("同じ投稿でも、上昇中の窓を過ぎたら隠す", () => {
+  it("同じ投稿でも、急上昇の時間を過ぎたら隠す", () => {
     expect(
       classifyPost(
         {

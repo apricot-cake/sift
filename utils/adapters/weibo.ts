@@ -18,7 +18,6 @@
 // 実機で確認してから＝載せた時点で manifest の登録先も決まるが、対象にする画面
 // もその未決の1つ。
 import { normalizeDigits, parseMetric } from "../filter-core.ts";
-import { LIKE_THRESHOLDS } from "../settings.ts";
 import type { ServiceAdapter } from "./types.ts";
 
 // Weibo の画面の作りを1箇所に集めてあるので、Weibo 側の描き直しはここ1箇所の
@@ -93,7 +92,7 @@ export const weiboAdapter = Object.freeze({
   matches: Object.freeze(["https://weibo.com/*"]),
   // しきい値が数える反応を、このサービスでは何と呼ぶか。赞は1人1回で X の
   // いいねと同じものなので、しきい値も共有する。
-  thresholdKeys: LIKE_THRESHOLDS,
+  settingsKey: "x",
 
   getPostCards(root: ParentNode) {
     return postCards(root);
@@ -139,7 +138,7 @@ export const weiboAdapter = Object.freeze({
   // なる＝だから同じリンクに対して両方を順に試す。
   //
   // 相対表記しか無い画面では読めないものとして NaN を返す。そのとき落ちるのは
-  // 「上昇中」の判定だけで、通常の判定は動く（Bluesky・Misskey と同じ）。
+  // 「急上昇」の判定だけで、通常の判定は動く（Bluesky・Misskey と同じ）。
   //
   // 却下した案 — 投稿 URL の末尾（mid）から復元する。Bluesky の record key と
   // 違い、Weibo の mid にタイムスタンプは埋まっておらず、復元の仕様も公開されて

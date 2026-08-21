@@ -13,7 +13,6 @@
 // 近い）。リアクション総数・ノートの時刻・メディアの有無を DOM から読み、同じ
 // ノートに対する各インスタンス自身の API の答えと突き合わせた。
 import { parseMetric } from "../filter-core.ts";
-import { MISSKEY_REACTION_THRESHOLDS } from "../settings.ts";
 import type { ServiceAdapter } from "./types.ts";
 
 // Misskey の画面の作りを1箇所に集めてあるので、インスタンス側の変更はここ1箇所
@@ -112,7 +111,7 @@ export const misskeyAdapter = Object.freeze({
   matches: Object.freeze([]),
   // Misskey のリアクションは、いいねと同じく1人1回。ただしインスタンスの規模が
   // X とは桁で違うので、専用のしきい値と比べる（#2 の Issue コメント第4節）。
-  thresholdKeys: MISSKEY_REACTION_THRESHOLDS,
+  settingsKey: "misskey",
 
   getPostCards(root: ParentNode) {
     return noteCards(root);
@@ -166,11 +165,11 @@ export const misskeyAdapter = Object.freeze({
   // Misskey は <time datetime> を書き出さない。あるのは要素の title に入った
   // 絶対時刻で、利用者のブラウザが要求するロケール向けに整形されている＝
   // Date.parse が理解できる利用者のページとそうでないページがある。理解できない
-  // 場合も投稿の判定自体は動き、「上昇中」だけが落ちる。
+  // 場合も投稿の判定自体は動き、「急上昇」だけが落ちる。
   //
   // 日が先に来る形式（"5.8.2026, 17:44:21"）だけは、読めも落ちもしない唯一の
   // ケース＝Date.parse が月を先と解釈して何ヶ月も離れた日付を返す。その答えは
-  // 常に上昇中の窓の外に落ちるので、代償は同じ「上昇中」だけで、それ以上には
+  // 常に急上昇の時間の外に落ちるので、代償は同じ「急上昇」だけで、それ以上には
   // ならない。
   readCreatedAt(postCard: Element) {
     const title = postCard

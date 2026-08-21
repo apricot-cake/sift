@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import { render } from "../../test/dom.ts";
-import { MISSKEY_REACTION_THRESHOLDS } from "../settings.ts";
 import { misskeyAdapter } from "./misskey.ts";
 import { xAdapter } from "./x.ts";
 
@@ -117,7 +116,7 @@ describe("リアクション数を読む", () => {
 });
 
 // 時刻は title 属性に入った現地語の文字なので、読者によって読めたり読めなかったり
-// する。読めなかった場合に落ちるのは「上昇中」だけ。
+// する。読めなかった場合に落ちるのは「急上昇」だけ。
 describe("ノートの時刻を読む", () => {
   it("Date.parse が解釈できる時刻を読む", () => {
     expect(misskeyAdapter.readCreatedAt(renderNote())).toBe(
@@ -270,7 +269,7 @@ describe("リノートを読む", () => {
 // 桁が違うので、しきい値は Misskey 自身の2つの数と比べる。
 describe("しきい値が数えるもの", () => {
   it("リアクション＝Misskey 自身の2つの数と比べる", () => {
-    expect(misskeyAdapter.thresholdKeys).toBe(MISSKEY_REACTION_THRESHOLDS);
-    expect(misskeyAdapter.thresholdKeys).not.toBe(xAdapter.thresholdKeys);
+    expect(misskeyAdapter.settingsKey).toBe("misskey");
+    expect(misskeyAdapter.settingsKey).not.toBe(xAdapter.settingsKey);
   });
 });

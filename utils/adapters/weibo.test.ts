@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import { render } from "../../test/dom.ts";
-import { LIKE_THRESHOLDS } from "../settings.ts";
 import { weiboAdapter } from "./weibo.ts";
 import { xAdapter } from "./x.ts";
 
@@ -134,7 +133,7 @@ describe("投稿時刻を読む", () => {
     );
   });
 
-  // 読めないときに落ちるのは「上昇中」の判定だけで、通常の判定は動く。
+  // 読めないときに落ちるのは「急上昇」の判定だけで、通常の判定は動く。
   it("相対表記しか無ければ読めないものとして返す", () => {
     const post = renderPost({ time: "", timeText: "9小时前" });
 
@@ -197,8 +196,8 @@ describe("メディアの有無を読む", () => {
 describe("しきい値", () => {
   // 赞は1人1回で X のいいねと同じもの＝設定項目は増やさない。
   it("X と同じしきい値を使う", () => {
-    expect(weiboAdapter.thresholdKeys).toBe(LIKE_THRESHOLDS);
-    expect(weiboAdapter.thresholdKeys).toBe(xAdapter.thresholdKeys);
+    expect(weiboAdapter.settingsKey).toBe("x");
+    expect(weiboAdapter.settingsKey).toBe(xAdapter.settingsKey);
   });
 });
 

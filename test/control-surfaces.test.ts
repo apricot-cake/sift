@@ -30,11 +30,14 @@ describe("抽出の操作入口", () => {
     expect(sidepanel).not.toContain('type="number"');
   });
 
-  it("サイドパネルで現在サイトの有効・無効を切り替える", () => {
+  it("サイドパネルでサイト別設定を切り替え、現在タブへ追従する", () => {
     const sidepanel = readEntrypoint("entrypoints/sidepanel/sidepanel-app.tsx");
 
     expect(sidepanel).toContain("withSiteEnabled");
-    expect(sidepanel).toContain("isSiteControlAvailable");
+    expect(sidepanel).toContain("withSiteSettings");
+    expect(sidepanel).toContain("siteSettingsKeyForControl");
+    expect(sidepanel).toContain("browser.tabs.onActivated.addListener");
+    expect(sidepanel).toContain("value={selectedSite}");
   });
 
   it("サイドパネルで現在タブの URL を読める", () => {

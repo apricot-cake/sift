@@ -2,7 +2,6 @@
 // 要素が投稿で、判定の入力がそれぞれどこに書かれているか。判定そのものは
 // filter-core.ts にあり、全サービスで共有している。
 import { parseMetric } from "../filter-core.ts";
-import { LIKE_THRESHOLDS } from "../settings.ts";
 import type { ServiceAdapter } from "./types.ts";
 
 // Bluesky の画面の作りを1箇所に集めてあるので、Bluesky 側の描き直しはここ1箇所
@@ -90,9 +89,7 @@ function readablePostCards(root: ParentNode): Element[] {
 export const blueskyAdapter = Object.freeze({
   id: "bluesky",
   matches: Object.freeze(["https://bsky.app/*"]),
-  // しきい値が数える反応を、このサービスでは何と呼ぶか。X と同じ反応なので、
-  // しきい値も共有する。
-  thresholdKeys: LIKE_THRESHOLDS,
+  settingsKey: "bluesky",
 
   getPostCards(root: ParentNode) {
     return readablePostCards(root);

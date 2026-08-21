@@ -8,7 +8,19 @@ import { defaults, normalizeSettings, type Settings } from "./settings.ts";
 // 設定1つにつきキー1つだった頃のビルドが書いたキー＝`defaults` のフィールド名。
 // 並べ書きせず導いてあるので、この移行が外される前に足された設定も下の移行が
 // 拾う。
-const LEGACY_KEYS: string[] = Object.keys(defaults);
+const LEGACY_KEYS: string[] = [
+  ...Object.keys(defaults),
+  "enabled",
+  "minLikes",
+  "risingMinLikes",
+  "risingEnabled",
+  "risingMaxAgeHours",
+  "mediaMode",
+  "excludedKeywords",
+  "hideReposts",
+  "misskeyMinReactions",
+  "misskeyRisingMinReactions",
+];
 
 // どの画面もこれを読み書きする。設定1つにつきキー1つではなく、1つのキーが
 // 1つのオブジェクトを持つ形＝`defaults` は既に `Settings` を導く唯一の宣言で

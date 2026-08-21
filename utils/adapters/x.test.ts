@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import { render } from "../../test/dom.ts";
-import { LIKE_THRESHOLDS } from "../settings.ts";
 import { xAdapter } from "./x.ts";
 
 // X は投稿を、区切り線と周囲の余白も持つセルで包んでいて、投稿そのものはその
@@ -125,7 +124,7 @@ describe("投稿時刻を読む", () => {
     );
   });
 
-  // どちらの読み方もできない場合＝投稿の判定自体は動き、「上昇中」だけが落ちる。
+  // どちらの読み方もできない場合＝投稿の判定自体は動き、「急上昇」だけが落ちる。
   it("時刻が無ければ NaN を返す", () => {
     expect(xAdapter.readCreatedAt(renderPost())).toBeNaN();
   });
@@ -224,6 +223,6 @@ describe("リポストを読む", () => {
 
 describe("しきい値が数えるもの", () => {
   it("いいねのしきい値を使う", () => {
-    expect(xAdapter.thresholdKeys).toBe(LIKE_THRESHOLDS);
+    expect(xAdapter.settingsKey).toBe("x");
   });
 });

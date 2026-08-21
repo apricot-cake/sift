@@ -17,6 +17,7 @@ import {
   isSiteEnabled,
   normalizeSettings,
   type Settings,
+  settingsFor,
   thresholdsFor,
   withSiteEnabled,
 } from "../../utils/settings.ts";
@@ -69,13 +70,14 @@ export function startContentRuntime(
   // 別々に届き、ここで畳み合わされる。`all` は本文だけの投稿も通す。
   function matchesMediaFilter(postCard: Element): boolean {
     const { hasImage, hasVideo } = adapter.readMedia(postCard);
-    if (settings.mediaMode === "all") {
+    const mediaMode = settingsFor(settings, adapter.settingsKey).mediaMode;
+    if (mediaMode === "all") {
       return true;
     }
-    if (settings.mediaMode === "images") {
+    if (mediaMode === "images") {
       return hasImage;
     }
-    if (settings.mediaMode === "video") {
+    if (mediaMode === "video") {
       return hasVideo;
     }
     return hasImage || hasVideo;
@@ -216,9 +218,7 @@ export function startContentRuntime(
           isRepost: adapter.readIsRepost(postCard),
           text: adapter.readText(postCard),
         },
-        // その数をどの数と比べるかはサービスの話で、この繰り返しの話では
-        // ない＝Misskey のリアクションは専用の組を持つ。
-        thresholdsFor(settings, adapter.thresholdKeys),
+        thresholdsFor(settingsFor(settings, adapter.settingsKey)),
       );
 
       updates.push({ cell, state: result.state, reason: result.reason });
