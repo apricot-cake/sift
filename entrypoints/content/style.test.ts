@@ -40,9 +40,9 @@ describe("content のスタイルシート", () => {
   it("それぞれの強調を、状態を持つセルに描く", () => {
     for (const state of ["hit", "rising"]) {
       expect(
-        contentStyles,
+        contentStyles.includes(`[data-sift-filter-state="${state}"]::before`),
         `entrypoints/content/style.css に、${state} のセル自身に当たる規則が無い`,
-      ).toMatch(new RegExp(`\\[data-sift-filter-state="${state}"\\]\\s*\\{`));
+      ).toBe(true);
     }
   });
 });

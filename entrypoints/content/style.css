@@ -34,10 +34,31 @@
    その中の投稿カードではない。ここでどれかのサービスの投稿カードを名指しすると、
    線はそのサービスにだけ引かれることになるし、画面の作りを抱えさせるために
    アダプターを切り出したのに、それを CSS へ戻すことになる。 */
-[data-sift-filter-state="hit"] {
-  box-shadow: inset 3px 0 0 rgb(37, 99, 235);
+[data-sift-filter-state="hit"],
+[data-sift-filter-state="rising"] {
+  position: relative;
 }
 
-[data-sift-filter-state="rising"] {
-  box-shadow: inset 3px 0 0 rgb(217, 119, 6);
+[data-sift-filter-state="hit"]::before,
+[data-sift-filter-state="rising"]::before {
+  position: absolute;
+  z-index: 1;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 3px;
+  pointer-events: none;
+  content: "";
+}
+
+[data-sift-filter-state="hit"]::before {
+  background: rgb(37, 99, 235);
+}
+
+[data-sift-filter-state="rising"]::before {
+  background: repeating-linear-gradient(
+    to bottom,
+    rgb(37, 99, 235) 0 6px,
+    transparent 6px 10px
+  );
 }

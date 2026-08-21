@@ -161,6 +161,10 @@ function SidepanelApp(): React.JSX.Element {
   }, []);
 
   const selectedSettings = settingsFor(settings, selectedSite);
+  const reactionFilterLabel =
+    selectedSite === "misskey"
+      ? t("optionsSectionReactionsFilter")
+      : t("optionsSectionLikesFilter");
   const activeSite =
     activeHost === null
       ? null
@@ -231,6 +235,7 @@ function SidepanelApp(): React.JSX.Element {
           <p className="mt-3 text-sm leading-6 text-muted-foreground">
             {t("sidepanelTagline")}
           </p>
+          <FilterLegend reactionFilterLabel={reactionFilterLabel} />
         </header>
 
         <SettingsGroup
@@ -291,7 +296,7 @@ function SidepanelApp(): React.JSX.Element {
         </SettingsGroup>
 
         <SettingsGroup
-          title={t("optionsSectionStandard")}
+          title={reactionFilterLabel}
           description={
             selectedSite === "misskey"
               ? t("optionsStandardReactionsNote")
@@ -311,7 +316,7 @@ function SidepanelApp(): React.JSX.Element {
         </SettingsGroup>
 
         <SettingsGroup
-          title={t("optionsSectionRising")}
+          title={t("optionsSectionRisingFilter")}
           description={t("optionsRisingNote")}
         >
           <SettingRow label={t("optionsRisingEnabled")}>
@@ -374,9 +379,11 @@ function SidepanelApp(): React.JSX.Element {
           </SettingRow>
         </SettingsGroup>
 
-        <p className="mt-5 text-sm text-muted-foreground" aria-live="polite">
-          {status || t("optionsAutosaveNote")}
-        </p>
+        {status && (
+          <p className="mt-5 text-sm text-muted-foreground" aria-live="polite">
+            {status}
+          </p>
+        )}
         <SettingsDisclosure
           count={misskeyInstanceCount}
           title={t("optionsSectionInstances")}
@@ -447,6 +454,41 @@ function SidepanelApp(): React.JSX.Element {
         </footer>
       </div>
     </main>
+  );
+}
+
+function FilterLegend({
+  reactionFilterLabel,
+}: {
+  reactionFilterLabel: string;
+}): React.JSX.Element {
+  return (
+    <div className="mt-4 rounded-lg bg-muted/60 px-3 py-2.5">
+      <p className="text-xs font-medium text-foreground">
+        {t("sidepanelFilterLegend")}
+      </p>
+      <div className="mt-2 flex flex-wrap gap-x-5 gap-y-2 text-xs text-muted-foreground">
+        <span className="flex items-center gap-2">
+          <span
+            className="h-5 w-[3px]"
+            style={{ backgroundColor: "rgb(37, 99, 235)" }}
+            aria-hidden="true"
+          />
+          {reactionFilterLabel}
+        </span>
+        <span className="flex items-center gap-2">
+          <span
+            className="h-5 w-[3px]"
+            style={{
+              backgroundImage:
+                "repeating-linear-gradient(to bottom, rgb(37, 99, 235) 0 4px, transparent 4px 7px)",
+            }}
+            aria-hidden="true"
+          />
+          {t("optionsSectionRisingFilter")}
+        </span>
+      </div>
+    </div>
   );
 }
 
