@@ -577,13 +577,14 @@ function NumberSetting({
       <div className="flex items-center gap-2">
         <Input
           className="w-24 text-right tabular-nums"
-          type="text"
+          type="number"
           inputMode="numeric"
-          pattern="[0-9]*"
+          min={min}
+          step={1}
           value={value}
           onFocus={(event) => event.currentTarget.select()}
           onChange={(event) => {
-            const nextValue = Number(event.currentTarget.value);
+            const nextValue = event.currentTarget.valueAsNumber;
             if (Number.isSafeInteger(nextValue)) {
               onValueChange(Math.max(min, nextValue));
             }
