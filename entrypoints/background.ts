@@ -58,14 +58,19 @@ export default defineBackground(() => {
   const sidePanel = (browser as { sidePanel?: typeof browser.sidePanel })
     .sidePanel;
   void sidePanel?.setPanelBehavior({ openPanelOnActionClick: true });
-
-  browser.commands.onCommand.addListener((command, tab) => {
-    if (command !== "toggle-filtering" || tab?.id === undefined) {
-      return;
-    }
-    void browser.tabs
-      .sendMessage(tab.id, { type: TIMELINE_CONTROL.toggleFiltering })
-      .catch(() => {});
+  sidePanel?.onClosed?.addListener(() => {
+    void browser.tabs.query({}).then((tabs) => {
+      for (const tab of tabs) {
+        if (tab.id !== undefined) {
+          void browser.tabs
+            .sendMessage(tab.id, {
+              type: TIMELINE_CONTROL.setFiltering,
+              enabled: false,
+            })
+            .catch(() => {});
+        }
+      }
+    });
   });
 
   browser.runtime.onMessage.addListener((message: unknown, sender) => {

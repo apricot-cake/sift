@@ -30,6 +30,7 @@ import {
 } from "../../utils/settings.ts";
 import { settingsItem } from "../../utils/settings-storage.ts";
 import { siteSettingsKeyForControl } from "../../utils/site-controls.ts";
+import { TIMELINE_CONTROL } from "../../utils/timeline-controls.ts";
 import { Button } from "../options/components/ui/button.tsx";
 import { Card, CardContent } from "../options/components/ui/card.tsx";
 import { Input } from "../options/components/ui/input.tsx";
@@ -95,6 +96,9 @@ export function SidepanelApp({
   const statusTimer = useRef<number | null>(null);
   const followActiveContext = useRef(true);
   const settingsRef = useRef(settings);
+  const activePageRef = useRef<{ tabId: number; pageKey: string } | null>(null);
+  const panelInitialized = useRef(false);
+  const [pageFilteringEnabled, setPageFilteringEnabled] = useState(false);
 
   useEffect(() => {
     settingsRef.current = settings;
@@ -125,8 +129,17 @@ export function SidepanelApp({
       if (statusTimer.current !== null) {
         window.clearTimeout(statusTimer.current);
       }
+      const activePage = activePageRef.current;
+      if (!manageAll && activePage !== null) {
+        void browser.tabs
+          .sendMessage(activePage.tabId, {
+            type: TIMELINE_CONTROL.setFiltering,
+            enabled: false,
+          })
+          .catch(() => {});
+      }
     },
-    [],
+    [manageAll],
   );
 
   const saveSettings = (next: Settings): void => {
@@ -165,6 +178,39 @@ export function SidepanelApp({
             )
             .catch(() => null);
         }
+        const nextPage =
+          tab?.id !== undefined && context !== null
+            ? { tabId: tab.id, pageKey: context.pageKey }
+            : null;
+        const previousPage = activePageRef.current;
+        const pageChanged =
+          previousPage !== null &&
+          (nextPage === null ||
+            previousPage.tabId !== nextPage.tabId ||
+            previousPage.pageKey !== nextPage.pageKey);
+        if (pageChanged) {
+          void browser.tabs
+            .sendMessage(previousPage.tabId, {
+              type: TIMELINE_CONTROL.setFiltering,
+              enabled: false,
+            })
+            .catch(() => {});
+        }
+        if (!panelInitialized.current && nextPage !== null) {
+          void browser.tabs
+            .sendMessage(nextPage.tabId, {
+              type: TIMELINE_CONTROL.setFiltering,
+              enabled: true,
+            })
+            .catch(() => {});
+          setPageFilteringEnabled(true);
+        } else if (pageChanged) {
+          setPageFilteringEnabled(false);
+        } else {
+          setPageFilteringEnabled(context?.filteringEnabled ?? false);
+        }
+        panelInitialized.current = true;
+        activePageRef.current = nextPage;
         setActiveContext(context);
         if (host !== null) {
           const site = siteSettingsKeyForControl(host);
@@ -266,12 +312,6 @@ export function SidepanelApp({
     selectedScopeKey,
   );
 
-  const reactionFilterLabel =
-    selectedSite === "youtube"
-      ? t("optionsSectionViewsFilter")
-      : selectedSite === "misskey"
-        ? t("optionsSectionReactionsFilter")
-        : t("optionsSectionLikesFilter");
   const reactionFilterEnabled =
     selectedSettings.kind === "youtube"
       ? selectedSettings.minViewsEnabled
@@ -288,10 +328,27 @@ export function SidepanelApp({
           : activeSite === "misskey" && activeHost !== null
             ? activeHost
             : (MISSKEY_HOSTS[0] ?? "misskey.io");
-  const filteringEnabled = isSiteEnabled(settings, selectedHost);
+  const siteFilteringEnabled = isSiteEnabled(settings, selectedHost);
+  const filteringEnabled = manageAll
+    ? siteFilteringEnabled
+    : siteFilteringEnabled && pageFilteringEnabled;
 
   const updateFiltering = (enabled: boolean): void => {
-    saveSettings(withSiteEnabled(settings, selectedHost, enabled));
+    if (manageAll) {
+      saveSettings(withSiteEnabled(settings, selectedHost, enabled));
+      return;
+    }
+    const activePage = activePageRef.current;
+    if (activePage === null) {
+      return;
+    }
+    setPageFilteringEnabled(enabled);
+    void browser.tabs
+      .sendMessage(activePage.tabId, {
+        type: TIMELINE_CONTROL.setFiltering,
+        enabled,
+      })
+      .catch(() => setPageFilteringEnabled(false));
   };
 
   const saveSelectedSettings = (
@@ -418,14 +475,10 @@ export function SidepanelApp({
               {manageAll ? t("optionsTitle") : t("sidepanelTitle")}
             </h1>
           </div>
-          <p className="mt-3 text-sm leading-6 text-muted-foreground">
-            {manageAll ? t("optionsTagline") : t("sidepanelTagline")}
-          </p>
-          {!manageAll && currentPageIsEditable && (
-            <FilterLegend
-              enabled={reactionFilterEnabled}
-              label={reactionFilterLabel}
-            />
+          {manageAll && (
+            <p className="mt-3 text-sm leading-6 text-muted-foreground">
+              {t("optionsTagline")}
+            </p>
           )}
         </header>
 
@@ -438,17 +491,14 @@ export function SidepanelApp({
               ? selectedScopeKey === null
                 ? t("sidepanelSiteDefault")
                 : selectedSourceLabel
-              : t("sidepanelSectionCurrentSite")
+              : t("sidepanelCurrentPage")
           }
-          description={manageAll ? undefined : t("sidepanelSiteNote")}
+          description={
+            !manageAll && activeContext !== null
+              ? contextLabel(activeContext)
+              : undefined
+          }
         >
-          {!manageAll && currentPageIsEditable && (
-            <SettingRow label={t("sidepanelCurrentLocation")}>
-              <span className="text-sm font-medium">
-                {activeContext === null ? "" : contextLabel(activeContext)}
-              </span>
-            </SettingRow>
-          )}
           {!manageAll && !currentPageIsEditable && (
             <div className="p-5 text-sm leading-6 text-muted-foreground sm:px-6">
               {t("sidepanelStatusUnavailable")}
@@ -476,7 +526,13 @@ export function SidepanelApp({
           )}
           {currentPageIsEditable &&
             (!manageAll || selectedScopeKey === null) && (
-              <SettingRow label={t("sidepanelSiteEnabled")}>
+              <SettingRow
+                label={
+                  manageAll
+                    ? t("sidepanelSiteEnabled")
+                    : t("sidepanelPageEnabled")
+                }
+              >
                 <Switch
                   checked={filteringEnabled}
                   onCheckedChange={updateFiltering}
@@ -487,7 +543,7 @@ export function SidepanelApp({
 
         {!manageAll && (
           <Button
-            className="mb-6 w-full"
+            className="mb-6 mt-3 w-full"
             onClick={() => void browser.runtime.openOptionsPage()}
             variant="outline"
           >
@@ -503,137 +559,141 @@ export function SidepanelApp({
           disabled={!filteringEnabled || !currentPageIsEditable}
           hidden={!currentPageIsEditable}
         >
-          {selectedSettings.kind === "reactions" && (
-            <SettingsGroup title={t("optionsSectionVisible")}>
-              <SettingRow label={t("optionsMediaEnabled")}>
-                <Switch
-                  checked={selectedSettings.mediaEnabled}
-                  onCheckedChange={(value) =>
-                    updateReactionSetting("mediaEnabled", value)
-                  }
-                />
-              </SettingRow>
-              {selectedSettings.mediaEnabled && (
-                <SettingRow label={t("optionsMedia")}>
-                  <Select
-                    value={selectedSettings.mediaMode}
-                    onValueChange={(value) =>
-                      updateReactionSetting(
-                        "mediaMode",
-                        value as ReactionSiteSettings["mediaMode"],
-                      )
+          <section
+            className="mt-7"
+            aria-label={t("optionsSectionDisplayConditions")}
+          >
+            <h2 className="mb-3 text-sm font-medium text-muted-foreground">
+              {t("optionsSectionDisplayConditions")}
+            </h2>
+            <div className="space-y-4">
+              <Card>
+                <CardContent className="divide-y p-0">
+                  <SettingRow
+                    label={
+                      selectedSettings.kind === "youtube"
+                        ? t("optionsViewsEnabled")
+                        : selectedSite === "misskey"
+                          ? t("optionsReactionsEnabled")
+                          : t("optionsLikesEnabled")
                     }
                   >
-                    <SelectTrigger className="w-40">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="any">
-                        {t("optionsMediaAny")}
-                      </SelectItem>
-                      <SelectItem value="images">
-                        {t("optionsMediaImages")}
-                      </SelectItem>
-                      <SelectItem value="video">
-                        {t("optionsMediaVideo")}
-                      </SelectItem>
-                    </SelectContent>
-                  </Select>
-                </SettingRow>
-              )}
-            </SettingsGroup>
-          )}
-
-          <SettingsGroup
-            title={reactionFilterLabel}
-            description={
-              selectedSettings.kind === "youtube"
-                ? t("optionsViewsFilterNote")
-                : selectedSite === "misskey"
-                  ? t("optionsReactionsFilterNote")
-                  : t("optionsLikesFilterNote")
-            }
-          >
-            <SettingRow
-              label={
-                selectedSettings.kind === "youtube"
-                  ? t("optionsViewsEnabled")
-                  : selectedSite === "misskey"
-                    ? t("optionsReactionsEnabled")
-                    : t("optionsLikesEnabled")
-              }
-            >
-              <Switch
-                checked={reactionFilterEnabled}
-                onCheckedChange={(value) =>
-                  selectedSettings.kind === "youtube"
-                    ? updateYouTubeSetting("minViewsEnabled", value)
-                    : updateReactionSetting("minReactionsEnabled", value)
-                }
-              />
-            </SettingRow>
-            {reactionFilterEnabled && (
-              <>
-                <PeriodSetting
+                    <Switch
+                      checked={reactionFilterEnabled}
+                      onCheckedChange={(value) =>
+                        selectedSettings.kind === "youtube"
+                          ? updateYouTubeSetting("minViewsEnabled", value)
+                          : updateReactionSetting("minReactionsEnabled", value)
+                      }
+                    />
+                  </SettingRow>
+                  {reactionFilterEnabled && (
+                    <>
+                      <PeriodSetting
+                        mode={selectedSettings.periodMode}
+                        onModeChange={(value) =>
+                          selectedSettings.kind === "youtube"
+                            ? updateYouTubeSetting("periodMode", value)
+                            : updateReactionSetting("periodMode", value)
+                        }
+                        onUnitChange={(value) =>
+                          selectedSettings.kind === "youtube"
+                            ? updateYouTubeSetting("periodUnit", value)
+                            : updateReactionSetting("periodUnit", value)
+                        }
+                        onValueChange={(value) =>
+                          selectedSettings.kind === "youtube"
+                            ? updateYouTubeSetting("periodValue", value)
+                            : updateReactionSetting("periodValue", value)
+                        }
+                        unit={selectedSettings.periodUnit}
+                        value={selectedSettings.periodValue}
+                      />
+                      {selectedSettings.kind === "youtube" ? (
+                        <NumberSetting
+                          label={t("optionsMinViews")}
+                          min={0}
+                          onValueChange={(value) =>
+                            updateYouTubeSetting("minViews", value)
+                          }
+                          suffix={t("optionsUnitViews")}
+                          value={selectedSettings.minViews}
+                        />
+                      ) : (
+                        <NumberSetting
+                          label={
+                            selectedSite === "misskey"
+                              ? t("optionsMinReactions")
+                              : t("optionsMinLikes")
+                          }
+                          min={0}
+                          onValueChange={(value) =>
+                            updateReactionSetting("minReactions", value)
+                          }
+                          value={selectedSettings.minReactions}
+                        />
+                      )}
+                    </>
+                  )}
+                </CardContent>
+              </Card>
+              {reactionFilterEnabled && (
+                <FilterSummary
+                  minimum={
+                    selectedSettings.kind === "youtube"
+                      ? selectedSettings.minViews
+                      : selectedSettings.minReactions
+                  }
                   mode={selectedSettings.periodMode}
-                  onModeChange={(value) =>
-                    selectedSettings.kind === "youtube"
-                      ? updateYouTubeSetting("periodMode", value)
-                      : updateReactionSetting("periodMode", value)
-                  }
-                  onUnitChange={(value) =>
-                    selectedSettings.kind === "youtube"
-                      ? updateYouTubeSetting("periodUnit", value)
-                      : updateReactionSetting("periodUnit", value)
-                  }
-                  onValueChange={(value) =>
-                    selectedSettings.kind === "youtube"
-                      ? updateYouTubeSetting("periodValue", value)
-                      : updateReactionSetting("periodValue", value)
-                  }
+                  site={selectedSite}
                   unit={selectedSettings.periodUnit}
                   value={selectedSettings.periodValue}
                 />
-                {selectedSettings.kind === "youtube" ? (
-                  <NumberSetting
-                    label={t("optionsMinViews")}
-                    min={0}
-                    onValueChange={(value) =>
-                      updateYouTubeSetting("minViews", value)
-                    }
-                    suffix={t("optionsUnitViews")}
-                    value={selectedSettings.minViews}
-                  />
-                ) : (
-                  <NumberSetting
-                    label={
-                      selectedSite === "misskey"
-                        ? t("optionsMinReactions")
-                        : t("optionsMinLikes")
-                    }
-                    min={0}
-                    onValueChange={(value) =>
-                      updateReactionSetting("minReactions", value)
-                    }
-                    value={selectedSettings.minReactions}
-                  />
-                )}
-              </>
-            )}
-          </SettingsGroup>
-          {reactionFilterEnabled && (
-            <FilterSummary
-              minimum={
-                selectedSettings.kind === "youtube"
-                  ? selectedSettings.minViews
-                  : selectedSettings.minReactions
-              }
-              mode={selectedSettings.periodMode}
-              site={selectedSite}
-              unit={selectedSettings.periodUnit}
-              value={selectedSettings.periodValue}
-            />
-          )}
+              )}
+              {selectedSettings.kind === "reactions" && (
+                <Card>
+                  <CardContent className="divide-y p-0">
+                    <SettingRow label={t("optionsMediaEnabled")}>
+                      <Switch
+                        checked={selectedSettings.mediaEnabled}
+                        onCheckedChange={(value) =>
+                          updateReactionSetting("mediaEnabled", value)
+                        }
+                      />
+                    </SettingRow>
+                    {selectedSettings.mediaEnabled && (
+                      <SettingRow label={t("optionsMedia")}>
+                        <Select
+                          value={selectedSettings.mediaMode}
+                          onValueChange={(value) =>
+                            updateReactionSetting(
+                              "mediaMode",
+                              value as ReactionSiteSettings["mediaMode"],
+                            )
+                          }
+                        >
+                          <SelectTrigger className="w-40">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="any">
+                              {t("optionsMediaAny")}
+                            </SelectItem>
+                            <SelectItem value="images">
+                              {t("optionsMediaImages")}
+                            </SelectItem>
+                            <SelectItem value="video">
+                              {t("optionsMediaVideo")}
+                            </SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </SettingRow>
+                    )}
+                  </CardContent>
+                </Card>
+              )}
+            </div>
+          </section>
 
           {selectedSettings.kind === "reactions" && (
             <SettingsGroup title={t("optionsSectionExclude")}>
@@ -698,35 +758,6 @@ export function SidepanelApp({
         )}
       </div>
     </main>
-  );
-}
-
-function FilterLegend({
-  enabled,
-  label,
-}: {
-  enabled: boolean;
-  label: string;
-}): React.JSX.Element | null {
-  if (!enabled) {
-    return null;
-  }
-  return (
-    <div className="mt-4 rounded-lg bg-muted/60 px-3 py-2.5">
-      <p className="text-xs font-medium text-foreground">
-        {t("sidepanelFilterLegend")}
-      </p>
-      <div className="mt-2 flex flex-wrap gap-x-5 gap-y-2 text-xs text-muted-foreground">
-        <span className="flex items-center gap-2">
-          <span
-            className="h-5 w-[3px]"
-            style={{ backgroundColor: "rgb(37, 99, 235)" }}
-            aria-hidden="true"
-          />
-          {label}
-        </span>
-      </div>
-    </div>
   );
 }
 

@@ -33,6 +33,14 @@ beforeEach(() => {
   document.body.innerHTML = "";
 });
 
+async function setFiltering(enabled: boolean): Promise<void> {
+  await fakeBrowser.runtime.onMessage.trigger(
+    { type: TIMELINE_CONTROL.setFiltering, enabled },
+    {},
+    () => {},
+  );
+}
+
 describe("タイムラインのフィルター", () => {
   it("投稿を絞り込み、ページ上の操作UIは作らない", async () => {
     document.body.innerHTML = timelineMarkup;
@@ -40,6 +48,8 @@ describe("タイムラインのフィルター", () => {
       new ContentScriptContext("sift-test"),
       xAdapter,
     );
+    expect(document.querySelector("[data-sift-filter-state]")).toBeNull();
+    await setFiltering(true);
 
     await vi.waitFor(() => {
       expect(
@@ -57,6 +67,7 @@ describe("タイムラインのフィルター", () => {
       new ContentScriptContext("sift-test"),
       xAdapter,
     );
+    await setFiltering(true);
 
     await vi.waitFor(() => {
       expect(document.querySelector("article")).toBeNull();
@@ -74,6 +85,7 @@ describe("タイムラインのフィルター", () => {
       new ContentScriptContext("sift-test"),
       xAdapter,
     );
+    await setFiltering(true);
 
     await vi.waitFor(() => {
       expect(document.querySelector("[data-sift-empty-state]")).not.toBeNull();
@@ -104,6 +116,7 @@ describe("タイムラインのフィルター", () => {
       new ContentScriptContext("sift-test"),
       blueskyAdapter,
     );
+    await setFiltering(true);
 
     await vi.waitFor(() => {
       expect(document.querySelector("[data-sift-empty-state]")).not.toBeNull();
@@ -121,6 +134,7 @@ describe("タイムラインのフィルター", () => {
       new ContentScriptContext("sift-test"),
       xAdapter,
     );
+    await setFiltering(true);
 
     await vi.waitFor(() => {
       expect(document.querySelector("[data-sift-empty-state]")).not.toBeNull();
@@ -146,16 +160,13 @@ describe("タイムラインのフィルター", () => {
       new ContentScriptContext("sift-test"),
       xAdapter,
     );
+    await setFiltering(true);
 
     await vi.waitFor(() => {
       expect(document.querySelector("[data-sift-empty-state]")).not.toBeNull();
     });
 
-    await fakeBrowser.runtime.onMessage.trigger(
-      { type: TIMELINE_CONTROL.toggleFiltering },
-      {},
-      () => {},
-    );
+    await setFiltering(false);
 
     await vi.waitFor(() => {
       expect(document.querySelector("[data-sift-empty-state]")).toBeNull();
@@ -171,6 +182,7 @@ describe("タイムラインのフィルター", () => {
       new ContentScriptContext("sift-test"),
       xAdapter,
     );
+    await setFiltering(true);
 
     await vi.waitFor(() => {
       expect(document.querySelector("[data-sift-empty-state]")).not.toBeNull();
@@ -200,6 +212,7 @@ describe("タイムラインのフィルター", () => {
       new ContentScriptContext("sift-test"),
       youtubeAdapter,
     );
+    await setFiltering(true);
 
     await vi.waitFor(() => {
       expect(document.querySelector("[data-sift-filter-state]")).not.toBeNull();
@@ -221,6 +234,7 @@ describe("タイムラインのフィルター", () => {
       new ContentScriptContext("sift-test"),
       xAdapter,
     );
+    await setFiltering(true);
     await vi.waitFor(() => {
       expect(
         document.querySelector<HTMLElement>("[data-sift-filter-state]"),
@@ -242,13 +256,7 @@ describe("タイムラインのフィルター", () => {
       .spyOn(window, "scrollBy")
       .mockImplementation(() => undefined);
 
-    await fakeBrowser.runtime.onMessage.trigger(
-      {
-        type: TIMELINE_CONTROL.toggleFiltering,
-      },
-      {},
-      () => {},
-    );
+    await setFiltering(false);
 
     await vi.waitFor(() => {
       expect(scrollBy).toHaveBeenCalledWith({ top: 200, behavior: "instant" });

@@ -3,6 +3,7 @@ import { homedir } from "node:os";
 import { basename, dirname, resolve } from "node:path";
 import tailwindcss from "@tailwindcss/vite";
 import { defineConfig } from "wxt";
+import { requireExplicitContentScriptReload } from "./plugins/dev-content-script-reload.ts";
 import { devErrorLog } from "./plugins/dev-error-log.ts";
 import { DEV_SERVER_HOST, DEV_SERVER_PORT } from "./utils/dev-server.ts";
 import { MISSKEY_HOSTS, originForHost } from "./utils/misskey-hosts.ts";
@@ -114,13 +115,11 @@ export default defineConfig({
     action: {
       default_title: "Sift",
     },
-    commands: {
-      "toggle-filtering": {
-        description: "Toggle filtering on the current timeline.",
-      },
-    },
   },
   hooks: {
+    "server:created": (_wxt, server) => {
+      requireExplicitContentScriptReload(server);
+    },
     // 開発サーバーが書くビルドのたびに発火する。最初の1回も含む。
     "build:done": () => {
       developmentBuildWritten = true;

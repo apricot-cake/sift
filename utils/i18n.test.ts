@@ -14,7 +14,7 @@ describe("t()", () => {
 describe("localizeDocument()", () => {
   it("文字・placeholder・aria-label を埋める", () => {
     const root = render(`
-      <p data-i18n="sidepanelTagline"></p>
+      <p data-i18n="optionsTagline"></p>
       <input
         data-i18n-placeholder="optionsExcludedKeywordsPlaceholder"
         data-i18n-aria-label="optionsExcludedKeywords"
@@ -25,7 +25,7 @@ describe("localizeDocument()", () => {
 
     const paragraph = root.querySelector("p");
     const input = root.querySelector("input");
-    expect(paragraph?.textContent).toBe(english.sidepanelTagline?.message);
+    expect(paragraph?.textContent).toBe(english.optionsTagline?.message);
     expect(input?.getAttribute("placeholder")).toBe(
       english.optionsExcludedKeywordsPlaceholder?.message,
     );

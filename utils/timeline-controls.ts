@@ -1,7 +1,7 @@
 // ショートカットがタイムラインの content script へ渡す操作。ポップアップは
 // 保存済みの設定を直接切り替えるため、content script の起動状態に依存しない。
 export const TIMELINE_CONTROL = {
-  toggleFiltering: "sift:timeline-toggle-filtering",
+  setFiltering: "sift:timeline-set-filtering",
 } as const;
 
 export type TimelineControlMessage =
@@ -9,6 +9,7 @@ export type TimelineControlMessage =
 
 export interface TimelineControlRequest {
   readonly type: TimelineControlMessage;
+  readonly enabled?: boolean;
 }
 
 export function isTimelineControlRequest(
@@ -20,6 +21,8 @@ export function isTimelineControlRequest(
     "type" in value &&
     Object.values(TIMELINE_CONTROL).includes(
       (value as { type?: unknown }).type as TimelineControlMessage,
-    )
+    ) &&
+    ((value as { type?: unknown }).type !== TIMELINE_CONTROL.setFiltering ||
+      typeof (value as { enabled?: unknown }).enabled === "boolean")
   );
 }

@@ -23,7 +23,6 @@ import {
   type Settings,
   settingsFor,
   thresholdsFor,
-  withSiteEnabled,
 } from "../../utils/settings.ts";
 import { settingsItem } from "../../utils/settings-storage.ts";
 import { SITE_MATCHES } from "../../utils/site-matches.ts";
@@ -65,9 +64,15 @@ export function startContentRuntime(
   let keepViewportOnNextFilter = false;
   let disposed = false;
   let reportedFilterPass = false;
+  let pageFilteringEnabled = false;
 
   function filteringEnabled(): boolean {
-    return isSiteEnabled(settings, location.hostname);
+    return pageFilteringEnabled && isSiteEnabled(settings, location.hostname);
+  }
+
+  function pageKey(): string {
+    const scope = adapter.settingsScope(document, location);
+    return `${location.origin}${location.pathname}${location.search}#${scope?.key ?? "default"}`;
   }
 
   // 画像と動画のどちらを絞り込むかは読み手の設定なので、2つはアダプターから
@@ -320,20 +325,17 @@ export function startContentRuntime(
     }
   }
 
-  function toggleFiltering(): void {
-    if (!adapter.isTimelineAvailable(document, location)) {
+  function setFiltering(enabled: boolean): void {
+    if (pageFilteringEnabled === enabled) {
       return;
     }
-
-    const wasFilteringEnabled = filteringEnabled();
-    settings = withSiteEnabled(
-      settings,
-      location.hostname,
-      !wasFilteringEnabled,
-    );
+    pageFilteringEnabled = enabled;
     keepViewportOnNextFilter = true;
-    scheduleFilter();
-    void settingsItem.setValue(settings).catch(() => {});
+    if (adapter.isTimelineAvailable(document, location)) {
+      scheduleFilter();
+    } else {
+      clearTimelineState();
+    }
   }
 
   async function handleTimelineControlMessage(
@@ -348,13 +350,18 @@ export function startContentRuntime(
         scopeKey: scope?.key ?? null,
         scopeKind: scope?.kind ?? null,
         pageTitle: document.title,
+        pageKey: pageKey(),
+        filteringEnabled: filteringEnabled(),
       };
     }
     if (!isTimelineControlRequest(message)) {
       return undefined;
     }
-    if (message.type === TIMELINE_CONTROL.toggleFiltering) {
-      toggleFiltering();
+    if (
+      message.type === TIMELINE_CONTROL.setFiltering &&
+      typeof message.enabled === "boolean"
+    ) {
+      setFiltering(message.enabled);
     }
     return undefined;
   }

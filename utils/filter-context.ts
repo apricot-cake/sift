@@ -11,6 +11,8 @@ export interface FilterContextResponse {
   readonly scopeKey: string | null;
   readonly scopeKind: SettingsScopeKind | null;
   readonly pageTitle: string;
+  readonly pageKey: string;
+  readonly filteringEnabled: boolean;
 }
 
 export function isFilterContextRequest(
@@ -42,6 +44,8 @@ export function isFilterContextResponse(
       response.scopeKind === "list" ||
       response.scopeKind === "feed" ||
       response.scopeKind === "antenna") &&
-    typeof response.pageTitle === "string"
+    typeof response.pageTitle === "string" &&
+    typeof response.pageKey === "string" &&
+    typeof response.filteringEnabled === "boolean"
   );
 }

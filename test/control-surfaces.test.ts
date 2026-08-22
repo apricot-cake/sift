@@ -34,7 +34,7 @@ describe("抽出の操作入口", () => {
     const sidepanel = readEntrypoint("entrypoints/sidepanel/sidepanel-app.tsx");
     const options = readEntrypoint("entrypoints/options/main.tsx");
 
-    expect(sidepanel).toContain("withSiteEnabled");
+    expect(sidepanel).toContain("TIMELINE_CONTROL.setFiltering");
     expect(sidepanel).toContain("withSiteSettings");
     expect(sidepanel).toContain("siteSettingsKeyForControl");
     expect(sidepanel).toContain("browser.tabs.onActivated.addListener");
