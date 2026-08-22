@@ -58,10 +58,6 @@ export interface SourceSettingsEntry {
 }
 
 export interface Settings {
-  readonly siteEnabled: {
-    readonly defaultEnabled: boolean;
-    readonly hosts: Readonly<Record<string, boolean>>;
-  };
   readonly siteSettings: SiteSettingsMap;
   readonly sourceSettings: Readonly<Record<string, SourceSettingsEntry>>;
 }
@@ -96,10 +92,6 @@ const defaultYouTubeSiteSettings: Readonly<YouTubeSiteSettings> = Object.freeze(
 );
 
 export const defaults: Readonly<Settings> = Object.freeze({
-  siteEnabled: Object.freeze({
-    defaultEnabled: true,
-    hosts: Object.freeze({}) as Readonly<Record<string, boolean>>,
-  }),
   siteSettings: Object.freeze({
     x: defaultReactionSiteSettings(1000),
     bluesky: defaultReactionSiteSettings(1000),
@@ -122,21 +114,6 @@ function clampInteger(
   return Math.min(maximum, Math.max(minimum, parsed));
 }
 
-function normalizeHostname(input: unknown): string | null {
-  if (typeof input !== "string") {
-    return null;
-  }
-  const value = input.trim();
-  if (value === "" || value.includes(":") || value.includes("/")) {
-    return null;
-  }
-  try {
-    return new URL(`https://${value}`).hostname || null;
-  } catch {
-    return null;
-  }
-}
-
 export function normalizeExcludedKeywords(value: unknown): string {
   const seen = new Set<string>();
   const keywords: string[] = [];
@@ -156,25 +133,6 @@ export function excludedKeywordsFrom(value: string): readonly string[] {
     .split("\n")
     .filter(Boolean)
     .map((keyword) => keyword.toLowerCase());
-}
-
-function normalizeSiteEnabled(
-  value: unknown,
-  legacyEnabled: boolean,
-): Settings["siteEnabled"] {
-  const source = objectSource(value);
-  const rawHosts = objectSource(source.hosts);
-  const hosts: Record<string, boolean> = {};
-  for (const [entry, enabled] of Object.entries(rawHosts)) {
-    const host = normalizeHostname(entry);
-    if (host !== null && typeof enabled === "boolean") {
-      hosts[host] = enabled;
-    }
-  }
-  return {
-    defaultEnabled: source.defaultEnabled === false ? false : legacyEnabled,
-    hosts,
-  };
 }
 
 function objectSource(value: unknown): Record<string, unknown> {
@@ -396,9 +354,6 @@ function legacyReactionSiteSettings(
 
 export function normalizeSettings(value: unknown): Settings {
   const source = objectSource(value);
-  const migratedDefaultEnabled = !(
-    !Object.hasOwn(source, "siteEnabled") && source.enabled === false
-  );
   const storedSiteSettings = objectSource(source.siteSettings);
   const normalizeReactionFor = (
     key: ReactionSiteSettingsKey,
@@ -419,44 +374,12 @@ export function normalizeSettings(value: unknown): Settings {
   };
 
   return {
-    siteEnabled: normalizeSiteEnabled(
-      source.siteEnabled,
-      migratedDefaultEnabled,
-    ),
     siteSettings,
     sourceSettings: normalizeSourceSettings(
       source.sourceSettings,
       siteSettings,
     ),
   };
-}
-
-export function isSiteEnabled(settings: Settings, hostname: string): boolean {
-  const host = normalizeHostname(hostname);
-  if (host === null) {
-    return settings.siteEnabled.defaultEnabled;
-  }
-  return (
-    settings.siteEnabled.hosts[host] ?? settings.siteEnabled.defaultEnabled
-  );
-}
-
-export function withSiteEnabled(
-  settings: Settings,
-  hostname: string,
-  enabled: boolean,
-): Settings {
-  const host = normalizeHostname(hostname);
-  if (host === null) {
-    return settings;
-  }
-  return normalizeSettings({
-    ...settings,
-    siteEnabled: {
-      defaultEnabled: settings.siteEnabled.defaultEnabled,
-      hosts: { ...settings.siteEnabled.hosts, [host]: enabled },
-    },
-  });
 }
 
 export function settingsFor<Key extends SiteSettingsKey>(

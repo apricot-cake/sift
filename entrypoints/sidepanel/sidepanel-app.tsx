@@ -8,11 +8,9 @@ import {
   isFilterContextResponse,
 } from "../../utils/filter-context.ts";
 import { t } from "../../utils/i18n.ts";
-import { MISSKEY_HOSTS } from "../../utils/misskey-hosts.ts";
 import {
   defaults,
   hasSourceSettings,
-  isSiteEnabled,
   normalizeSettings,
   type PeriodMode,
   type PeriodUnit,
@@ -23,7 +21,6 @@ import {
   settingsFor,
   sourceSettingsFor,
   withoutSourceSettings,
-  withSiteEnabled,
   withSiteSettings,
   withSourceSettings,
   type YouTubeSiteSettings,
@@ -88,7 +85,6 @@ export function SidepanelApp({
     normalizeSettings(defaults),
   );
   const [status, setStatus] = useState(t("optionsStatusLoading"));
-  const [activeHost, setActiveHost] = useState<string | null>(null);
   const [activeContext, setActiveContext] =
     useState<FilterContextResponse | null>(null);
   const [selectedSite, setSelectedSite] = useState<SiteSettingsKey>("x");
@@ -168,7 +164,6 @@ export function SidepanelApp({
       });
       try {
         const host = tab?.url ? new URL(tab.url).hostname : null;
-        setActiveHost(host);
         let context: FilterContextResponse | null = null;
         if (tab?.id !== undefined) {
           context = await browser.tabs
@@ -248,9 +243,7 @@ export function SidepanelApp({
             );
           }
         }
-      } catch {
-        setActiveHost(null);
-      }
+      } catch {}
     };
 
     const handleTabActivated = () => void refreshActiveHost(true);
@@ -316,28 +309,9 @@ export function SidepanelApp({
     selectedSettings.kind === "youtube"
       ? selectedSettings.minViewsEnabled
       : selectedSettings.minReactionsEnabled;
-  const activeSite =
-    activeHost === null ? null : siteSettingsKeyForControl(activeHost);
-  const selectedHost =
-    selectedSite === "x"
-      ? "x.com"
-      : selectedSite === "bluesky"
-        ? "bsky.app"
-        : selectedSite === "youtube"
-          ? "www.youtube.com"
-          : activeSite === "misskey" && activeHost !== null
-            ? activeHost
-            : (MISSKEY_HOSTS[0] ?? "misskey.io");
-  const siteFilteringEnabled = isSiteEnabled(settings, selectedHost);
-  const filteringEnabled = manageAll
-    ? siteFilteringEnabled
-    : siteFilteringEnabled && pageFilteringEnabled;
+  const filteringEnabled = manageAll || pageFilteringEnabled;
 
   const updateFiltering = (enabled: boolean): void => {
-    if (manageAll) {
-      saveSettings(withSiteEnabled(settings, selectedHost, enabled));
-      return;
-    }
     const activePage = activePageRef.current;
     if (activePage === null) {
       return;
@@ -484,62 +458,51 @@ export function SidepanelApp({
 
         {settingsNavigation}
 
-        <SettingsGroup
-          className={manageAll ? "md:col-start-2" : undefined}
-          title={
-            manageAll
-              ? selectedScopeKey === null
-                ? t("sidepanelSiteDefault")
-                : selectedSourceLabel
-              : t("sidepanelCurrentPage")
-          }
-          description={
-            !manageAll && activeContext !== null
-              ? contextLabel(activeContext)
-              : undefined
-          }
-        >
-          {!manageAll && !currentPageIsEditable && (
-            <div className="p-5 text-sm leading-6 text-muted-foreground sm:px-6">
-              {t("sidepanelStatusUnavailable")}
-            </div>
-          )}
-          {manageAll && selectedScopeKey !== null && (
-            <div className="flex justify-end p-5 sm:px-6">
-              <Button
-                variant="destructive"
-                onClick={() => {
-                  saveSettings(
-                    withoutSourceSettings(
-                      settings,
-                      selectedSite,
-                      selectedScopeKey,
-                    ),
-                  );
-                  setSelectedScopeKey(null);
-                }}
-              >
-                <Trash2 className="size-4" aria-hidden="true" />
-                {t("sidepanelDeleteSourceSettings")}
-              </Button>
-            </div>
-          )}
-          {currentPageIsEditable &&
-            (!manageAll || selectedScopeKey === null) && (
-              <SettingRow
-                label={
-                  manageAll
-                    ? t("sidepanelSiteEnabled")
-                    : t("sidepanelPageEnabled")
-                }
-              >
+        {(!manageAll || selectedScopeKey !== null) && (
+          <SettingsGroup
+            className={manageAll ? "md:col-start-2" : undefined}
+            title={manageAll ? selectedSourceLabel : t("sidepanelCurrentPage")}
+            description={
+              !manageAll && activeContext !== null
+                ? contextLabel(activeContext)
+                : undefined
+            }
+          >
+            {!manageAll && !currentPageIsEditable && (
+              <div className="p-5 text-sm leading-6 text-muted-foreground sm:px-6">
+                {t("sidepanelStatusUnavailable")}
+              </div>
+            )}
+            {manageAll && selectedScopeKey !== null && (
+              <div className="flex justify-end p-5 sm:px-6">
+                <Button
+                  variant="destructive"
+                  onClick={() => {
+                    saveSettings(
+                      withoutSourceSettings(
+                        settings,
+                        selectedSite,
+                        selectedScopeKey,
+                      ),
+                    );
+                    setSelectedScopeKey(null);
+                  }}
+                >
+                  <Trash2 className="size-4" aria-hidden="true" />
+                  {t("sidepanelDeleteSourceSettings")}
+                </Button>
+              </div>
+            )}
+            {!manageAll && currentPageIsEditable && (
+              <SettingRow label={t("sidepanelPageEnabled")}>
                 <Switch
                   checked={filteringEnabled}
                   onCheckedChange={updateFiltering}
                 />
               </SettingRow>
             )}
-        </SettingsGroup>
+          </SettingsGroup>
+        )}
 
         {!manageAll && (
           <Button

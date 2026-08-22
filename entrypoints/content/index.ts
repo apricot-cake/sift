@@ -18,7 +18,6 @@ import { OPEN_LIVE_CONTROLS } from "../../utils/live-controls.ts";
 import { CONTENT_RUNTIME_KEY } from "../../utils/runtime-key.ts";
 import {
   defaults,
-  isSiteEnabled,
   normalizeSettings,
   type Settings,
   settingsFor,
@@ -67,7 +66,7 @@ export function startContentRuntime(
   let pageFilteringEnabled = false;
 
   function filteringEnabled(): boolean {
-    return pageFilteringEnabled && isSiteEnabled(settings, location.hostname);
+    return pageFilteringEnabled;
   }
 
   function pageKey(): string {

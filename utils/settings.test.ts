@@ -2,13 +2,11 @@ import { describe, expect, it } from "vitest";
 import {
   defaults,
   excludedKeywordsFrom,
-  isSiteEnabled,
   normalizeSettings,
   periodInHours,
   settingsFor,
   thresholdsFor,
   withoutSourceSettings,
-  withSiteEnabled,
   withSiteSettings,
   withSourceSettings,
 } from "./settings.ts";
@@ -72,16 +70,12 @@ describe("normalizeSettings", () => {
     ).toEqual(["spoiler", "new release"]);
   });
 
-  it("旧版の全体OFFをサイトごとの既定OFFへ移行する", () => {
-    const settings = normalizeSettings({ enabled: false });
-    expect(isSiteEnabled(settings, "x.com")).toBe(false);
-    expect(isSiteEnabled(settings, "misskey.example")).toBe(false);
-  });
-
-  it("ホストごとに抽出の有効・無効を分ける", () => {
-    const settings = withSiteEnabled(normalizeSettings({}), "x.com", false);
-    expect(isSiteEnabled(settings, "x.com")).toBe(false);
-    expect(isSiteEnabled(settings, "bsky.app")).toBe(true);
+  it("旧版の有効状態を保存設定へ引き継がない", () => {
+    const settings = normalizeSettings({
+      enabled: false,
+      siteEnabled: { defaultEnabled: false, hosts: { "x.com": false } },
+    });
+    expect(settings).not.toHaveProperty("siteEnabled");
   });
 
   it("旧共有設定を全サイトへ全期間の条件として引き継ぐ", () => {
