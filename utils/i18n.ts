@@ -26,6 +26,7 @@ type SimpleMessageKey = keyof {
   [K in keyof GeneratedI18nStructure as GeneratedI18nStructure[K] extends {
     plural: false;
     substitutions: 0;
+    namedSubstitutions?: never;
   }
     ? K
     : never]: true;

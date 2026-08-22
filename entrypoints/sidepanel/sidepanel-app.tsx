@@ -1,29 +1,35 @@
-import { ChevronDown, SlidersHorizontal } from "lucide-react";
+import { Settings2, SlidersHorizontal, Trash2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { browser } from "wxt/browser";
-import { DEFAULT_MISSKEY_HOSTS } from "../../utils/default-instances.ts";
 import { startUncaughtReporting } from "../../utils/error-log.ts";
-import { t } from "../../utils/i18n.ts";
 import {
-  addInstance,
-  type InstanceDeps,
-  normalizeInstanceHost,
-  removeInstance,
-} from "../../utils/instances.ts";
+  FILTER_CONTEXT_REQUEST,
+  type FilterContextResponse,
+  isFilterContextResponse,
+} from "../../utils/filter-context.ts";
+import { t } from "../../utils/i18n.ts";
+import { MISSKEY_HOSTS } from "../../utils/misskey-hosts.ts";
 import {
   defaults,
+  hasSourceSettings,
   isSiteEnabled,
   normalizeSettings,
+  type PeriodMode,
+  type PeriodUnit,
+  type ReactionSiteSettings,
   type Settings,
-  type SiteSettings,
+  type SettingsScopeKind,
   type SiteSettingsKey,
   settingsFor,
+  sourceSettingsFor,
+  withoutSourceSettings,
   withSiteEnabled,
   withSiteSettings,
+  withSourceSettings,
+  type YouTubeSiteSettings,
 } from "../../utils/settings.ts";
-import { instanceStorage, settingsItem } from "../../utils/settings-storage.ts";
+import { settingsItem } from "../../utils/settings-storage.ts";
 import { siteSettingsKeyForControl } from "../../utils/site-controls.ts";
-import { Badge } from "../options/components/ui/badge.tsx";
 import { Button } from "../options/components/ui/button.tsx";
 import { Card, CardContent } from "../options/components/ui/card.tsx";
 import { Input } from "../options/components/ui/input.tsx";
@@ -42,19 +48,52 @@ const SITE_LABELS: Readonly<Record<SiteSettingsKey, string>> = Object.freeze({
   x: "X",
   bluesky: "Bluesky",
   misskey: "Misskey",
+  youtube: "YouTube",
 });
+function cleanPageTitle(title: string): string {
+  return title
+    .replace(/\s+(?:\/|—|\|)\s+(?:X|Bluesky|Misskey(?:\.io)?|YouTube).*$/u, "")
+    .trim();
+}
 
-function SidepanelApp(): React.JSX.Element {
+function contextLabel(context: FilterContextResponse): string {
+  if (context.scopeKind === "following") {
+    return t("sidepanelScopeFollowing");
+  }
+  if (context.scopeKind === "home") {
+    return t("sidepanelScopeHome");
+  }
+  const kindLabels: Readonly<
+    Record<Exclude<SettingsScopeKind, "following" | "home">, string>
+  > = {
+    list: t("sidepanelScopeList"),
+    feed: t("sidepanelScopeFeed"),
+    antenna: t("sidepanelScopeAntenna"),
+  };
+  const kind = context.scopeKind;
+  if (kind === null) {
+    return t("sidepanelSiteDefault");
+  }
+  const title = cleanPageTitle(context.pageTitle);
+  return title === "" ? kindLabels[kind] : `${kindLabels[kind]}: ${title}`;
+}
+
+export function SidepanelApp({
+  manageAll = false,
+}: {
+  manageAll?: boolean;
+}): React.JSX.Element {
   const [settings, setSettings] = useState<Settings>(
     normalizeSettings(defaults),
   );
   const [status, setStatus] = useState(t("optionsStatusLoading"));
   const [activeHost, setActiveHost] = useState<string | null>(null);
+  const [activeContext, setActiveContext] =
+    useState<FilterContextResponse | null>(null);
   const [selectedSite, setSelectedSite] = useState<SiteSettingsKey>("x");
-  const [instanceHost, setInstanceHost] = useState("");
-  const [instanceError, setInstanceError] = useState("");
-  const [isSubmittingInstance, setIsSubmittingInstance] = useState(false);
+  const [selectedScopeKey, setSelectedScopeKey] = useState<string | null>(null);
   const statusTimer = useRef<number | null>(null);
+  const followActiveContext = useRef(true);
   const settingsRef = useRef(settings);
 
   useEffect(() => {
@@ -105,19 +144,11 @@ function SidepanelApp(): React.JSX.Element {
       .catch(() => setStatus(t("optionsErrorSaveFailed")));
   };
 
-  const updateSiteSetting = <Key extends keyof SiteSettings>(
-    key: Key,
-    value: SiteSettings[Key],
-  ): void =>
-    saveSettings(
-      withSiteSettings(settings, selectedSite, {
-        ...settingsFor(settings, selectedSite),
-        [key]: value,
-      }),
-    );
-
   useEffect(() => {
-    const refreshActiveHost = async (): Promise<void> => {
+    if (manageAll) {
+      return;
+    }
+    const refreshActiveHost = async (forceSelection = false): Promise<void> => {
       const [tab] = await browser.tabs.query({
         active: true,
         currentWindow: true,
@@ -125,10 +156,50 @@ function SidepanelApp(): React.JSX.Element {
       try {
         const host = tab?.url ? new URL(tab.url).hostname : null;
         setActiveHost(host);
+        let context: FilterContextResponse | null = null;
+        if (tab?.id !== undefined) {
+          context = await browser.tabs
+            .sendMessage(tab.id, { type: FILTER_CONTEXT_REQUEST })
+            .then((response) =>
+              isFilterContextResponse(response) ? response : null,
+            )
+            .catch(() => null);
+        }
+        setActiveContext(context);
         if (host !== null) {
-          const site = siteSettingsKeyForControl(host, settingsRef.current);
-          if (site !== null) {
+          const site = siteSettingsKeyForControl(host);
+          if (
+            site !== null &&
+            context?.site === site &&
+            context.scopeKey !== null
+          ) {
+            const current = settingsRef.current;
+            const stored = sourceSettingsFor(current, site).find(
+              ({ scopeKey }) => scopeKey === context.scopeKey,
+            );
+            const label = contextLabel(context);
+            if (stored !== undefined && stored.label !== label) {
+              const renamed = withSourceSettings(
+                current,
+                site,
+                context.scopeKey,
+                label,
+                stored.settings,
+              );
+              settingsRef.current = renamed;
+              setSettings(renamed);
+              void settingsItem.setValue(renamed).catch(() => {});
+            }
+          }
+          if (
+            site !== null &&
+            (forceSelection || followActiveContext.current)
+          ) {
+            followActiveContext.current = true;
             setSelectedSite(site);
+            setSelectedScopeKey(
+              context?.site === site ? context.scopeKey : null,
+            );
           }
         }
       } catch {
@@ -136,7 +207,7 @@ function SidepanelApp(): React.JSX.Element {
       }
     };
 
-    const handleTabActivated = () => void refreshActiveHost();
+    const handleTabActivated = () => void refreshActiveHost(true);
     const handleTabUpdated = (
       tabId: number,
       changeInfo: Browser.tabs.OnUpdatedInfo,
@@ -146,322 +217,500 @@ function SidepanelApp(): React.JSX.Element {
           .query({ active: true, currentWindow: true })
           .then(([tab]) => {
             if (tab?.id === tabId) {
-              void refreshActiveHost();
+              void refreshActiveHost(true);
             }
           });
       }
     };
-    void refreshActiveHost();
+    void refreshActiveHost(true);
+    const contextTimer = window.setInterval(() => {
+      void refreshActiveHost();
+    }, 750);
     browser.tabs.onActivated.addListener(handleTabActivated);
     browser.tabs.onUpdated.addListener(handleTabUpdated);
     return () => {
       browser.tabs.onActivated.removeListener(handleTabActivated);
       browser.tabs.onUpdated.removeListener(handleTabUpdated);
+      window.clearInterval(contextTimer);
     };
-  }, []);
+  }, [manageAll]);
 
-  const selectedSettings = settingsFor(settings, selectedSite);
+  const activeSource =
+    activeContext?.site === selectedSite && activeContext.scopeKey !== null
+      ? {
+          scopeKey: activeContext.scopeKey,
+          label: contextLabel(activeContext),
+        }
+      : null;
+  const storedSources = sourceSettingsFor(settings, selectedSite);
+  const sourceOptions = [
+    ...storedSources.map(({ scopeKey, label }) => ({ scopeKey, label })),
+  ];
+  if (
+    activeSource !== null &&
+    !sourceOptions.some(({ scopeKey }) => scopeKey === activeSource.scopeKey)
+  ) {
+    sourceOptions.push(activeSource);
+  }
+  const selectedSourceLabel =
+    sourceOptions.find(({ scopeKey }) => scopeKey === selectedScopeKey)
+      ?.label ??
+    selectedScopeKey ??
+    "";
+  const selectedSourceIsSaved =
+    selectedScopeKey !== null &&
+    hasSourceSettings(settings, selectedSite, selectedScopeKey);
+  const selectedSettings = settingsFor(
+    settings,
+    selectedSite,
+    selectedScopeKey,
+  );
+
   const reactionFilterLabel =
-    selectedSite === "misskey"
-      ? t("optionsSectionReactionsFilter")
-      : t("optionsSectionLikesFilter");
+    selectedSite === "youtube"
+      ? t("optionsSectionViewsFilter")
+      : selectedSite === "misskey"
+        ? t("optionsSectionReactionsFilter")
+        : t("optionsSectionLikesFilter");
+  const reactionFilterEnabled =
+    selectedSettings.kind === "youtube"
+      ? selectedSettings.minViewsEnabled
+      : selectedSettings.minReactionsEnabled;
   const activeSite =
-    activeHost === null
-      ? null
-      : siteSettingsKeyForControl(activeHost, settings);
+    activeHost === null ? null : siteSettingsKeyForControl(activeHost);
   const selectedHost =
     selectedSite === "x"
       ? "x.com"
       : selectedSite === "bluesky"
         ? "bsky.app"
-        : activeSite === "misskey" && activeHost !== null
-          ? activeHost
-          : (DEFAULT_MISSKEY_HOSTS[0] ?? "misskey.io");
+        : selectedSite === "youtube"
+          ? "www.youtube.com"
+          : activeSite === "misskey" && activeHost !== null
+            ? activeHost
+            : (MISSKEY_HOSTS[0] ?? "misskey.io");
   const filteringEnabled = isSiteEnabled(settings, selectedHost);
-  const customMisskeyInstances = settings.misskeyInstances.filter(
-    (host) => !DEFAULT_MISSKEY_HOSTS.includes(host),
-  );
-  const misskeyInstanceCount =
-    DEFAULT_MISSKEY_HOSTS.length + customMisskeyInstances.length;
 
   const updateFiltering = (enabled: boolean): void => {
     saveSettings(withSiteEnabled(settings, selectedHost, enabled));
   };
 
-  const instanceDeps: InstanceDeps = {
-    permissions: browser.permissions,
-    scripting: browser.scripting,
-    storage: instanceStorage,
-  };
-
-  const addMisskeyInstance = async (event: React.FormEvent): Promise<void> => {
-    event.preventDefault();
-    setInstanceError("");
-    const host = normalizeInstanceHost(instanceHost);
-    if (host === null) {
-      setInstanceError(t("optionsErrorBadHost"));
+  const saveSelectedSettings = (
+    nextSiteSettings: ReactionSiteSettings | YouTubeSiteSettings,
+  ): void => {
+    if (selectedScopeKey === null) {
+      saveSettings(withSiteSettings(settings, selectedSite, nextSiteSettings));
       return;
     }
-    if (DEFAULT_MISSKEY_HOSTS.includes(host)) {
-      setInstanceError(t("optionsErrorAlreadyDefault"));
-      return;
-    }
-
-    setIsSubmittingInstance(true);
-    try {
-      const result = await addInstance(host, instanceDeps);
-      if (!result.added) {
-        setInstanceError(t("optionsErrorPermissionDenied"));
-        return;
+    if (!selectedSourceIsSaved) {
+      if (selectedSite !== "youtube" && nextSiteSettings.kind === "reactions") {
+        saveSettings(
+          withSourceSettings(
+            settings,
+            selectedSite,
+            selectedScopeKey,
+            selectedSourceLabel,
+            nextSiteSettings,
+          ),
+        );
       }
-      setInstanceHost("");
-    } finally {
-      setIsSubmittingInstance(false);
+      return;
     }
+    saveSettings(
+      withSourceSettings(
+        settings,
+        selectedSite,
+        selectedScopeKey,
+        selectedSourceLabel,
+        nextSiteSettings,
+      ),
+    );
   };
+
+  const updateReactionSetting = <Key extends keyof ReactionSiteSettings>(
+    key: Key,
+    value: ReactionSiteSettings[Key],
+  ): void => {
+    if (selectedSettings.kind !== "reactions") {
+      return;
+    }
+    saveSelectedSettings({ ...selectedSettings, [key]: value });
+  };
+
+  const updateYouTubeSetting = <Key extends keyof YouTubeSiteSettings>(
+    key: Key,
+    value: YouTubeSiteSettings[Key],
+  ): void => {
+    if (selectedSettings.kind !== "youtube") {
+      return;
+    }
+    saveSelectedSettings({ ...selectedSettings, [key]: value });
+  };
+
+  const currentPageIsEditable =
+    manageAll ||
+    (activeContext !== null && activeContext.site === selectedSite);
+
+  const settingsNavigation = manageAll ? (
+    <Card className="h-fit md:sticky md:top-6 md:col-start-1 md:row-start-2">
+      <CardContent className="p-3">
+        <nav aria-label={t("optionsNavigationLabel")}>
+          {(Object.keys(SITE_LABELS) as SiteSettingsKey[]).map((site) => {
+            const sources = sourceSettingsFor(settings, site);
+            return (
+              <div className="mb-4 last:mb-0" key={site}>
+                <p className="px-3 pb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  {SITE_LABELS[site]}
+                </p>
+                <button
+                  className={`w-full rounded-md px-3 py-2 text-left text-sm hover:bg-muted ${
+                    selectedSite === site && selectedScopeKey === null
+                      ? "bg-muted font-medium"
+                      : ""
+                  }`}
+                  onClick={() => {
+                    setSelectedSite(site);
+                    setSelectedScopeKey(null);
+                  }}
+                  type="button"
+                >
+                  {t("sidepanelSiteDefault")}
+                </button>
+                {sources.map(({ scopeKey, label }) => (
+                  <button
+                    className={`w-full rounded-md px-3 py-2 pl-6 text-left text-sm hover:bg-muted ${
+                      selectedSite === site && selectedScopeKey === scopeKey
+                        ? "bg-muted font-medium"
+                        : ""
+                    }`}
+                    key={scopeKey}
+                    onClick={() => {
+                      setSelectedSite(site);
+                      setSelectedScopeKey(scopeKey);
+                    }}
+                    type="button"
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            );
+          })}
+        </nav>
+      </CardContent>
+    </Card>
+  ) : null;
 
   return (
     <main className="min-h-screen bg-background text-foreground">
-      <div className="mx-auto max-w-xl px-5 py-6">
-        <header className="mb-7">
+      <div
+        className={`mx-auto px-5 py-6 ${
+          manageAll
+            ? "max-w-6xl md:grid md:grid-cols-[17rem_minmax(0,1fr)] md:gap-x-7"
+            : "max-w-xl"
+        }`}
+      >
+        <header className={`mb-7 ${manageAll ? "md:col-span-2" : ""}`}>
           <div className="flex items-center gap-3">
             <span className="flex size-9 items-center justify-center rounded-lg bg-primary text-primary-foreground shadow-sm">
               <SlidersHorizontal className="size-4" aria-hidden="true" />
             </span>
             <h1 className="text-xl font-semibold tracking-tight">
-              {t("sidepanelTitle")}
+              {manageAll ? t("optionsTitle") : t("sidepanelTitle")}
             </h1>
           </div>
           <p className="mt-3 text-sm leading-6 text-muted-foreground">
-            {t("sidepanelTagline")}
+            {manageAll ? t("optionsTagline") : t("sidepanelTagline")}
           </p>
-          <FilterLegend reactionFilterLabel={reactionFilterLabel} />
+          {!manageAll && currentPageIsEditable && (
+            <FilterLegend
+              enabled={reactionFilterEnabled}
+              label={reactionFilterLabel}
+            />
+          )}
         </header>
 
-        <SettingsGroup
-          title={t("sidepanelSectionCurrentSite")}
-          description={t("sidepanelSiteNote")}
-        >
-          <SettingRow label={t("sidepanelSite")}>
-            <Select
-              value={selectedSite}
-              onValueChange={(value) =>
-                setSelectedSite(value as SiteSettingsKey)
-              }
-            >
-              <SelectTrigger className="w-40">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {(Object.keys(SITE_LABELS) as SiteSettingsKey[]).map((site) => (
-                  <SelectItem key={site} value={site}>
-                    {SITE_LABELS[site]}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </SettingRow>
-          <SettingRow label={t("sidepanelFiltering")}>
-            <Switch
-              checked={filteringEnabled}
-              onCheckedChange={updateFiltering}
-            />
-          </SettingRow>
-        </SettingsGroup>
-
-        <SettingsGroup title={t("optionsSectionVisible")}>
-          <SettingRow label={t("optionsMedia")}>
-            <Select
-              value={selectedSettings.mediaMode}
-              onValueChange={(value) =>
-                updateSiteSetting(
-                  "mediaMode",
-                  value as SiteSettings["mediaMode"],
-                )
-              }
-            >
-              <SelectTrigger className="w-40">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">{t("optionsMediaAll")}</SelectItem>
-                <SelectItem value="any">{t("optionsMediaAny")}</SelectItem>
-                <SelectItem value="images">
-                  {t("optionsMediaImages")}
-                </SelectItem>
-                <SelectItem value="video">{t("optionsMediaVideo")}</SelectItem>
-              </SelectContent>
-            </Select>
-          </SettingRow>
-        </SettingsGroup>
+        {settingsNavigation}
 
         <SettingsGroup
-          title={reactionFilterLabel}
-          description={
-            selectedSite === "misskey"
-              ? t("optionsStandardReactionsNote")
-              : t("optionsStandardLikesNote")
+          className={manageAll ? "md:col-start-2" : undefined}
+          title={
+            manageAll
+              ? selectedScopeKey === null
+                ? t("sidepanelSiteDefault")
+                : selectedSourceLabel
+              : t("sidepanelSectionCurrentSite")
           }
+          description={manageAll ? undefined : t("sidepanelSiteNote")}
         >
-          <NumberSetting
-            label={
-              selectedSite === "misskey"
-                ? t("optionsMinReactions")
-                : t("optionsMinLikes")
-            }
-            min={0}
-            onValueChange={(value) => updateSiteSetting("minReactions", value)}
-            value={selectedSettings.minReactions}
-          />
-        </SettingsGroup>
-
-        <SettingsGroup
-          title={t("optionsSectionRisingFilter")}
-          description={t("optionsRisingNote")}
-        >
-          <SettingRow label={t("optionsRisingEnabled")}>
-            <Switch
-              checked={selectedSettings.risingEnabled}
-              onCheckedChange={(value) =>
-                updateSiteSetting("risingEnabled", value)
-              }
-            />
-          </SettingRow>
-          {selectedSettings.risingEnabled && (
-            <>
-              <NumberSetting
-                label={t("optionsMaxAge")}
-                min={1}
-                onValueChange={(value) =>
-                  updateSiteSetting("risingMaxAgeHours", value)
-                }
-                suffix={t("optionsUnitHours")}
-                value={selectedSettings.risingMaxAgeHours}
-              />
-              <NumberSetting
-                label={
-                  selectedSite === "misskey"
-                    ? t("optionsRisingMinReactions")
-                    : t("optionsRisingMinLikes")
-                }
-                min={0}
-                onValueChange={(value) =>
-                  updateSiteSetting("risingMinReactions", value)
-                }
-                value={selectedSettings.risingMinReactions}
-              />
-            </>
+          {!manageAll && currentPageIsEditable && (
+            <SettingRow label={t("sidepanelCurrentLocation")}>
+              <span className="text-sm font-medium">
+                {activeContext === null ? "" : contextLabel(activeContext)}
+              </span>
+            </SettingRow>
           )}
+          {!manageAll && !currentPageIsEditable && (
+            <div className="p-5 text-sm leading-6 text-muted-foreground sm:px-6">
+              {t("sidepanelStatusUnavailable")}
+            </div>
+          )}
+          {manageAll && selectedScopeKey !== null && (
+            <div className="flex justify-end p-5 sm:px-6">
+              <Button
+                variant="destructive"
+                onClick={() => {
+                  saveSettings(
+                    withoutSourceSettings(
+                      settings,
+                      selectedSite,
+                      selectedScopeKey,
+                    ),
+                  );
+                  setSelectedScopeKey(null);
+                }}
+              >
+                <Trash2 className="size-4" aria-hidden="true" />
+                {t("sidepanelDeleteSourceSettings")}
+              </Button>
+            </div>
+          )}
+          {currentPageIsEditable &&
+            (!manageAll || selectedScopeKey === null) && (
+              <SettingRow label={t("sidepanelSiteEnabled")}>
+                <Switch
+                  checked={filteringEnabled}
+                  onCheckedChange={updateFiltering}
+                />
+              </SettingRow>
+            )}
         </SettingsGroup>
 
-        <SettingsGroup title={t("optionsSectionExclude")}>
-          <div className="p-5 sm:px-6">
-            <label className="text-sm font-medium" htmlFor="excluded-keywords">
-              {t("optionsExcludedKeywords")}
-            </label>
-            <Textarea
-              id="excluded-keywords"
-              className="mt-3"
-              placeholder={t("optionsExcludedKeywordsPlaceholder")}
-              value={selectedSettings.excludedKeywords}
-              onChange={(event) =>
-                updateSiteSetting("excludedKeywords", event.currentTarget.value)
+        {!manageAll && (
+          <Button
+            className="mb-6 w-full"
+            onClick={() => void browser.runtime.openOptionsPage()}
+            variant="outline"
+          >
+            <Settings2 className="size-4" aria-hidden="true" />
+            {t("sidepanelManageSettings")}
+          </Button>
+        )}
+
+        <fieldset
+          className={`m-0 min-w-0 border-0 p-0 disabled:opacity-60 ${
+            manageAll ? "md:col-start-2" : ""
+          }`}
+          disabled={!filteringEnabled || !currentPageIsEditable}
+          hidden={!currentPageIsEditable}
+        >
+          {selectedSettings.kind === "reactions" && (
+            <SettingsGroup title={t("optionsSectionVisible")}>
+              <SettingRow label={t("optionsMediaEnabled")}>
+                <Switch
+                  checked={selectedSettings.mediaEnabled}
+                  onCheckedChange={(value) =>
+                    updateReactionSetting("mediaEnabled", value)
+                  }
+                />
+              </SettingRow>
+              {selectedSettings.mediaEnabled && (
+                <SettingRow label={t("optionsMedia")}>
+                  <Select
+                    value={selectedSettings.mediaMode}
+                    onValueChange={(value) =>
+                      updateReactionSetting(
+                        "mediaMode",
+                        value as ReactionSiteSettings["mediaMode"],
+                      )
+                    }
+                  >
+                    <SelectTrigger className="w-40">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="any">
+                        {t("optionsMediaAny")}
+                      </SelectItem>
+                      <SelectItem value="images">
+                        {t("optionsMediaImages")}
+                      </SelectItem>
+                      <SelectItem value="video">
+                        {t("optionsMediaVideo")}
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                </SettingRow>
+              )}
+            </SettingsGroup>
+          )}
+
+          <SettingsGroup
+            title={reactionFilterLabel}
+            description={
+              selectedSettings.kind === "youtube"
+                ? t("optionsViewsFilterNote")
+                : selectedSite === "misskey"
+                  ? t("optionsReactionsFilterNote")
+                  : t("optionsLikesFilterNote")
+            }
+          >
+            <SettingRow
+              label={
+                selectedSettings.kind === "youtube"
+                  ? t("optionsViewsEnabled")
+                  : selectedSite === "misskey"
+                    ? t("optionsReactionsEnabled")
+                    : t("optionsLikesEnabled")
               }
-            />
-          </div>
-          <SettingRow label={t("optionsHideReposts")}>
-            <Switch
-              checked={selectedSettings.hideReposts}
-              onCheckedChange={(value) =>
-                updateSiteSetting("hideReposts", value)
+            >
+              <Switch
+                checked={reactionFilterEnabled}
+                onCheckedChange={(value) =>
+                  selectedSettings.kind === "youtube"
+                    ? updateYouTubeSetting("minViewsEnabled", value)
+                    : updateReactionSetting("minReactionsEnabled", value)
+                }
+              />
+            </SettingRow>
+            {reactionFilterEnabled && (
+              <>
+                <PeriodSetting
+                  mode={selectedSettings.periodMode}
+                  onModeChange={(value) =>
+                    selectedSettings.kind === "youtube"
+                      ? updateYouTubeSetting("periodMode", value)
+                      : updateReactionSetting("periodMode", value)
+                  }
+                  onUnitChange={(value) =>
+                    selectedSettings.kind === "youtube"
+                      ? updateYouTubeSetting("periodUnit", value)
+                      : updateReactionSetting("periodUnit", value)
+                  }
+                  onValueChange={(value) =>
+                    selectedSettings.kind === "youtube"
+                      ? updateYouTubeSetting("periodValue", value)
+                      : updateReactionSetting("periodValue", value)
+                  }
+                  unit={selectedSettings.periodUnit}
+                  value={selectedSettings.periodValue}
+                />
+                {selectedSettings.kind === "youtube" ? (
+                  <NumberSetting
+                    label={t("optionsMinViews")}
+                    min={0}
+                    onValueChange={(value) =>
+                      updateYouTubeSetting("minViews", value)
+                    }
+                    suffix={t("optionsUnitViews")}
+                    value={selectedSettings.minViews}
+                  />
+                ) : (
+                  <NumberSetting
+                    label={
+                      selectedSite === "misskey"
+                        ? t("optionsMinReactions")
+                        : t("optionsMinLikes")
+                    }
+                    min={0}
+                    onValueChange={(value) =>
+                      updateReactionSetting("minReactions", value)
+                    }
+                    value={selectedSettings.minReactions}
+                  />
+                )}
+              </>
+            )}
+          </SettingsGroup>
+          {reactionFilterEnabled && (
+            <FilterSummary
+              minimum={
+                selectedSettings.kind === "youtube"
+                  ? selectedSettings.minViews
+                  : selectedSettings.minReactions
               }
+              mode={selectedSettings.periodMode}
+              site={selectedSite}
+              unit={selectedSettings.periodUnit}
+              value={selectedSettings.periodValue}
             />
-          </SettingRow>
-        </SettingsGroup>
+          )}
+
+          {selectedSettings.kind === "reactions" && (
+            <SettingsGroup title={t("optionsSectionExclude")}>
+              <SettingRow label={t("optionsKeywordsEnabled")}>
+                <Switch
+                  checked={selectedSettings.excludedKeywordsEnabled}
+                  onCheckedChange={(value) =>
+                    updateReactionSetting("excludedKeywordsEnabled", value)
+                  }
+                />
+              </SettingRow>
+              {selectedSettings.excludedKeywordsEnabled && (
+                <div className="p-5 sm:px-6">
+                  <label
+                    className="text-sm font-medium"
+                    htmlFor="excluded-keywords"
+                  >
+                    {t("optionsExcludedKeywords")}
+                  </label>
+                  <Textarea
+                    id="excluded-keywords"
+                    className="mt-3"
+                    placeholder={t("optionsExcludedKeywordsPlaceholder")}
+                    value={selectedSettings.excludedKeywords}
+                    onChange={(event) =>
+                      updateReactionSetting(
+                        "excludedKeywords",
+                        event.currentTarget.value,
+                      )
+                    }
+                  />
+                </div>
+              )}
+              <SettingRow label={t("optionsHideReposts")}>
+                <Switch
+                  checked={selectedSettings.hideReposts}
+                  onCheckedChange={(value) =>
+                    updateReactionSetting("hideReposts", value)
+                  }
+                />
+              </SettingRow>
+            </SettingsGroup>
+          )}
+        </fieldset>
 
         {status && (
           <p className="mt-5 text-sm text-muted-foreground" aria-live="polite">
             {status}
           </p>
         )}
-        <SettingsDisclosure
-          count={misskeyInstanceCount}
-          title={t("optionsSectionInstances")}
-        >
-          <CardContent className="divide-y p-0">
-            {DEFAULT_MISSKEY_HOSTS.map((host) => (
-              <div
-                className="flex items-center justify-between gap-4 p-5 sm:px-6"
-                key={host}
-              >
-                <span className="text-sm font-medium">{host}</span>
-                <Badge>{t("optionsInstanceDefault")}</Badge>
-              </div>
-            ))}
-            {customMisskeyInstances.map((host) => (
-              <div
-                className="flex items-center justify-between gap-4 p-5 sm:px-6"
-                key={host}
-              >
-                <span className="text-sm font-medium">{host}</span>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => void removeInstance(host, instanceDeps)}
-                >
-                  {t("optionsInstanceRemove")}
-                </Button>
-              </div>
-            ))}
-            <form
-              className="p-5 sm:p-6"
-              onSubmit={(event) => void addMisskeyInstance(event)}
+        {manageAll && (
+          <footer className="mt-7 text-sm md:col-start-2">
+            <a
+              className="text-muted-foreground underline-offset-4 hover:text-foreground hover:underline focus-visible:text-foreground focus-visible:underline"
+              href={REPOSITORY_URL}
+              rel="noreferrer"
+              target="_blank"
             >
-              <div className="flex gap-2">
-                <Input
-                  value={instanceHost}
-                  onChange={(event) =>
-                    setInstanceHost(event.currentTarget.value)
-                  }
-                  placeholder={t("optionsInstancePlaceholder")}
-                  aria-label={t("optionsInstanceInputLabel")}
-                />
-                <Button type="submit" disabled={isSubmittingInstance}>
-                  {t("optionsInstanceAdd")}
-                </Button>
-              </div>
-              {instanceError && (
-                <p className="mt-2 text-sm text-destructive" role="alert">
-                  {instanceError}
-                </p>
-              )}
-              <p className="mt-3 text-sm text-muted-foreground">
-                {t("optionsInstanceNote")}
-              </p>
-            </form>
-          </CardContent>
-        </SettingsDisclosure>
-
-        <footer className="mt-7 text-sm">
-          <a
-            className="text-muted-foreground underline-offset-4 hover:text-foreground hover:underline focus-visible:text-foreground focus-visible:underline"
-            href={REPOSITORY_URL}
-            rel="noreferrer"
-            target="_blank"
-          >
-            {t("optionsRepository")}
-          </a>
-        </footer>
+              {t("optionsRepository")}
+            </a>
+          </footer>
+        )}
       </div>
     </main>
   );
 }
 
 function FilterLegend({
-  reactionFilterLabel,
+  enabled,
+  label,
 }: {
-  reactionFilterLabel: string;
-}): React.JSX.Element {
+  enabled: boolean;
+  label: string;
+}): React.JSX.Element | null {
+  if (!enabled) {
+    return null;
+  }
   return (
     <div className="mt-4 rounded-lg bg-muted/60 px-3 py-2.5">
       <p className="text-xs font-medium text-foreground">
@@ -474,18 +723,7 @@ function FilterLegend({
             style={{ backgroundColor: "rgb(37, 99, 235)" }}
             aria-hidden="true"
           />
-          {reactionFilterLabel}
-        </span>
-        <span className="flex items-center gap-2">
-          <span
-            className="h-5 w-[3px]"
-            style={{
-              backgroundImage:
-                "repeating-linear-gradient(to bottom, rgb(37, 99, 235) 0 4px, transparent 4px 7px)",
-            }}
-            aria-hidden="true"
-          />
-          {t("optionsSectionRisingFilter")}
+          {label}
         </span>
       </div>
     </div>
@@ -494,15 +732,17 @@ function FilterLegend({
 
 function SettingsGroup({
   children,
+  className,
   description,
   title,
 }: {
   children: React.ReactNode;
+  className?: string;
   description?: string;
   title: string;
 }): React.JSX.Element {
   return (
-    <section className="mt-7" aria-label={title}>
+    <section className={`mt-7 ${className ?? ""}`} aria-label={title}>
       <h2 className="mb-3 text-sm font-medium text-muted-foreground">
         {title}
       </h2>
@@ -515,32 +755,6 @@ function SettingsGroup({
         <CardContent className="divide-y p-0">{children}</CardContent>
       </Card>
     </section>
-  );
-}
-
-function SettingsDisclosure({
-  children,
-  count,
-  title,
-}: {
-  children: React.ReactNode;
-  count: number;
-  title: string;
-}): React.JSX.Element {
-  return (
-    <details className="group mt-7">
-      <summary className="flex min-h-12 cursor-pointer list-none items-center justify-between gap-3 rounded-lg px-1 text-sm font-medium text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/30 [&::-webkit-details-marker]:hidden">
-        <span className="flex items-center gap-2">
-          {title}
-          <Badge>{count}</Badge>
-        </span>
-        <ChevronDown
-          className="size-4 shrink-0 transition-transform group-open:rotate-180"
-          aria-hidden="true"
-        />
-      </summary>
-      <Card className="mt-3">{children}</Card>
-    </details>
   );
 }
 
@@ -598,4 +812,141 @@ function NumberSetting({
   );
 }
 
-export { SidepanelApp };
+function PeriodSetting({
+  mode,
+  onModeChange,
+  onUnitChange,
+  onValueChange,
+  unit,
+  value,
+}: {
+  mode: PeriodMode;
+  onModeChange: (value: PeriodMode) => void;
+  onUnitChange: (value: PeriodUnit) => void;
+  onValueChange: (value: number) => void;
+  unit: PeriodUnit;
+  value: number;
+}): React.JSX.Element {
+  return (
+    <fieldset className="m-0 border-0 px-5 pb-5 sm:px-6">
+      <legend className="mb-3 w-full px-0 pb-0 pt-5 text-sm font-medium">
+        {t("optionsPostTiming")}
+      </legend>
+      <div className="space-y-3">
+        <label className="flex cursor-pointer items-center gap-2.5 text-sm">
+          <input
+            className="size-4 accent-primary"
+            type="radio"
+            name="filter-period"
+            value="all"
+            checked={mode === "all"}
+            onChange={() => onModeChange("all")}
+          />
+          {t("optionsAllPosts")}
+        </label>
+        <label className="flex cursor-pointer items-center gap-2.5 text-sm">
+          <input
+            className="size-4 accent-primary"
+            type="radio"
+            name="filter-period"
+            value="limited"
+            checked={mode === "limited"}
+            onChange={() => onModeChange("limited")}
+          />
+          {t("optionsSpecifyPeriod")}
+        </label>
+        {mode === "limited" && (
+          <div className="ml-6 flex items-center gap-2">
+            <Input
+              className="w-24 text-right tabular-nums"
+              type="number"
+              inputMode="numeric"
+              min={1}
+              step={1}
+              value={value}
+              aria-label={t("optionsPeriodValue")}
+              onFocus={(event) => event.currentTarget.select()}
+              onChange={(event) => {
+                const nextValue = event.currentTarget.valueAsNumber;
+                if (Number.isSafeInteger(nextValue)) {
+                  onValueChange(Math.max(1, nextValue));
+                }
+              }}
+            />
+            <Select
+              value={unit}
+              onValueChange={(nextUnit) => onUnitChange(nextUnit as PeriodUnit)}
+            >
+              <SelectTrigger
+                className="min-w-28 flex-1"
+                aria-label={t("optionsPeriodUnit")}
+              >
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="hour">{t("optionsUnitHours")}</SelectItem>
+                <SelectItem value="day">{t("optionsUnitDays")}</SelectItem>
+                <SelectItem value="week">{t("optionsUnitWeeks")}</SelectItem>
+                <SelectItem value="month">{t("optionsUnitMonths")}</SelectItem>
+                <SelectItem value="year">{t("optionsUnitYears")}</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        )}
+      </div>
+    </fieldset>
+  );
+}
+
+function periodUnitLabel(unit: PeriodUnit): string {
+  const labels: Readonly<Record<PeriodUnit, string>> = {
+    hour: t("optionsUnitHours"),
+    day: t("optionsUnitDays"),
+    week: t("optionsUnitWeeks"),
+    month: t("optionsUnitMonths"),
+    year: t("optionsUnitYears"),
+  };
+  return labels[unit];
+}
+
+function FilterSummary({
+  minimum,
+  mode,
+  site,
+  unit,
+  value,
+}: {
+  minimum: number;
+  mode: PeriodMode;
+  site: SiteSettingsKey;
+  unit: PeriodUnit;
+  value: number;
+}): React.JSX.Element {
+  const formattedMinimum = minimum.toLocaleString();
+  const periodArgs = {
+    value: String(value),
+    unit: periodUnitLabel(unit),
+    minimum: formattedMinimum,
+  };
+  let message: string;
+  if (mode === "all") {
+    message =
+      site === "youtube"
+        ? t("optionsFilterSummaryAllViews", { minimum: formattedMinimum })
+        : site === "misskey"
+          ? t("optionsFilterSummaryAllReactions", { minimum: formattedMinimum })
+          : t("optionsFilterSummaryAllLikes", { minimum: formattedMinimum });
+  } else {
+    message =
+      site === "youtube"
+        ? t("optionsFilterSummaryPeriodViews", periodArgs)
+        : site === "misskey"
+          ? t("optionsFilterSummaryPeriodReactions", periodArgs)
+          : t("optionsFilterSummaryPeriodLikes", periodArgs);
+  }
+  return (
+    <p className="mt-3 px-1 text-sm leading-6 text-muted-foreground">
+      {message}
+    </p>
+  );
+}

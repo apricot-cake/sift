@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { render } from "../../test/dom.ts";
-import { misskeyAdapter } from "./misskey.ts";
+import { isMisskeyFilterPage, misskeyAdapter } from "./misskey.ts";
 import { xAdapter } from "./x.ts";
 
 // Misskey のノートには目印が何も無い＝クラス名はビルドごとのハッシュで、
@@ -62,6 +62,89 @@ describe("ノートを見つける", () => {
   });
 });
 
+describe("フィルターを使う画面", () => {
+  it.each([
+    "/search",
+    "/timeline/list/9abc",
+    "/timeline/list/9abc/",
+    "/timeline/antenna/9abc",
+  ])("%s を対象にする", (pathname) => {
+    expect(isMisskeyFilterPage(pathname)).toBe(true);
+  });
+
+  it.each([
+    "/",
+    "/timeline/local",
+    "/timeline/social",
+    "/timeline/global",
+    "/explore",
+    "/channels",
+    "/my/lists",
+    "/my/antennas",
+    "/timeline/list",
+  ])("%s を対象外にする", (pathname) => {
+    expect(isMisskeyFilterPage(pathname)).toBe(false);
+  });
+
+  it("ホームが選択され、ノートがある場合だけルート画面で操作できる", () => {
+    const page = render(`
+      <div>
+        <button class="_button"><i class="ti ti-home"></i><div>ホーム</div></button>
+        <button class="_button"><i class="ti ti-planet"></i><div style="display: none">ローカル</div></button>
+        <button class="_button"><i class="ti ti-whirl"></i><div style="display: none">グローバル</div></button>
+      </div>
+      ${renderNoteRoot().innerHTML}
+    `);
+
+    expect(misskeyAdapter.isTimelineAvailable(page, { pathname: "/" })).toBe(
+      true,
+    );
+  });
+
+  it("ローカルが選択されたルート画面では操作しない", () => {
+    const page = render(`
+      <div>
+        <button class="_button"><i class="ti ti-home"></i><div style="width: 0px">ホーム</div></button>
+        <button class="_button"><i class="ti ti-planet"></i><div>ローカル</div></button>
+        <button class="_button"><i class="ti ti-whirl"></i><div style="display: none">グローバル</div></button>
+      </div>
+      ${renderNoteRoot().innerHTML}
+    `);
+
+    expect(misskeyAdapter.isTimelineAvailable(page, { pathname: "/" })).toBe(
+      false,
+    );
+  });
+
+  it("検索と選択したリストでは切替部品がなくても操作する", () => {
+    const page = render(renderNoteRoot().innerHTML);
+
+    expect(
+      misskeyAdapter.isTimelineAvailable(page, { pathname: "/search" }),
+    ).toBe(true);
+    expect(
+      misskeyAdapter.isTimelineAvailable(page, {
+        pathname: "/timeline/list/9abc",
+      }),
+    ).toBe(true);
+  });
+
+  it("専用リストとアンテナをIDごとの設定へ分ける", () => {
+    const page = render("");
+
+    expect(
+      misskeyAdapter.settingsScope(page, {
+        pathname: "/timeline/list/9abc",
+      }),
+    ).toEqual({ key: "list:9abc", kind: "list" });
+    expect(
+      misskeyAdapter.settingsScope(page, {
+        pathname: "/timeline/antenna/xyz",
+      }),
+    ).toEqual({ key: "antenna:xyz", kind: "antenna" });
+  });
+});
+
 describe("隠される単位", () => {
   // リノートのヘッダと返信先のノートは article の外側に描かれるので、
   // article だけを隠すとそれらが残ってしまう。
@@ -107,16 +190,16 @@ describe("リアクション数を読む", () => {
       `,
     });
 
-    expect(misskeyAdapter.readReactionCount(note)).toBe(20);
+    expect(misskeyAdapter.readMetricCount(note)).toBe(20);
   });
 
   it("誰もリアクションしていないノートには 0 を返す", () => {
-    expect(misskeyAdapter.readReactionCount(renderNote())).toBe(0);
+    expect(misskeyAdapter.readMetricCount(renderNote())).toBe(0);
   });
 });
 
 // 時刻は title 属性に入った現地語の文字なので、読者によって読めたり読めなかったり
-// する。読めなかった場合に落ちるのは「急上昇」だけ。
+// する。読めなくても全期間の判定は動く。
 describe("ノートの時刻を読む", () => {
   it("Date.parse が解釈できる時刻を読む", () => {
     expect(misskeyAdapter.readCreatedAt(renderNote())).toBe(

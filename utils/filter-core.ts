@@ -111,29 +111,34 @@ export function parseMetric(value: unknown): number {
 
 export interface Post {
   mediaMatches: boolean;
-  likeCount: number;
+  metricCount: number;
   createdAtMs: number;
   isRepost: boolean;
   text?: string;
 }
 
+export interface InclusionThreshold {
+  enabled: boolean;
+  minimum: number;
+  maximumAgeHours: number | null;
+}
+
 export interface ClassifyThresholds {
   excludedKeywords: readonly string[];
   hideReposts: boolean;
-  minLikes: number;
-  risingEnabled: boolean;
-  risingMinLikes: number;
-  risingMaxAgeHours: number;
+  inclusion: InclusionThreshold;
+  mediaEnabled: boolean;
 }
 
-export type ClassifyState = "hit" | "rising" | "hidden";
+export type ClassifyState = "visible" | "matched" | "hidden";
 export type ClassifyReason =
   | "no-media"
   | "excluded-keyword"
   | "repost"
   | "indeterminate-metric"
-  | "minimum-likes"
-  | "rising"
+  | "indeterminate-age"
+  | "no-inclusion-filter"
+  | "filter-match"
   | "below-threshold";
 
 export interface ClassifyResult {
@@ -146,7 +151,7 @@ export function classifyPost(
   settings: ClassifyThresholds,
   nowMs = Date.now(),
 ): ClassifyResult {
-  if (!post.mediaMatches) {
+  if (settings.mediaEnabled && !post.mediaMatches) {
     return { state: "hidden", reason: "no-media" };
   }
 
@@ -163,26 +168,32 @@ export function classifyPost(
     return { state: "hidden", reason: "repost" };
   }
 
+  if (!settings.inclusion.enabled) {
+    return { state: "visible", reason: "no-inclusion-filter" };
+  }
+
   // `parseMetric` が判定不能（`Number.NaN`）を返した投稿。誤って隠すと
   // 利用者からは見えず回復できないが、誤って残すのは目に入るだけなので、
-  // ここでは隠さずに残す（#82）。
-  if (!Number.isFinite(post.likeCount)) {
-    return { state: "hit", reason: "indeterminate-metric" };
+  // ここでは線を付けずに残す（#82）。
+  if (!Number.isFinite(post.metricCount)) {
+    return { state: "visible", reason: "indeterminate-metric" };
   }
 
-  if (post.likeCount >= settings.minLikes) {
-    return { state: "hit", reason: "minimum-likes" };
+  if (post.metricCount < settings.inclusion.minimum) {
+    return { state: "hidden", reason: "below-threshold" };
   }
 
-  if (
-    settings.risingEnabled &&
-    Number.isFinite(post.createdAtMs) &&
-    post.likeCount >= settings.risingMinLikes
-  ) {
-    const ageHours = (nowMs - post.createdAtMs) / 3600000;
-    if (ageHours >= -0.1 && ageHours <= settings.risingMaxAgeHours) {
-      return { state: "rising", reason: "rising" };
-    }
+  if (settings.inclusion.maximumAgeHours === null) {
+    return { state: "matched", reason: "filter-match" };
+  }
+
+  if (!Number.isFinite(post.createdAtMs)) {
+    return { state: "visible", reason: "indeterminate-age" };
+  }
+
+  const ageHours = (nowMs - post.createdAtMs) / 3600000;
+  if (ageHours >= -0.1 && ageHours <= settings.inclusion.maximumAgeHours) {
+    return { state: "matched", reason: "filter-match" };
   }
 
   return { state: "hidden", reason: "below-threshold" };

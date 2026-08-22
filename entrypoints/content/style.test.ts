@@ -35,15 +35,12 @@ describe("content のスタイルシート", () => {
     }
   });
 
-  // どちらの強調も状態の属性だけを手掛かりにしているので、どのアダプターが
-  // 印を付けたセルにも当たる。
-  it("それぞれの強調を、状態を持つセルに描く", () => {
-    for (const state of ["hit", "rising"]) {
-      expect(
-        contentStyles.includes(`[data-sift-filter-state="${state}"]::before`),
-        `entrypoints/content/style.css に、${state} のセル自身に当たる規則が無い`,
-      ).toBe(true);
-    }
+  // 強調は状態の属性だけを手掛かりにしているので、どのアダプターが印を付けた
+  // セルにも当たる。
+  it("条件に合うセル自身へ強調を描く", () => {
+    expect(
+      contentStyles.includes('[data-sift-filter-state="matched"]::before'),
+    ).toBe(true);
   });
 });
 

@@ -106,6 +106,10 @@ export const weiboAdapter = Object.freeze({
     return this.hasPostCards(root);
   },
 
+  settingsScope() {
+    return null;
+  },
+
   // 隠される単位は投稿カードそのもの＝外側の `.wbpro-scroller-item` ではない。
   // 仮想スクローラーは自分の非表示を `display: none` で行い、高さの計算はその器
   // が居る前提で組まれているので、器ごと消すとスクロール位置が飛ぶ。
@@ -117,7 +121,7 @@ export const weiboAdapter = Object.freeze({
   // 评论・赞の3つ組）も同じ丸め表記で、実数を持つ要素はどこにも無い＝丸めの誤差
   // は表示桁ぶんで最大 ±500 になる。既定のしきい値500の周辺はまだ丸めが始まらず
   // 実数で出る。
-  readReactionCount(postCard: Element) {
+  readMetricCount(postCard: Element) {
     const count = postCard
       .querySelector(WEIBO_SELECTORS.reactionButton)
       ?.querySelector(WEIBO_SELECTORS.reactionCount);
@@ -137,8 +141,8 @@ export const weiboAdapter = Object.freeze({
   // 詳細ではその `title` が空になり、代わりにリンクの文字が2桁年の絶対時刻に
   // なる＝だから同じリンクに対して両方を順に試す。
   //
-  // 相対表記しか無い画面では読めないものとして NaN を返す。そのとき落ちるのは
-  // 「急上昇」の判定だけで、通常の判定は動く（Bluesky・Misskey と同じ）。
+  // 相対表記しか無い画面では読めないものとして NaN を返す。全期間の判定は動き、
+  // 期間指定では時刻を読めない投稿を隠さない（Bluesky・Misskey と同じ）。
   //
   // 却下した案 — 投稿 URL の末尾（mid）から復元する。Bluesky の record key と
   // 違い、Weibo の mid にタイムスタンプは埋まっておらず、復元の仕様も公開されて

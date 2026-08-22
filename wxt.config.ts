@@ -4,9 +4,8 @@ import { basename, dirname, resolve } from "node:path";
 import tailwindcss from "@tailwindcss/vite";
 import { defineConfig } from "wxt";
 import { devErrorLog } from "./plugins/dev-error-log.ts";
-import { DEFAULT_MISSKEY_HOSTS } from "./utils/default-instances.ts";
 import { DEV_SERVER_HOST, DEV_SERVER_PORT } from "./utils/dev-server.ts";
-import { originForHost } from "./utils/instances.ts";
+import { MISSKEY_HOSTS, originForHost } from "./utils/misskey-hosts.ts";
 
 // 開発ビルドの置き場所。作業ツリーの外にあり、どのツリーでも同じ場所なのは
 // 意図的＝開発専用の Chrome プロファイルは展開済みの置き場を一度だけ読み込む
@@ -106,33 +105,12 @@ export default defineConfig({
     // __MSG_extensionName__ はそう言うために間接の層を1つ増やすだけ。
     name: "Sift",
     description: "__MSG_extensionDescription__",
-    // `scripting` は、WXT の開発モードが content script を登録するために自分で
-    // 足すものでもある。ここで宣言することはもう開発時だけの話ではない＝リリース
-    // ビルドも、読み手が追加した Misskey インスタンスを同じやり方で登録する
-    // ようになったから（utils/instances.ts）。
     // サイドパネルは現在のタブのホストごとに設定を切り替える。この権限が無いと
     // URL が伏せられ、対応する
     // タイムラインでも操作不能と表示される。常時のサイト権限にはしない。
-    permissions: ["activeTab", "storage", "scripting"],
-    // misskey.io だけはビルド時に確定した既定ホスト（#41）。利用者数が突出して
-    // いるため、インストール直後から追加操作なしに content script が動く方を
-    // 選んだ＝#28 の「どのインスタンスも対等」という前提とは非対称になるが、
-    // それは決定の際に受け入れたコストで、実行時要求の仕組み自体は他の
-    // Misskey ホストに残したまま（utils/instances.ts）。
-    //
-    // ここを広げる変更は Chrome にとって権限昇格＝反映した回だけ、拡張機能が
-    // 無効化されて読み手の再承認を挟む（このリポジトリでは一度きり。以後
-    // host_permissions を変えない限り再発しない）。
-    host_permissions: DEFAULT_MISSKEY_HOSTS.map((host) => originForHost(host)),
-    // 読み手が許可するオリジンが、その人の追加したホスト1つより広くなることは
-    // ない＝browser.permissions.request() が一度に訊くオリジンは常に1つで
-    // （utils/instances.ts）、Chrome の実行時のダイアログは、ここのワイルド
-    // カードがどれだけ広くてもそのオリジンに限られる。ここでワイルドカードを
-    // 宣言することが、そもそも任意のホストを要求可能にしている＝もう一方の
-    // host_permissions は、ビルド時に固定された集合で、実行時には増やせない
-    // （#2 の Issue コメント第5節）。上の misskey.io はその固定集合の唯一の
-    // 住人。
-    optional_host_permissions: ["https://*/*"],
+    permissions: ["activeTab", "storage"],
+    // Misskey は misskey.io だけを正式に対応する。実行時に任意ホストの権限は求めない。
+    host_permissions: MISSKEY_HOSTS.map((host) => originForHost(host)),
     action: {
       default_title: "Sift",
     },

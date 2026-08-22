@@ -8,10 +8,8 @@
 // アバターの `_noSelect`・アイコンフォントのクラス `ti ti-*` だけ（#2 の
 // Issue コメント第3節）。以下のセレクタは全部そのどれか。
 //
-// 2026-08-05 に、Sift が耐えるべき幅の両端にある2つの実インスタンスで確認した
-// ＝misskey.io（2025.4.1-io・フォーク）と misskey.design（2026.7.0・upstream に
-// 近い）。リアクション総数・ノートの時刻・メディアの有無を DOM から読み、同じ
-// ノートに対する各インスタンス自身の API の答えと突き合わせた。
+// 対応先は misskey.io。リアクション総数・ノートの時刻・メディアの有無を DOM
+// から読み、同じノートに対する API の答えと突き合わせている。
 import { parseMetric } from "../filter-core.ts";
 import type { ServiceAdapter } from "./types.ts";
 
@@ -26,7 +24,7 @@ const MISSKEY_SELECTORS = Object.freeze({
   postCard: "article",
   createdAt: "time[title]",
   // リアクションのチップも、フッターの返信・リノート・リアクションのボタンも、
-  // どれも `button._button`。見分けているのは下の readReactionCount()。
+  // どれも `button._button`。見分けているのは下の readMetricCount()。
   reactionButton: "button._button",
   icon: 'i[class*="ti-"]',
   // リノートのヘッダのアイコン。フッターのリノートボタンにも出るので、
@@ -44,14 +42,13 @@ const MISSKEY_SELECTORS = Object.freeze({
   postText: "._selectable",
   // クライアントが動く前の、サーバー応答のページに書き込まれている。
   application: 'meta[name="application-name"][content="Misskey"]',
+  timelineHome: "button._button:has(i.ti-home)",
+  timelineLocal: "button._button:has(i.ti-planet)",
+  timelineGlobal: "button._button:has(i.ti-whirl)",
 });
 
-// このページが Misskey のインスタンスかどうか。Sift がそのために作られていない
-// ホスト＝利用者が追加したホストに対して尋ねる。一覧に載っていることは利用者の
-// 主張でしかなく、これはページ自身の答えだから。2026-08-05 に確認したインスタンス
-// はフォークも含めて全部このタグを持っていた（misskey.io・misskey.design・
-// submarin.online・nijimiss.moe・misskey.systems・mi.yumechi.jp）＝クライアントの
-// ビルドではなくサーバーの HTML テンプレート由来のもの。
+// 対応ホストのページが Misskey かどうかを、サーバーの HTML テンプレートにある
+// application-name で確認する。
 export function isMisskeyPage(page: ParentNode): boolean {
   return Boolean(page.querySelector(MISSKEY_SELECTORS.application));
 }
@@ -71,6 +68,37 @@ const EMOJI_TEXT =
   /\p{Extended_Pictographic}|\p{Regional_Indicator}|\uFE0F|\u200D|\s/gu;
 // 絵文字を外したあとのリアクションチップの文字は、その数だけになる。
 const COUNT_ONLY = /^\d[\d,]*$/;
+
+const MISSKEY_SELECTED_TIMELINE_PATH =
+  /^\/timeline\/(?:list\/[^/]+|antenna\/[^/]+)\/?$/;
+
+export function isMisskeyFilterPage(pathname: string): boolean {
+  return (
+    pathname === "/search" || MISSKEY_SELECTED_TIMELINE_PATH.test(pathname)
+  );
+}
+
+function isHomeTimelineSelected(root: ParentNode): boolean {
+  const home = root.querySelector(MISSKEY_SELECTORS.timelineHome);
+  const switcher = home?.parentElement;
+  if (
+    !home ||
+    !switcher?.querySelector(MISSKEY_SELECTORS.timelineLocal) ||
+    !switcher.querySelector(MISSKEY_SELECTORS.timelineGlobal)
+  ) {
+    return false;
+  }
+
+  // Misskey は選択中のタイムライン名だけを表示し、他の名前は inline の
+  // display: none または width: 0 にする。クラス名はビルドごとに変わるため、
+  // 固定のアイコンとこの表示状態を組み合わせてホームを判定する。
+  const label = home.querySelector("i.ti-home + div") as HTMLElement | null;
+  return (
+    label !== null &&
+    label.style.display !== "none" &&
+    label.style.width !== "0px"
+  );
+}
 
 function noteCards(root: ParentNode): Element[] {
   return Array.from(root.querySelectorAll(MISSKEY_SELECTORS.postCard)).filter(
@@ -105,9 +133,8 @@ function isNoteImage(image: Element): boolean {
 // `:` の注釈ではなく `satisfies`。理由は x.ts を参照。
 export const misskeyAdapter = Object.freeze({
   id: "misskey",
-  // 空なのは書き忘れではない＝Misskey のホストは利用者が1つずつ追加し実行時に
-  // 登録される（utils/instances.ts）ので、manifest がビルド時に宣言するものが
-  // 無い。代わりにページをこのアダプターへ振り分けるのは selectAdapter()。
+  // Misskey の固定ホストはアダプターの外で manifest に足すため、ここでは
+  // 重ねて宣言しない。振り分けは selectAdapter() が行う。
   matches: Object.freeze([]),
   // Misskey のリアクションは、いいねと同じく1人1回。ただしインスタンスの規模が
   // X とは桁で違うので、専用のしきい値と比べる（#2 の Issue コメント第4節）。
@@ -121,8 +148,27 @@ export const misskeyAdapter = Object.freeze({
     return noteCards(root).length > 0;
   },
 
-  isTimelineAvailable(root: ParentNode) {
-    return this.hasPostCards(root);
+  isTimelineAvailable(root: ParentNode, page: Pick<Location, "pathname">) {
+    const selectedPage =
+      isMisskeyFilterPage(page.pathname) ||
+      (page.pathname === "/" && isHomeTimelineSelected(root));
+    return selectedPage && this.hasPostCards(root);
+  },
+
+  settingsScope(root: ParentNode, page: Pick<Location, "pathname">) {
+    if (page.pathname === "/" && isHomeTimelineSelected(root)) {
+      return { key: "home", kind: "home" } as const;
+    }
+    const listId = /^\/timeline\/list\/([^/]+)\/?$/.exec(page.pathname)?.[1];
+    if (listId) {
+      return { key: `list:${listId}`, kind: "list" } as const;
+    }
+    const antennaId = /^\/timeline\/antenna\/([^/]+)\/?$/.exec(
+      page.pathname,
+    )?.[1];
+    return antennaId
+      ? ({ key: `antenna:${antennaId}`, kind: "antenna" } as const)
+      : null;
   },
 
   // 隠される単位は article ではなくノートの root＝リノートのヘッダと返信先の
@@ -143,7 +189,7 @@ export const misskeyAdapter = Object.freeze({
   // チップは16種類で打ち切られる。これは Misskey 側の制限で、Sift が広げられる
   // 読み方ではない＝それより多くの種類が付いたノートは、描かれない尾の分だけ
   // ここでは少なく出る。
-  readReactionCount(postCard: Element) {
+  readMetricCount(postCard: Element) {
     let total = 0;
 
     for (const button of postCard.querySelectorAll(
@@ -165,12 +211,11 @@ export const misskeyAdapter = Object.freeze({
   // Misskey は <time datetime> を書き出さない。あるのは要素の title に入った
   // 絶対時刻で、利用者のブラウザが要求するロケール向けに整形されている＝
   // Date.parse が理解できる利用者のページとそうでないページがある。理解できない
-  // 場合も投稿の判定自体は動き、「急上昇」だけが落ちる。
+  // 場合も全期間の判定は動く。期間指定では、時刻を読めない投稿を隠さない。
   //
   // 日が先に来る形式（"5.8.2026, 17:44:21"）だけは、読めも落ちもしない唯一の
   // ケース＝Date.parse が月を先と解釈して何ヶ月も離れた日付を返す。その答えは
-  // 常に急上昇の時間の外に落ちるので、代償は同じ「急上昇」だけで、それ以上には
-  // ならない。
+  // 期間指定では誤って期間外と判定するが、全期間の判定には影響しない。
   readCreatedAt(postCard: Element) {
     const title = postCard
       .querySelector(MISSKEY_SELECTORS.createdAt)

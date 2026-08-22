@@ -2,7 +2,6 @@
 // ビルドスクリプトが node で読めるように拡張機能の API を持たないままにしてある。
 import { browser } from "wxt/browser";
 import { storage } from "wxt/utils/storage";
-import type { InstanceStorage } from "./instances.ts";
 import { defaults, normalizeSettings, type Settings } from "./settings.ts";
 
 // 設定1つにつきキー1つだった頃のビルドが書いたキー＝`defaults` のフィールド名。
@@ -43,19 +42,3 @@ export const settingsItem = storage.defineItem<Settings>("sync:settings", {
   init: async () =>
     normalizeSettings(await browser.storage.sync.get(LEGACY_KEYS)),
 });
-
-// utils/instances.ts がホストの一覧へ届く経路＝専用のキーではなく設定値の
-// フィールド1つにしてあるので、サイドパネルの一覧とそれが動かす登録は同じものを
-// 読んでいる。
-export const instanceStorage: InstanceStorage = {
-  async getInstances() {
-    const settings = normalizeSettings(await settingsItem.getValue());
-    return [...settings.misskeyInstances];
-  },
-  async setInstances(hosts) {
-    const settings = normalizeSettings(await settingsItem.getValue());
-    await settingsItem.setValue(
-      normalizeSettings({ ...settings, misskeyInstances: hosts }),
-    );
-  },
-};

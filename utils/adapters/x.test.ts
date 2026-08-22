@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { render } from "../../test/dom.ts";
-import { xAdapter } from "./x.ts";
+import { isXFollowingTimeline, xAdapter } from "./x.ts";
 
 // X は投稿を、区切り線と周囲の余白も持つセルで包んでいて、投稿そのものはその
 // セルの中の article。
@@ -41,12 +41,57 @@ describe("投稿を見つける", () => {
     expect(xAdapter.hasPostCards(page)).toBe(false);
   });
 
-  it("Home は投稿の描き直し中でも操作できる", () => {
-    const page = render('<div data-testid="primaryColumn"></div>');
+  it("Home のフォロー中は投稿の描き直し中でも操作できる", () => {
+    const page = render(`
+      <div data-testid="ScrollSnap-List" role="tablist">
+        <div role="tab" aria-selected="false">おすすめ</div>
+        <div role="tab" aria-selected="true">フォロー中</div>
+      </div>
+    `);
 
     expect(xAdapter.isTimelineAvailable(page, { pathname: "/home" })).toBe(
       true,
     );
+  });
+
+  it("Home のおすすめは対象外", () => {
+    const page = render(`
+      <div data-testid="ScrollSnap-List" role="tablist">
+        <div role="tab" aria-selected="true">For you</div>
+        <div role="tab" aria-selected="false">Following</div>
+      </div>
+    `);
+
+    expect(isXFollowingTimeline(page)).toBe(false);
+    expect(xAdapter.isTimelineAvailable(page, { pathname: "/home" })).toBe(
+      false,
+    );
+  });
+
+  it("Home のピン留めリストは対象外", () => {
+    const page = render(`
+      <div data-testid="ScrollSnap-List" role="tablist">
+        <div role="tab" aria-selected="false">おすすめ</div>
+        <div role="tab" aria-selected="false">フォロー中</div>
+        <div role="tab" aria-selected="true">開発ニュース</div>
+      </div>
+    `);
+
+    expect(isXFollowingTimeline(page)).toBe(false);
+    expect(xAdapter.isTimelineAvailable(page, { pathname: "/home" })).toBe(
+      false,
+    );
+  });
+
+  it("Home の選択状態をまだ読めない間は対象外", () => {
+    const page = render(`
+      <div data-testid="ScrollSnap-List" role="tablist">
+        <div role="tab">おすすめ</div>
+        <div role="tab">フォロー中</div>
+      </div>
+    `);
+
+    expect(isXFollowingTimeline(page)).toBe(false);
   });
 
   it("投稿のない他の画面は操作できない", () => {
@@ -55,6 +100,25 @@ describe("投稿を見つける", () => {
     expect(xAdapter.isTimelineAvailable(page, { pathname: "/settings" })).toBe(
       false,
     );
+  });
+});
+
+describe("場所別設定の識別", () => {
+  it("フォロー中と専用リストを安定したキーへ分ける", () => {
+    const following = render(`
+      <div data-testid="ScrollSnap-List" role="tablist">
+        <div role="tab" aria-selected="false">おすすめ</div>
+        <div role="tab" aria-selected="true">フォロー中</div>
+      </div>
+    `);
+
+    expect(xAdapter.settingsScope(following, { pathname: "/home" })).toEqual({
+      key: "following",
+      kind: "following",
+    });
+    expect(
+      xAdapter.settingsScope(following, { pathname: "/i/lists/12345" }),
+    ).toEqual({ key: "list:12345", kind: "list" });
   });
 });
 
@@ -90,13 +154,13 @@ describe("いいね数を読む", () => {
       '<button data-testid="like" aria-label="11788 件のいいね。いいねする"><span>1.1万</span></button>',
     );
 
-    expect(xAdapter.readReactionCount(card)).toBe(11788);
+    expect(xAdapter.readMetricCount(card)).toBe(11788);
   });
 
   it("ボタンにラベルが無ければ、画面の文字に落ちる", () => {
     const card = renderPost('<button data-testid="like"> 1,234 </button>');
 
-    expect(xAdapter.readReactionCount(card)).toBe(1234);
+    expect(xAdapter.readMetricCount(card)).toBe(1234);
   });
 
   // 既にいいね済みの投稿はもう一方の testid を持つが、数え方は同じ。
@@ -105,11 +169,11 @@ describe("いいね数を読む", () => {
       '<button data-testid="unlike" aria-label="1,234 件のいいね。いいねを取り消す"></button>',
     );
 
-    expect(xAdapter.readReactionCount(card)).toBe(1234);
+    expect(xAdapter.readMetricCount(card)).toBe(1234);
   });
 
   it("いいねボタン自体が無ければ 0 を返す", () => {
-    expect(xAdapter.readReactionCount(renderPost())).toBe(0);
+    expect(xAdapter.readMetricCount(renderPost())).toBe(0);
   });
 });
 
@@ -124,7 +188,7 @@ describe("投稿時刻を読む", () => {
     );
   });
 
-  // どちらの読み方もできない場合＝投稿の判定自体は動き、「急上昇」だけが落ちる。
+  // どちらの読み方もできない場合も、全期間の判定は動く。
   it("時刻が無ければ NaN を返す", () => {
     expect(xAdapter.readCreatedAt(renderPost())).toBeNaN();
   });

@@ -8,14 +8,14 @@ describe("SITE_MATCHES", () => {
         "https://x.com/*",
         "https://twitter.com/*",
         "https://bsky.app/*",
+        "https://www.youtube.com/*",
       ]),
     );
   });
 
-  // misskey.io だけは、他の Misskey ホストと違ってここに載る（#41）。
-  // misskeyAdapter.matches 自身は空のまま＝他のホストは利用者が実行時に追加する
-  // ので、その静的な一覧には現れない。
-  it("misskey.io を既定の静的ホストとして持つ", () => {
+  // Misskey の対応先は misskey.io だけ。アダプターの宣言とは別に、対応ホストの
+  // 一覧から manifest の配布先へ足す。
+  it("misskey.io を対応ホストとして持つ", () => {
     expect(SITE_MATCHES).toContain("https://misskey.io/*");
   });
 });

@@ -1,7 +1,7 @@
 // サービスごとのアダプターが満たす契約。どれか1つのアダプターから推論させず
 // ここに置いてあるのは、x.ts・bluesky.ts・misskey.ts が互いを基準にするのでは
 // なく、同じ形に対して検査されるようにするため。
-import type { SiteSettingsKey } from "../settings.ts";
+import type { SettingsScope, SiteSettingsKey } from "../settings.ts";
 
 export interface PostMedia {
   hasImage: boolean;
@@ -10,9 +10,8 @@ export interface PostMedia {
 
 export interface ServiceAdapter {
   readonly id: string;
-  // このサービス向けに manifest が登録する match パターン。ビルド時には一度も
-  // 登録されないサービスでは空＝Misskey がそれで、ホストは利用者が1つずつ
-  // 追加する（utils/instances.ts）。
+  // このサービス向けに manifest が登録する match パターン。Misskey の固定
+  // ホストはアダプターの外で manifest に足すため空になる。
   readonly matches: readonly string[];
   // このサービスが読むサイト別設定。
   readonly settingsKey: SiteSettingsKey;
@@ -24,9 +23,16 @@ export interface ServiceAdapter {
     root: ParentNode,
     page: Pick<Location, "pathname">,
   ): boolean;
+  settingsScope(
+    root: ParentNode,
+    page: Pick<Location, "pathname">,
+  ): SettingsScope | null;
+  findEmptyStateContainer?(root: ParentNode): HTMLElement | null;
   // 隠される単位＝投稿カードそのものとは限らない。
   findPostCell(postCard: Element): Element;
-  readReactionCount(postCard: Element): number;
+  // サービスが一覧で公開している主指標。X / Bluesky / Misskey は反応数、
+  // YouTube は再生回数を返す。
+  readMetricCount(postCard: Element): number;
   // 投稿時刻が読めないときは NaN。
   readCreatedAt(postCard: Element): number;
   readMedia(postCard: Element): PostMedia;

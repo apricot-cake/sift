@@ -62,6 +62,31 @@ describe("投稿を見つける", () => {
   });
 });
 
+describe("場所別設定の識別", () => {
+  it("Following・専用リスト・専用フィードを安定したキーへ分ける", () => {
+    const following = render(`
+      <div data-testid="homeScreenFeedTabs-selector-0">
+        <div style="background-color: rgb(0, 106, 255)"></div>
+      </div>
+    `);
+
+    expect(blueskyAdapter.settingsScope(following, { pathname: "/" })).toEqual({
+      key: "following",
+      kind: "following",
+    });
+    expect(
+      blueskyAdapter.settingsScope(following, {
+        pathname: "/profile/alice.test/lists/abc",
+      }),
+    ).toEqual({ key: "list:alice.test:abc", kind: "list" });
+    expect(
+      blueskyAdapter.settingsScope(following, {
+        pathname: "/profile/alice.test/feed/news",
+      }),
+    ).toEqual({ key: "feed:alice.test:news", kind: "feed" });
+  });
+});
+
 // X と違い、Bluesky は区切り線と周囲の余白をカードの内側に持っているので、
 // 外側のセルを探しにいく必要が無い。
 describe("隠される単位", () => {
@@ -76,7 +101,7 @@ describe("いいね数を読む", () => {
   // ボタンの隣の文字は「6万」に丸められていて、しきい値と比べようがない。
   // 正確な数を持っているのは読み上げ用のラベルの方。
   it("読み上げ用ラベルから正確な数を読む", () => {
-    expect(blueskyAdapter.readReactionCount(renderPost())).toBe(63561);
+    expect(blueskyAdapter.readMetricCount(renderPost())).toBe(63561);
   });
 
   it("いいねボタンが無ければ 0 を返す", () => {
@@ -85,7 +110,7 @@ describe("いいね数を読む", () => {
       throw new Error("描画したフィードに行が無い");
     }
 
-    expect(blueskyAdapter.readReactionCount(row)).toBe(0);
+    expect(blueskyAdapter.readMetricCount(row)).toBe(0);
   });
 });
 
@@ -136,7 +161,7 @@ describe("投稿時刻を読む", () => {
     expect(blueskyAdapter.readCreatedAt(card)).toBe(recordKeyTime);
   });
 
-  // どちらの読み方もできない場合＝投稿の判定自体は動き、「急上昇」だけが落ちる。
+  // どちらの読み方もできない場合も、全期間の判定は動く。
   it("キーがレコードキーでないリンクには NaN を返す", () => {
     const card = renderPost(
       '<a href="/profile/example.bsky.social/post/self"></a>',

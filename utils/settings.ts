@@ -1,49 +1,113 @@
 // 設定とは何で、正しい設定とはどういうものか。保管場所は settings-storage.ts。
 import type { ClassifyThresholds } from "./filter-core.ts";
-import { normalizeInstanceHost } from "./instances.ts";
 
 export type MediaMode = "all" | "any" | "images" | "video";
-export type SiteSettingsKey = "x" | "bluesky" | "misskey";
+export type PeriodMode = "all" | "limited";
+export type PeriodUnit = "hour" | "day" | "week" | "month" | "year";
+export type ReactionSiteSettingsKey = "x" | "bluesky" | "misskey";
+export type SiteSettingsKey = ReactionSiteSettingsKey | "youtube";
 
-export interface SiteSettings {
+export interface ReactionSiteSettings {
+  readonly kind: "reactions";
+  readonly mediaEnabled: boolean;
   readonly mediaMode: MediaMode;
+  readonly minReactionsEnabled: boolean;
   readonly minReactions: number;
-  readonly risingEnabled: boolean;
-  readonly risingMinReactions: number;
-  readonly risingMaxAgeHours: number;
+  readonly periodMode: PeriodMode;
+  readonly periodValue: number;
+  readonly periodUnit: PeriodUnit;
+  readonly excludedKeywordsEnabled: boolean;
   readonly excludedKeywords: string;
   readonly hideReposts: boolean;
 }
 
-function defaultSiteSettings(
+export interface YouTubeSiteSettings {
+  readonly kind: "youtube";
+  readonly minViewsEnabled: boolean;
+  readonly minViews: number;
+  readonly periodMode: PeriodMode;
+  readonly periodValue: number;
+  readonly periodUnit: PeriodUnit;
+}
+
+export interface SiteSettingsMap {
+  readonly x: ReactionSiteSettings;
+  readonly bluesky: ReactionSiteSettings;
+  readonly misskey: ReactionSiteSettings;
+  readonly youtube: YouTubeSiteSettings;
+}
+
+export type SiteSettings = SiteSettingsMap[SiteSettingsKey];
+
+export type SettingsScopeKind =
+  | "following"
+  | "home"
+  | "list"
+  | "feed"
+  | "antenna";
+
+export interface SettingsScope {
+  readonly key: string;
+  readonly kind: SettingsScopeKind;
+}
+
+export interface SourceSettingsEntry {
+  readonly site: SiteSettingsKey;
+  readonly label: string;
+  readonly settings: SiteSettings;
+}
+
+export interface Settings {
+  readonly siteEnabled: {
+    readonly defaultEnabled: boolean;
+    readonly hosts: Readonly<Record<string, boolean>>;
+  };
+  readonly siteSettings: SiteSettingsMap;
+  readonly sourceSettings: Readonly<Record<string, SourceSettingsEntry>>;
+}
+
+function defaultReactionSiteSettings(
   minReactions: number,
-  risingMinReactions: number,
-): Readonly<SiteSettings> {
+): Readonly<ReactionSiteSettings> {
   return Object.freeze({
+    kind: "reactions",
+    mediaEnabled: false,
     mediaMode: "all",
+    minReactionsEnabled: true,
     minReactions,
-    risingEnabled: true,
-    risingMinReactions,
-    risingMaxAgeHours: 6,
+    periodMode: "all",
+    periodValue: 6,
+    periodUnit: "hour",
+    excludedKeywordsEnabled: false,
     excludedKeywords: "",
     hideReposts: true,
   });
 }
 
-export const defaults = Object.freeze({
+const defaultYouTubeSiteSettings: Readonly<YouTubeSiteSettings> = Object.freeze(
+  {
+    kind: "youtube",
+    minViewsEnabled: true,
+    minViews: 10000,
+    periodMode: "all",
+    periodValue: 1,
+    periodUnit: "week",
+  },
+);
+
+export const defaults: Readonly<Settings> = Object.freeze({
   siteEnabled: Object.freeze({
-    defaultEnabled: true as boolean,
+    defaultEnabled: true,
     hosts: Object.freeze({}) as Readonly<Record<string, boolean>>,
   }),
   siteSettings: Object.freeze({
-    x: defaultSiteSettings(500, 100),
-    bluesky: defaultSiteSettings(500, 100),
-    misskey: defaultSiteSettings(20, 5),
+    x: defaultReactionSiteSettings(1000),
+    bluesky: defaultReactionSiteSettings(1000),
+    misskey: defaultReactionSiteSettings(20),
+    youtube: defaultYouTubeSiteSettings,
   }),
-  misskeyInstances: Object.freeze([]) as readonly string[],
+  sourceSettings: Object.freeze({}),
 });
-
-export type Settings = typeof defaults;
 
 function clampInteger(
   value: unknown,
@@ -58,20 +122,19 @@ function clampInteger(
   return Math.min(maximum, Math.max(minimum, parsed));
 }
 
-function normalizeInstanceList(value: unknown): string[] {
-  if (!Array.isArray(value)) {
-    return [];
+function normalizeHostname(input: unknown): string | null {
+  if (typeof input !== "string") {
+    return null;
   }
-  const seen = new Set<string>();
-  const hosts: string[] = [];
-  for (const entry of value) {
-    const host = normalizeInstanceHost(entry);
-    if (host !== null && !seen.has(host)) {
-      seen.add(host);
-      hosts.push(host);
-    }
+  const value = input.trim();
+  if (value === "" || value.includes(":") || value.includes("/")) {
+    return null;
   }
-  return hosts;
+  try {
+    return new URL(`https://${value}`).hostname || null;
+  } catch {
+    return null;
+  }
 }
 
 export function normalizeExcludedKeywords(value: unknown): string {
@@ -103,7 +166,7 @@ function normalizeSiteEnabled(
   const rawHosts = objectSource(source.hosts);
   const hosts: Record<string, boolean> = {};
   for (const [entry, enabled] of Object.entries(rawHosts)) {
-    const host = normalizeInstanceHost(entry);
+    const host = normalizeHostname(entry);
     if (host !== null && typeof enabled === "boolean") {
       hosts[host] = enabled;
     }
@@ -120,46 +183,89 @@ function objectSource(value: unknown): Record<string, unknown> {
     : {};
 }
 
-function normalizeSiteSettings(
+function normalizeMediaMode(value: unknown, fallback: MediaMode): MediaMode {
+  if (
+    value === "all" ||
+    value === "any" ||
+    value === "images" ||
+    value === "video"
+  ) {
+    return value;
+  }
+  return fallback;
+}
+
+function normalizePeriodMode(value: unknown, fallback: PeriodMode): PeriodMode {
+  return value === "all" || value === "limited" ? value : fallback;
+}
+
+function normalizePeriodUnit(value: unknown, fallback: PeriodUnit): PeriodUnit {
+  if (
+    value === "hour" ||
+    value === "day" ||
+    value === "week" ||
+    value === "month" ||
+    value === "year"
+  ) {
+    return value;
+  }
+  return fallback;
+}
+
+function normalizeReactionSiteSettings(
   value: unknown,
-  fallback: SiteSettings,
-): SiteSettings {
+  fallback: ReactionSiteSettings,
+): ReactionSiteSettings {
   const source = objectSource(value);
+  const mediaMode = normalizeMediaMode(source.mediaMode, fallback.mediaMode);
+  const legacyLimitedOnly =
+    source.periodMode === undefined &&
+    source.minReactionsEnabled === false &&
+    source.risingEnabled === true;
+  const excludedKeywords =
+    source.excludedKeywords === undefined
+      ? fallback.excludedKeywords
+      : normalizeExcludedKeywords(source.excludedKeywords);
   return {
-    mediaMode:
-      source.mediaMode === "any" ||
-      source.mediaMode === "images" ||
-      source.mediaMode === "video"
-        ? source.mediaMode
-        : source.mediaMode === "all"
-          ? "all"
-          : fallback.mediaMode,
+    kind: "reactions",
+    mediaEnabled:
+      typeof source.mediaEnabled === "boolean"
+        ? source.mediaEnabled
+        : source.mediaMode === undefined
+          ? fallback.mediaEnabled
+          : mediaMode !== "all",
+    mediaMode,
+    minReactionsEnabled:
+      legacyLimitedOnly || source.minReactionsEnabled === true
+        ? true
+        : source.minReactionsEnabled === false
+          ? false
+          : fallback.minReactionsEnabled,
     minReactions: clampInteger(
-      source.minReactions,
+      legacyLimitedOnly ? source.risingMinReactions : source.minReactions,
       fallback.minReactions,
       0,
       1000000000,
     ),
-    risingEnabled:
-      typeof source.risingEnabled === "boolean"
-        ? source.risingEnabled
-        : fallback.risingEnabled,
-    risingMinReactions: clampInteger(
-      source.risingMinReactions,
-      fallback.risingMinReactions,
-      0,
-      1000000000,
+    periodMode: normalizePeriodMode(
+      source.periodMode,
+      legacyLimitedOnly ? "limited" : fallback.periodMode,
     ),
-    risingMaxAgeHours: clampInteger(
-      source.risingMaxAgeHours,
-      fallback.risingMaxAgeHours,
+    periodValue: clampInteger(
+      source.periodValue ??
+        (legacyLimitedOnly ? source.risingMaxAgeHours : undefined),
+      fallback.periodValue,
       1,
-      168,
+      1000,
     ),
-    excludedKeywords:
-      source.excludedKeywords === undefined
-        ? fallback.excludedKeywords
-        : normalizeExcludedKeywords(source.excludedKeywords),
+    periodUnit: normalizePeriodUnit(source.periodUnit, fallback.periodUnit),
+    excludedKeywordsEnabled:
+      typeof source.excludedKeywordsEnabled === "boolean"
+        ? source.excludedKeywordsEnabled
+        : source.excludedKeywords === undefined
+          ? fallback.excludedKeywordsEnabled
+          : excludedKeywords !== "",
+    excludedKeywords,
     hideReposts:
       typeof source.hideReposts === "boolean"
         ? source.hideReposts
@@ -167,10 +273,100 @@ function normalizeSiteSettings(
   };
 }
 
-function legacySiteSettings(
+function normalizeYouTubeSiteSettings(
+  value: unknown,
+  fallback: YouTubeSiteSettings,
+): YouTubeSiteSettings {
+  const source = objectSource(value);
+  const legacyLimitedOnly =
+    source.periodMode === undefined &&
+    source.minViewsEnabled === false &&
+    source.viewRateEnabled === true;
+  return {
+    kind: "youtube",
+    minViewsEnabled:
+      legacyLimitedOnly || source.minViewsEnabled === true
+        ? true
+        : source.minViewsEnabled === false
+          ? false
+          : fallback.minViewsEnabled,
+    minViews: clampInteger(
+      legacyLimitedOnly ? source.minViewsPerDay : source.minViews,
+      fallback.minViews,
+      0,
+      1000000000,
+    ),
+    periodMode: normalizePeriodMode(
+      source.periodMode,
+      legacyLimitedOnly ? "limited" : fallback.periodMode,
+    ),
+    periodValue: clampInteger(
+      source.periodValue,
+      legacyLimitedOnly ? 1 : fallback.periodValue,
+      1,
+      1000,
+    ),
+    periodUnit: normalizePeriodUnit(
+      source.periodUnit,
+      legacyLimitedOnly ? "day" : fallback.periodUnit,
+    ),
+  };
+}
+
+function isSiteSettingsKey(value: unknown): value is SiteSettingsKey {
+  return (
+    value === "x" ||
+    value === "bluesky" ||
+    value === "misskey" ||
+    value === "youtube"
+  );
+}
+
+function sourceSettingsStorageKey(
+  site: SiteSettingsKey,
+  scopeKey: string,
+): string {
+  return `${site}:${scopeKey}`;
+}
+
+function normalizeSourceSettings(
+  value: unknown,
+  siteSettings: SiteSettingsMap,
+): Readonly<Record<string, SourceSettingsEntry>> {
+  const normalized: Record<string, SourceSettingsEntry> = {};
+  for (const [storageKey, rawEntry] of Object.entries(objectSource(value))) {
+    const entry = objectSource(rawEntry);
+    const site = entry.site;
+    const separator = storageKey.indexOf(":");
+    const scopeKey = separator < 0 ? "" : storageKey.slice(separator + 1);
+    if (
+      !isSiteSettingsKey(site) ||
+      storageKey !== sourceSettingsStorageKey(site, scopeKey) ||
+      scopeKey === "" ||
+      scopeKey.length > 500
+    ) {
+      continue;
+    }
+    const label =
+      typeof entry.label === "string" && entry.label.trim() !== ""
+        ? entry.label.trim().slice(0, 100)
+        : scopeKey;
+    const settings =
+      site === "youtube"
+        ? normalizeYouTubeSiteSettings(entry.settings, siteSettings.youtube)
+        : normalizeReactionSiteSettings(
+            entry.settings,
+            siteSettings[site] as ReactionSiteSettings,
+          );
+    normalized[storageKey] = { site, label, settings };
+  }
+  return normalized;
+}
+
+function legacyReactionSiteSettings(
   source: Record<string, unknown>,
-  key: SiteSettingsKey,
-): SiteSettings {
+  key: ReactionSiteSettingsKey,
+): ReactionSiteSettings {
   const defaultsForSite = defaults.siteSettings[key];
   const minReactions =
     key === "misskey"
@@ -184,7 +380,7 @@ function legacySiteSettings(
       : key === "bluesky"
         ? (source.blueskyRisingMinLikes ?? source.risingMinLikes)
         : (source.xRisingMinLikes ?? source.risingMinLikes);
-  return normalizeSiteSettings(
+  return normalizeReactionSiteSettings(
     {
       mediaMode: source.mediaMode,
       minReactions,
@@ -204,28 +400,39 @@ export function normalizeSettings(value: unknown): Settings {
     !Object.hasOwn(source, "siteEnabled") && source.enabled === false
   );
   const storedSiteSettings = objectSource(source.siteSettings);
-  const normalizeFor = (key: SiteSettingsKey): SiteSettings =>
-    normalizeSiteSettings(
+  const normalizeReactionFor = (
+    key: ReactionSiteSettingsKey,
+  ): ReactionSiteSettings =>
+    normalizeReactionSiteSettings(
       storedSiteSettings[key],
-      legacySiteSettings(source, key),
+      legacyReactionSiteSettings(source, key),
     );
+
+  const siteSettings: SiteSettingsMap = {
+    x: normalizeReactionFor("x"),
+    bluesky: normalizeReactionFor("bluesky"),
+    misskey: normalizeReactionFor("misskey"),
+    youtube: normalizeYouTubeSiteSettings(
+      storedSiteSettings.youtube,
+      defaults.siteSettings.youtube,
+    ),
+  };
 
   return {
     siteEnabled: normalizeSiteEnabled(
       source.siteEnabled,
       migratedDefaultEnabled,
     ),
-    siteSettings: {
-      x: normalizeFor("x"),
-      bluesky: normalizeFor("bluesky"),
-      misskey: normalizeFor("misskey"),
-    },
-    misskeyInstances: normalizeInstanceList(source.misskeyInstances),
+    siteSettings,
+    sourceSettings: normalizeSourceSettings(
+      source.sourceSettings,
+      siteSettings,
+    ),
   };
 }
 
 export function isSiteEnabled(settings: Settings, hostname: string): boolean {
-  const host = normalizeInstanceHost(hostname);
+  const host = normalizeHostname(hostname);
   if (host === null) {
     return settings.siteEnabled.defaultEnabled;
   }
@@ -239,7 +446,7 @@ export function withSiteEnabled(
   hostname: string,
   enabled: boolean,
 ): Settings {
-  const host = normalizeInstanceHost(hostname);
+  const host = normalizeHostname(hostname);
   if (host === null) {
     return settings;
   }
@@ -252,11 +459,77 @@ export function withSiteEnabled(
   });
 }
 
-export function settingsFor(
+export function settingsFor<Key extends SiteSettingsKey>(
   settings: Settings,
-  key: SiteSettingsKey,
-): SiteSettings {
+  key: Key,
+  scopeKey?: string | null,
+): SiteSettingsMap[Key] {
+  if (scopeKey) {
+    const entry =
+      settings.sourceSettings[sourceSettingsStorageKey(key, scopeKey)];
+    if (
+      entry?.site === key &&
+      entry.settings.kind === settings.siteSettings[key].kind
+    ) {
+      return entry.settings as SiteSettingsMap[Key];
+    }
+  }
   return settings.siteSettings[key];
+}
+
+export function sourceSettingsFor(
+  settings: Settings,
+  site: SiteSettingsKey,
+): readonly (SourceSettingsEntry & { readonly scopeKey: string })[] {
+  const prefix = `${site}:`;
+  return Object.entries(settings.sourceSettings)
+    .filter(
+      ([storageKey, entry]) =>
+        storageKey.startsWith(prefix) && entry.site === site,
+    )
+    .map(([storageKey, entry]) => ({
+      ...entry,
+      scopeKey: storageKey.slice(prefix.length),
+    }));
+}
+
+export function hasSourceSettings(
+  settings: Settings,
+  site: SiteSettingsKey,
+  scopeKey: string,
+): boolean {
+  return Object.hasOwn(
+    settings.sourceSettings,
+    sourceSettingsStorageKey(site, scopeKey),
+  );
+}
+
+export function withSourceSettings(
+  settings: Settings,
+  site: SiteSettingsKey,
+  scopeKey: string,
+  label: string,
+  siteSettings: SiteSettings,
+): Settings {
+  const storageKey = sourceSettingsStorageKey(site, scopeKey);
+  return normalizeSettings({
+    ...settings,
+    sourceSettings: {
+      ...settings.sourceSettings,
+      [storageKey]: { site, label, settings: siteSettings },
+    },
+  });
+}
+
+export function withoutSourceSettings(
+  settings: Settings,
+  site: SiteSettingsKey,
+  scopeKey: string,
+): Settings {
+  const storageKey = sourceSettingsStorageKey(site, scopeKey);
+  const sourceSettings = { ...settings.sourceSettings };
+  delete sourceSettings[storageKey];
+  return normalizeSettings({ ...settings, sourceSettings });
 }
 
 export function withSiteSettings(
@@ -270,13 +543,48 @@ export function withSiteSettings(
   });
 }
 
+const HOURS_PER_PERIOD_UNIT: Readonly<Record<PeriodUnit, number>> =
+  Object.freeze({
+    hour: 1,
+    day: 24,
+    week: 24 * 7,
+    month: 24 * 30,
+    year: 24 * 365,
+  });
+
+export function periodInHours(value: number, unit: PeriodUnit): number {
+  return value * HOURS_PER_PERIOD_UNIT[unit];
+}
+
 export function thresholdsFor(settings: SiteSettings): ClassifyThresholds {
+  if (settings.kind === "youtube") {
+    return {
+      mediaEnabled: false,
+      excludedKeywords: [],
+      hideReposts: false,
+      inclusion: {
+        enabled: settings.minViewsEnabled,
+        minimum: settings.minViews,
+        maximumAgeHours:
+          settings.periodMode === "all"
+            ? null
+            : periodInHours(settings.periodValue, settings.periodUnit),
+      },
+    };
+  }
   return {
-    excludedKeywords: excludedKeywordsFrom(settings.excludedKeywords),
+    mediaEnabled: settings.mediaEnabled,
+    excludedKeywords: settings.excludedKeywordsEnabled
+      ? excludedKeywordsFrom(settings.excludedKeywords)
+      : [],
     hideReposts: settings.hideReposts,
-    minLikes: settings.minReactions,
-    risingEnabled: settings.risingEnabled,
-    risingMinLikes: settings.risingMinReactions,
-    risingMaxAgeHours: settings.risingMaxAgeHours,
+    inclusion: {
+      enabled: settings.minReactionsEnabled,
+      minimum: settings.minReactions,
+      maximumAgeHours:
+        settings.periodMode === "all"
+          ? null
+          : periodInHours(settings.periodValue, settings.periodUnit),
+    },
   };
 }

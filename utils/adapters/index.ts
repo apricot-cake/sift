@@ -1,15 +1,19 @@
 // Sift が読み方を知っているサービス。1サービスにつき1アダプターで、content
 // script は起動したページに対してそのうち1つだけを選び、あとはどれを選んだかに
 // 関わらず同じループを回す。
+
+import { MISSKEY_HOSTS } from "../misskey-hosts.ts";
 import { blueskyAdapter } from "./bluesky.ts";
 import { isMisskeyPage, misskeyAdapter } from "./misskey.ts";
 import type { ServiceAdapter } from "./types.ts";
 import { xAdapter } from "./x.ts";
+import { youtubeAdapter } from "./youtube.ts";
 
 export const ADAPTERS: readonly ServiceAdapter[] = Object.freeze([
   xAdapter,
   blueskyAdapter,
   misskeyAdapter,
+  youtubeAdapter,
 ]);
 
 // Chrome の match パターンのホスト部＝"*" なら任意、"*.example.com" ならその
@@ -32,12 +36,9 @@ export function hostMatchesPattern(pattern: string, hostname: string): boolean {
 // 既にそういうページから遠ざけているので、これは同じことを二度目に成り立たせる
 // ためのもの＝manifest を通らない注入経路のために要る。
 //
-// ホストがビルド時に分かっているサービスは、ホストだけで決まる。Misskey は
-// そうではなく、利用者が1つずつ追加し、そもそも Sift がそのページで動いている
-// 理由がそのホスト向けに行った登録そのもの（utils/instances.ts）。それでも
-// ページ側が Misskey だと名乗るまで Misskey として読まない＝間違って追加された
-// ホストは、そのために書かれたのではないセレクタで読まれるのではなく、何も
-// 起きないで済む。
+// ホストがアダプターに宣言されているサービスは、ホストだけで決まる。
+// Misskey は固定ホストをアダプターの外で manifest に足すため、対応ホストかつ
+// ページ自身が Misskey と名乗る場合だけ振り分ける。
 export function selectAdapter(
   hostname: string,
   page: ParentNode,
@@ -49,5 +50,7 @@ export function selectAdapter(
     return declared;
   }
 
-  return isMisskeyPage(page) ? misskeyAdapter : null;
+  return MISSKEY_HOSTS.includes(hostname) && isMisskeyPage(page)
+    ? misskeyAdapter
+    : null;
 }

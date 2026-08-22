@@ -5,6 +5,10 @@ import type { ServiceAdapter } from "../../utils/adapters/types.ts";
 import { DEV_CONTENT_STARTED, DEV_FILTER_PASS } from "../../utils/dev-link.ts";
 import { startUncaughtReporting } from "../../utils/error-log.ts";
 import {
+  type FilterContextResponse,
+  isFilterContextRequest,
+} from "../../utils/filter-context.ts";
+import {
   type ClassifyReason,
   type ClassifyState,
   classifyPost,
@@ -68,9 +72,20 @@ export function startContentRuntime(
 
   // 画像と動画のどちらを絞り込むかは読み手の設定なので、2つはアダプターから
   // 別々に届き、ここで畳み合わされる。`all` は本文だけの投稿も通す。
-  function matchesMediaFilter(postCard: Element): boolean {
+  function selectedSiteSettings() {
+    const scope = adapter.settingsScope(document, location);
+    return settingsFor(settings, adapter.settingsKey, scope?.key);
+  }
+
+  function matchesMediaFilter(
+    postCard: Element,
+    siteSettings: ReturnType<typeof selectedSiteSettings>,
+  ): boolean {
     const { hasImage, hasVideo } = adapter.readMedia(postCard);
-    const mediaMode = settingsFor(settings, adapter.settingsKey).mediaMode;
+    if (siteSettings.kind === "youtube" || !siteSettings.mediaEnabled) {
+      return true;
+    }
+    const mediaMode = siteSettings.mediaMode;
     if (mediaMode === "all") {
       return true;
     }
@@ -105,7 +120,11 @@ export function startContentRuntime(
     const current = document.querySelector<HTMLElement>(
       "[data-sift-empty-state]",
     );
-    const container = cells[0]?.parentElement ?? document.body;
+    const container =
+      adapter.findEmptyStateContainer?.(document) ??
+      cells[0]?.parentElement ??
+      document.querySelector<HTMLElement>("main") ??
+      document.body;
     if (current?.parentElement === container) {
       return;
     }
@@ -187,13 +206,26 @@ export function startContentRuntime(
       return;
     }
 
-    const postCards = adapter.getPostCards(document);
-    if (postCards.length === 0) {
+    const scope = adapter.settingsScope(document, location);
+    const timelineAvailable = adapter.isTimelineAvailable(document, location);
+    if (!timelineAvailable && scope === null) {
       clearTimelineState();
       return;
     }
 
-    const counts = { hit: 0, rising: 0, hidden: 0 };
+    const postCards = adapter.getPostCards(document);
+    if (postCards.length === 0) {
+      clearAllFiltering();
+      if (filteringEnabled()) {
+        showEmptyState([]);
+      } else {
+        clearEmptyState();
+      }
+      return;
+    }
+
+    const counts = { visible: 0, matched: 0, hidden: 0 };
+    const siteSettings = selectedSiteSettings();
     const updates: {
       cell: HTMLElement;
       state: ClassifyState | null;
@@ -212,13 +244,13 @@ export function startContentRuntime(
 
       const result = classifyPost(
         {
-          mediaMatches: matchesMediaFilter(postCard),
-          likeCount: adapter.readReactionCount(postCard),
+          mediaMatches: matchesMediaFilter(postCard, siteSettings),
+          metricCount: adapter.readMetricCount(postCard),
           createdAtMs: adapter.readCreatedAt(postCard),
           isRepost: adapter.readIsRepost(postCard),
           text: adapter.readText(postCard),
         },
-        thresholdsFor(settingsFor(settings, adapter.settingsKey)),
+        thresholdsFor(siteSettings),
       );
 
       updates.push({ cell, state: result.state, reason: result.reason });
@@ -281,7 +313,7 @@ export function startContentRuntime(
   }
 
   function handleRoute(): void {
-    if (adapter.hasPostCards(document)) {
+    if (adapter.isTimelineAvailable(document, location)) {
       scheduleFilter();
     } else {
       clearTimelineState();
@@ -304,7 +336,20 @@ export function startContentRuntime(
     void settingsItem.setValue(settings).catch(() => {});
   }
 
-  function handleTimelineControlMessage(message: unknown): undefined {
+  async function handleTimelineControlMessage(
+    message: unknown,
+  ): Promise<FilterContextResponse | undefined> {
+    if (isFilterContextRequest(message)) {
+      const scope = adapter.isTimelineAvailable(document, location)
+        ? adapter.settingsScope(document, location)
+        : null;
+      return {
+        site: adapter.settingsKey,
+        scopeKey: scope?.key ?? null,
+        scopeKind: scope?.kind ?? null,
+        pageTitle: document.title,
+      };
+    }
     if (!isTimelineControlRequest(message)) {
       return undefined;
     }
@@ -410,9 +455,7 @@ export default defineContentScript({
     runtimeGlobal[runtimeSymbol]?.dispose();
     runtimeGlobal[runtimeSymbol] = startContentRuntime(
       ctx,
-      // ホストだけでなくページ自身も渡す＝Sift 向けに作られていないホストは、
-      // 読み手が Misskey のインスタンスとして追加したものであり、それを確かめる
-      // のはページの方（utils/adapters/index.ts）。
+      // Misskey はホストをアダプターの外で登録するため、振り分けにページ自身も渡す。
       selectAdapter(location.hostname, document),
     );
 

@@ -68,10 +68,7 @@ assert.deepEqual(
   generatedManifest.host_permissions,
   declaredManifest.host_permissions,
 );
-assert.deepEqual(
-  generatedManifest.optional_host_permissions,
-  declaredManifest.optional_host_permissions,
-);
+assert.equal(generatedManifest.optional_host_permissions, undefined);
 
 // バージョンがあるのは package.json だけ。ここへは WXT が写す。
 assert.equal(generatedManifest.version, packageJson.version);
@@ -125,9 +122,10 @@ if (target === "firefox") {
   assert.ok(generatedManifest.permissions.includes("sidePanel"));
 }
 
-// 設定専用のページは持たない。インスタンスの追加を含む操作はサイドパネルに
-// まとめている。
-assert.equal(generatedManifest.options_ui, undefined);
+// サイドパネルは現在のページだけを調整する。他のサイトや保存済みページの設定は
+// ブラウザの拡張機能設定からも開ける専用ページに分ける。
+assert.equal(generatedManifest.options_ui.page, "options.html");
+assert.equal(generatedManifest.options_ui.open_in_tab, true);
 
 // 2つの対象が本当に違う唯一の項目＝Chrome MV3 は service worker を取り、
 // Firefox MV3 はスクリプトの一覧を取る。どちらも同じ entrypoints/background.ts

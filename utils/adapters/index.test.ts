@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { render } from "../../test/dom.ts";
-import { DEFAULT_MISSKEY_HOSTS } from "../default-instances.ts";
-import { originForHost } from "../instances.ts";
+import { MISSKEY_HOSTS, originForHost } from "../misskey-hosts.ts";
 import { SITE_MATCHES } from "../site-matches.ts";
 import { blueskyAdapter } from "./bluesky.ts";
 import { ADAPTERS, hostMatchesPattern, selectAdapter } from "./index.ts";
@@ -42,11 +41,10 @@ describe("ページに対してアダプターを選ぶ", () => {
     expect(selectAdapter("mobile.x.com", otherPage)).toBeNull();
   });
 
-  // Misskey は宣言されたホストを持たない＝ページ自身が名乗ったときに Misskey
-  // として読む。利用者が追加したホストについて手に入る主張はそれだけ。
-  it("ページが自分で名乗ったときだけ Misskey として読む", () => {
-    expect(selectAdapter("misskey.example", misskeyPage)).toBe(misskeyAdapter);
-    expect(selectAdapter("misskey.example", otherPage)).toBeNull();
+  it("対応ホストが自分で名乗ったときだけ Misskey として読む", () => {
+    expect(selectAdapter("misskey.io", misskeyPage)).toBe(misskeyAdapter);
+    expect(selectAdapter("misskey.io", otherPage)).toBeNull();
+    expect(selectAdapter("misskey.example", misskeyPage)).toBeNull();
   });
 
   it("宣言済みのサービスは、ページが何と名乗っても Misskey として読み直さない", () => {
@@ -68,9 +66,7 @@ describe("isMisskeyPage", () => {
     ).toBe(false);
   });
 
-  // manifest がビルド時に宣言するものは無い＝ホストは利用者のもので、1つずつ
-  // 追加され、実行時に登録される。
-  it("ホストを宣言しない Misskey アダプターへの唯一の経路になっている", () => {
+  it("固定ホストを外から受け取る Misskey アダプターへの判定経路になっている", () => {
     expect(misskeyAdapter.matches).toEqual([]);
   });
 });
@@ -94,13 +90,11 @@ describe("hostMatchesPattern", () => {
 });
 
 describe("manifest が登録するサイト", () => {
-  // Sift が読めないサービスは読み込み先にしてはならないし、対応する登録の無い
-  // アダプターは一度も動かない。misskey.io だけは例外＝ビルド時の既定ホスト
-  // （#41）として、アダプターとは別に DEFAULT_MISSKEY_HOSTS から足される。
+  // Sift が読めないサービスは読み込み先にしない。Misskey は固定ホストを別に足す。
   it("二度目の宣言ではなくアダプターと既定ホストから導出されている", () => {
     expect(SITE_MATCHES).toEqual([
       ...ADAPTERS.flatMap((adapter) => [...adapter.matches]),
-      ...DEFAULT_MISSKEY_HOSTS.map((host) => originForHost(host)),
+      ...MISSKEY_HOSTS.map((host) => originForHost(host)),
     ]);
   });
 });

@@ -47,7 +47,11 @@ export interface DevContentStartedMessage {
 }
 export interface DevFilterPassMessage {
   type: typeof DEV_FILTER_PASS;
-  counts: { hit: number; rising: number; hidden: number };
+  counts: {
+    visible: number;
+    matched: number;
+    hidden: number;
+  };
 }
 export type DevLinkMessage = DevContentStartedMessage | DevFilterPassMessage;
 

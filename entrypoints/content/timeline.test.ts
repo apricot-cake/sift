@@ -1,7 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fakeBrowser } from "wxt/testing/fake-browser";
 import { ContentScriptContext } from "wxt/utils/content-script-context";
+import { blueskyAdapter } from "../../utils/adapters/bluesky.ts";
 import { xAdapter } from "../../utils/adapters/x.ts";
+import { youtubeAdapter } from "../../utils/adapters/youtube.ts";
 import { OPEN_LIVE_CONTROLS } from "../../utils/live-controls.ts";
 import { TIMELINE_CONTROL } from "../../utils/timeline-controls.ts";
 import { startContentRuntime } from "./index.ts";
@@ -10,7 +12,7 @@ const timelineMarkup = `
   <div data-testid="cellInnerDiv">
     <article data-testid="tweet">
       <div data-testid="tweetPhoto"></div>
-      <button data-testid="like" aria-label="900 件のいいね"></button>
+      <button data-testid="like" aria-label="1,100 件のいいね"></button>
       <time datetime="2026-08-01T12:00:00.000Z"></time>
     </article>
   </div>
@@ -27,6 +29,7 @@ const hiddenTimelineMarkup = `
 
 beforeEach(() => {
   fakeBrowser.reset();
+  history.replaceState({}, "", "/");
   document.body.innerHTML = "";
 });
 
@@ -94,6 +97,24 @@ describe("タイムラインのフィルター", () => {
     runtime.dispose();
   });
 
+  it("Blueskyの空の専用リストでは画面本体に空状態を出す", async () => {
+    history.replaceState({}, "", "/profile/alice.test/lists/abc");
+    document.body.innerHTML = '<div data-testid="homeScreen"></div>';
+    const runtime = startContentRuntime(
+      new ContentScriptContext("sift-test"),
+      blueskyAdapter,
+    );
+
+    await vi.waitFor(() => {
+      expect(document.querySelector("[data-sift-empty-state]")).not.toBeNull();
+    });
+    expect(
+      document.querySelector("[data-sift-empty-state]")?.parentElement,
+    ).toBe(document.querySelector('[data-testid="homeScreen"]'));
+
+    runtime.dispose();
+  });
+
   it("表示対象の投稿が加わると空状態を消す", async () => {
     document.body.innerHTML = hiddenTimelineMarkup;
     const runtime = startContentRuntime(
@@ -110,7 +131,9 @@ describe("タイムラインのフィルター", () => {
     await vi.waitFor(() => {
       expect(document.querySelector("[data-sift-empty-state]")).toBeNull();
       expect(
-        document.querySelector<HTMLElement>('[data-sift-filter-state="hit"]'),
+        document.querySelector<HTMLElement>(
+          '[data-sift-filter-state="matched"]',
+        ),
       ).not.toBeNull();
     });
 
@@ -157,6 +180,35 @@ describe("タイムラインのフィルター", () => {
 
     await vi.waitFor(() => {
       expect(document.querySelector("[data-sift-empty-state]")).toBeNull();
+      expect(document.querySelector("[data-sift-filter-state]")).toBeNull();
+    });
+
+    runtime.dispose();
+  });
+
+  it("YouTubeの対象外ページへ移るとフィルター状態を消す", async () => {
+    history.replaceState({}, "", "/results");
+    document.body.innerHTML = `
+      <ytd-video-renderer>
+        <div id="metadata-line">
+          <span>1万回視聴</span>
+          <span>1日前</span>
+        </div>
+      </ytd-video-renderer>
+    `;
+    const runtime = startContentRuntime(
+      new ContentScriptContext("sift-test"),
+      youtubeAdapter,
+    );
+
+    await vi.waitFor(() => {
+      expect(document.querySelector("[data-sift-filter-state]")).not.toBeNull();
+    });
+
+    history.pushState({}, "", "/");
+    document.body.append(document.createElement("div"));
+
+    await vi.waitFor(() => {
       expect(document.querySelector("[data-sift-filter-state]")).toBeNull();
     });
 

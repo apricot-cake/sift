@@ -15,28 +15,13 @@ import {
 } from "../utils/dev-server.ts";
 import { drainErrorLog } from "../utils/error-drain.ts";
 import { errorLogItem, startUncaughtReporting } from "../utils/error-log.ts";
-import {
-  handlePermissionsAdded,
-  handlePermissionsRemoved,
-  type InstanceDeps,
-  reconcileInstances,
-} from "../utils/instances.ts";
 import { isOpenLiveControlsRequest } from "../utils/live-controls.ts";
-import { instanceStorage } from "../utils/settings-storage.ts";
 import { TIMELINE_CONTROL } from "../utils/timeline-controls.ts";
 
-// このファイルは3つの仕事を持っている。Misskey インスタンスの登録を正しく
-// 保つ仕事はどのビルドでも走る。開発時のエラーログの送り出しと dev-link の
+// このファイルは、開発時のエラーログの送り出しと dev-link の
 // 追跡は開発ビルドでしか走らない＝Chrome がその情報を見せる相手は、画面を
 // 見ている人だけで、他の誰でもないから。
 //
-//   - browser.permissions は拡張機能の外から取り消されうる（読み手が
-//     chrome://extensions で消す、Chrome 自身が取り消す）ので、どのビルドも
-//     起動時に Misskey インスタンスの登録を実際の許可へ合わせ直し、動いている
-//     間は permissions.onRemoved を聞き続ける（下の、__SIFT_DEV__ の外側の
-//     コード）。permissions.onAdded も聞くが、これは見た目ほど鏡像ではない＝
-//     addInstance() がページの終了で完了処理を失った場合の受け皿
-//     （utils/instances.ts）。
 //   - 捕まえ損ねた例外が届く先は chrome://extensions のエラー欄だけで、そこは
 //     Chrome の外からは誰にも読めない。どの画面もそれを
 //     browser.storage.local の環状バッファへ書き（utils/error-log.ts）、この
@@ -49,9 +34,7 @@ import { TIMELINE_CONTROL } from "../utils/timeline-controls.ts";
 // なぜリリースビルドもこのファイルを持っているか＝`__SIFT_DEV__` はビルド時に
 // 定数へ畳まれるので（wxt.config.ts が Vite の command で決める）、リリース
 // ビルドではこの門より下は全部が到達不能になって落ちる。出荷されるのは
-// Misskey インスタンスの合わせ直しと、その permissions.onRemoved のリスナー＝
-// Chrome が worker を起こす理由になる本物のリスナー。加えて、開発専用の半分に
-// ついては中身の無い worker。エラー報告の「集める側」はそれとは無関係に
+// 開発専用の半分については中身の無い worker。エラー報告の「集める側」はそれとは無関係に
 // どのビルドでも生きている＝日常のブラウザでもバッファは埋まり続け、ただ開発
 // ビルドがそれを読むまで送る相手がいないだけ。
 //
@@ -72,36 +55,9 @@ const devLinkReloadItem = storage.defineItem<string>(
 );
 
 export default defineBackground(() => {
-  const instanceDeps: InstanceDeps = {
-    permissions: browser.permissions,
-    scripting: browser.scripting,
-    storage: instanceStorage,
-  };
-
-  // 設定と、Chrome が実際にまだ許可しているものとのずれを直す＝それが起きる
-  // 3つの経路は utils/instances.ts を参照。best-effort であり、ここで失敗
-  // しても次の起動でもう一度機会がある。
-  reconcileInstances(instanceDeps).catch(() => {});
-
   const sidePanel = (browser as { sidePanel?: typeof browser.sidePanel })
     .sidePanel;
   void sidePanel?.setPanelBehavior({ openPanelOnActionClick: true });
-
-  // 読み手は removeInstance() を丸ごと迂回して、chrome://extensions から直接
-  // Misskey のオリジンを取り消せる。動いている間にそれを Sift が聞く、ビルドに
-  // 依らない唯一の経路がこれ。聞けるだけ動いていなかった場合は、上の
-  // reconcileInstances() が埋める。
-  browser.permissions.onRemoved.addListener((removed) => {
-    handlePermissionsRemoved(removed, instanceDeps).catch(() => {});
-  });
-
-  // addInstance() の受け皿。権限を許可した後に拡張機能の画面が終了しても、
-  // content script の登録とホストの保管を取りこぼさない。このリスナーが反応
-  // するのは Chrome が実際に行った許可であって、呼び出し元が答えを聞くまで
-  // 生き延びたかどうかではない。
-  browser.permissions.onAdded.addListener((added) => {
-    handlePermissionsAdded(added, instanceDeps).catch(() => {});
-  });
 
   browser.commands.onCommand.addListener((command, tab) => {
     if (command !== "toggle-filtering" || tab?.id === undefined) {
@@ -188,8 +144,10 @@ export default defineBackground(() => {
         note(`content script が ${message.page} で起動した`);
       }
       if (message?.type === DEV_FILTER_PASS) {
-        const { hit, rising, hidden } = message.counts;
-        note(`フィルタ一巡: 表示 ${hit}・急上昇 ${rising}・非表示 ${hidden}`);
+        const { visible, matched, hidden } = message.counts;
+        note(
+          `フィルタ一巡: そのまま ${visible}・条件一致 ${matched}・非表示 ${hidden}`,
+        );
       }
     },
   );

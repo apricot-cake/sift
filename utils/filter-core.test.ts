@@ -1,12 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { classifyPost, parseMetric } from "./filter-core.ts";
+import {
+  type ClassifyThresholds,
+  classifyPost,
+  parseMetric,
+} from "./filter-core.ts";
 
-const settings = {
+const settings: ClassifyThresholds = {
   excludedKeywords: [],
-  minLikes: 500,
-  risingEnabled: true,
-  risingMinLikes: 100,
-  risingMaxAgeHours: 6,
+  mediaEnabled: false,
+  inclusion: { enabled: true, minimum: 500, maximumAgeHours: null },
   hideReposts: true,
 };
 
@@ -59,107 +61,124 @@ describe("parseMetric", () => {
     expect(parseMetric("11788 Likes. Like")).toBe(11788);
   });
 
-  it("2文字以上の綴りは、頭1文字だけの単位に飲まれない（語境界）", () => {
-    // ベトナム語の Tr（100万）。頭の T だけを見て判定不能を返すと壊れる。
+  it("2文字以上の綴りは、頭1文字だけの単位に飲まれない", () => {
     expect(parseMetric("1.2Tr")).toBe(1200000);
   });
 
-  it("単位だと分かっているが桁が決まらない綴りは判定不能（NaN）を返す", () => {
-    // T はベトナム語では10億、デンマーク語では1,000で、ページの言語を
-    // 読まない限り決められない。
+  it("単位だと分かっているが桁が決まらない綴りは判定不能にする", () => {
     expect(Number.isNaN(parseMetric("1,2 T"))).toBe(true);
-  });
-
-  it("1文字の B / M は英語の読みのまま据え置く（#82 の残）", () => {
-    // トルコ語の B は本来1,000（bin）だが、英語の10億として読む。
-    expect(parseMetric("1,2 B")).toBe(1200000000);
-    // インドネシア語の M は本来10億（miliar）だが、英語の100万として読む。
-    expect(parseMetric("1,2 M")).toBe(1200000);
   });
 });
 
 describe("classifyPost", () => {
-  it("最低の反応数に届いた投稿は残す", () => {
+  it("全期間では投稿時期に関係なく最低値で判定する", () => {
     expect(
       classifyPost(
         {
           mediaMatches: true,
-          likeCount: 500,
-          createdAtMs: now - 24 * 3600000,
+          metricCount: 500,
+          createdAtMs: now - 5 * 365 * 24 * 3600000,
           isRepost: false,
         },
         settings,
         now,
       ),
-    ).toEqual({ state: "hit", reason: "minimum-likes" });
+    ).toEqual({ state: "matched", reason: "filter-match" });
   });
 
-  it("新しい投稿は、低い方の急上昇の数に届けば残す", () => {
+  it("期間を指定すると期間と最低値を両方満たす投稿を残す", () => {
     expect(
       classifyPost(
         {
           mediaMatches: true,
-          likeCount: 120,
+          metricCount: 500,
           createdAtMs: now - 2 * 3600000,
           isRepost: false,
         },
-        settings,
+        {
+          ...settings,
+          inclusion: { ...settings.inclusion, maximumAgeHours: 6 },
+        },
         now,
       ),
-    ).toEqual({ state: "rising", reason: "rising" });
+    ).toEqual({ state: "matched", reason: "filter-match" });
   });
 
-  it("同じ投稿でも、急上昇の時間を過ぎたら隠す", () => {
+  it("指定した期間を過ぎた投稿は最低値を満たしても隠す", () => {
     expect(
       classifyPost(
         {
           mediaMatches: true,
-          likeCount: 120,
+          metricCount: 500,
           createdAtMs: now - 7 * 3600000,
           isRepost: false,
         },
-        settings,
+        {
+          ...settings,
+          inclusion: { ...settings.inclusion, maximumAgeHours: 6 },
+        },
         now,
       ),
     ).toEqual({ state: "hidden", reason: "below-threshold" });
   });
 
-  it("メディアの条件を満たさない投稿は、数がいくつでも隠す", () => {
+  it("期間を指定して投稿時期を読めない場合は線を付けずに残す", () => {
+    expect(
+      classifyPost(
+        {
+          mediaMatches: true,
+          metricCount: 500,
+          createdAtMs: Number.NaN,
+          isRepost: false,
+        },
+        {
+          ...settings,
+          inclusion: { ...settings.inclusion, maximumAgeHours: 6 },
+        },
+        now,
+      ),
+    ).toEqual({ state: "visible", reason: "indeterminate-age" });
+  });
+
+  it("反応数フィルターがオフなら線を付けずに表示する", () => {
+    expect(
+      classifyPost(
+        {
+          mediaMatches: true,
+          metricCount: 0,
+          createdAtMs: Number.NaN,
+          isRepost: false,
+        },
+        {
+          ...settings,
+          inclusion: { ...settings.inclusion, enabled: false },
+        },
+        now,
+      ),
+    ).toEqual({ state: "visible", reason: "no-inclusion-filter" });
+  });
+
+  it("メディア条件がオンのときだけ一致しない投稿を隠す", () => {
     expect(
       classifyPost(
         {
           mediaMatches: false,
-          likeCount: 1000,
+          metricCount: 1000,
           createdAtMs: now,
           isRepost: false,
         },
-        settings,
+        { ...settings, mediaEnabled: true },
         now,
       ),
     ).toEqual({ state: "hidden", reason: "no-media" });
   });
 
-  it("設定が入っている間、リポストは隠す", () => {
+  it("除外キーワードを含む投稿を隠す", () => {
     expect(
       classifyPost(
         {
           mediaMatches: true,
-          likeCount: 1000,
-          createdAtMs: now,
-          isRepost: true,
-        },
-        settings,
-        now,
-      ),
-    ).toEqual({ state: "hidden", reason: "repost" });
-  });
-
-  it("除外キーワードを本文またはハッシュタグに含む投稿を隠す", () => {
-    expect(
-      classifyPost(
-        {
-          mediaMatches: true,
-          likeCount: 1000,
+          metricCount: 1000,
           createdAtMs: now,
           isRepost: false,
           text: "New trailer #Spoiler",
@@ -170,42 +189,12 @@ describe("classifyPost", () => {
     ).toEqual({ state: "hidden", reason: "excluded-keyword" });
   });
 
-  it("反応数が判定不能（NaN）な投稿は隠さずに残す", () => {
+  it("設定が入っている間、リポストは隠す", () => {
     expect(
       classifyPost(
         {
           mediaMatches: true,
-          likeCount: Number.NaN,
-          createdAtMs: now,
-          isRepost: false,
-        },
-        settings,
-        now,
-      ),
-    ).toEqual({ state: "hit", reason: "indeterminate-metric" });
-  });
-
-  it("反応数が判定不能でも、メディアの条件を満たさない投稿は隠す", () => {
-    expect(
-      classifyPost(
-        {
-          mediaMatches: false,
-          likeCount: Number.NaN,
-          createdAtMs: now,
-          isRepost: false,
-        },
-        settings,
-        now,
-      ),
-    ).toEqual({ state: "hidden", reason: "no-media" });
-  });
-
-  it("反応数が判定不能でも、設定が入っていればリポストは隠す", () => {
-    expect(
-      classifyPost(
-        {
-          mediaMatches: true,
-          likeCount: Number.NaN,
+          metricCount: 1000,
           createdAtMs: now,
           isRepost: true,
         },
@@ -213,5 +202,20 @@ describe("classifyPost", () => {
         now,
       ),
     ).toEqual({ state: "hidden", reason: "repost" });
+  });
+
+  it("指標が判定不能な投稿は線を付けずに残す", () => {
+    expect(
+      classifyPost(
+        {
+          mediaMatches: true,
+          metricCount: Number.NaN,
+          createdAtMs: now,
+          isRepost: false,
+        },
+        settings,
+        now,
+      ),
+    ).toEqual({ state: "visible", reason: "indeterminate-metric" });
   });
 });

@@ -87,30 +87,28 @@ describe("隠す単位", () => {
 
 describe("反応数を読む", () => {
   it("丸めが始まる前の数はそのまま読む", () => {
-    expect(weiboAdapter.readReactionCount(renderPost({ likes: "523" }))).toBe(
+    expect(weiboAdapter.readMetricCount(renderPost({ likes: "523" }))).toBe(
       523,
     );
   });
 
   // 1万以上は丸められ、実数を持つ要素はどこにも無い。読めるのは表示桁までの値。
   it("1万以上の丸め表記を読む", () => {
-    expect(weiboAdapter.readReactionCount(renderPost({ likes: "1.2万" }))).toBe(
+    expect(weiboAdapter.readMetricCount(renderPost({ likes: "1.2万" }))).toBe(
       12000,
     );
-    expect(weiboAdapter.readReactionCount(renderPost({ likes: "115万" }))).toBe(
+    expect(weiboAdapter.readMetricCount(renderPost({ likes: "115万" }))).toBe(
       1150000,
     );
   });
 
   // 反応が無い投稿は、数の代わりにラベルの文字が入る。
   it("反応が無い投稿のラベル文字を0と読む", () => {
-    expect(weiboAdapter.readReactionCount(renderPost({ likes: "赞" }))).toBe(0);
+    expect(weiboAdapter.readMetricCount(renderPost({ likes: "赞" }))).toBe(0);
   });
 
   it("赞のボタンが無ければ0", () => {
-    expect(weiboAdapter.readReactionCount(render("<article></article>"))).toBe(
-      0,
-    );
+    expect(weiboAdapter.readMetricCount(render("<article></article>"))).toBe(0);
   });
 });
 
@@ -133,7 +131,7 @@ describe("投稿時刻を読む", () => {
     );
   });
 
-  // 読めないときに落ちるのは「急上昇」の判定だけで、通常の判定は動く。
+  // 読めなくても全期間の判定は動く。
   it("相対表記しか無ければ読めないものとして返す", () => {
     const post = renderPost({ time: "", timeText: "9小时前" });
 

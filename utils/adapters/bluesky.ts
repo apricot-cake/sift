@@ -25,7 +25,20 @@ const BLUESKY_SELECTORS = Object.freeze({
   animatedImage: 'video[src*="t.gifs.bsky.app"]',
   postText: '[data-testid="postText"]',
   profileLink: 'a[href^="/profile/"]',
+  followingTab: '[data-testid="homeScreenFeedTabs-selector-0"]',
+  selectedTabMark: '[style*="background-color"]',
 });
+
+const BLUESKY_LIST_PATH = /^\/profile\/([^/]+)\/lists\/([^/]+)\/?$/;
+const BLUESKY_FEED_PATH = /^\/profile\/([^/]+)\/feed\/([^/]+)\/?$/;
+
+export function isBlueskyFollowingTimeline(root: ParentNode): boolean {
+  return Boolean(
+    root
+      .querySelector(BLUESKY_SELECTORS.followingTab)
+      ?.querySelector(BLUESKY_SELECTORS.selectedTabMark),
+  );
+}
 
 // AT Protocol の record key は TID＝base32-sortable 13文字で 64bit の値を持ち、
 // 上位53bit がマイクロ秒のタイムスタンプ、下位10bit が clock id。
@@ -99,8 +112,31 @@ export const blueskyAdapter = Object.freeze({
     return readablePostCards(root).length > 0;
   },
 
-  isTimelineAvailable(root: ParentNode) {
-    return this.hasPostCards(root);
+  isTimelineAvailable(root: ParentNode, page: Pick<Location, "pathname">) {
+    const selectedPage =
+      page.pathname !== "/" || isBlueskyFollowingTimeline(root);
+    return selectedPage && this.hasPostCards(root);
+  },
+
+  settingsScope(root: ParentNode, page: Pick<Location, "pathname">) {
+    if (page.pathname === "/" && isBlueskyFollowingTimeline(root)) {
+      return { key: "following", kind: "following" } as const;
+    }
+    const list = BLUESKY_LIST_PATH.exec(page.pathname);
+    if (list) {
+      return {
+        key: `list:${list[1]}:${list[2]}`,
+        kind: "list",
+      } as const;
+    }
+    const feed = BLUESKY_FEED_PATH.exec(page.pathname);
+    return feed
+      ? ({ key: `feed:${feed[1]}:${feed[2]}`, kind: "feed" } as const)
+      : null;
+  },
+
+  findEmptyStateContainer(root: ParentNode) {
+    return root.querySelector<HTMLElement>('[data-testid="homeScreen"]');
   },
 
   // 隠される単位。X と違い Bluesky は区切り線と余白をカードの内側に持つので、
@@ -109,7 +145,7 @@ export const blueskyAdapter = Object.freeze({
     return postCard;
   },
 
-  readReactionCount(postCard: Element) {
+  readMetricCount(postCard: Element) {
     const button = postCard.querySelector(BLUESKY_SELECTORS.reactionButton);
     if (!button) {
       return 0;

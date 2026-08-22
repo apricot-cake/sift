@@ -27,17 +27,20 @@ describe("抽出の操作入口", () => {
 
     expect(sidepanel).toContain('inputMode="numeric"');
     expect(sidepanel).toContain("event.currentTarget.select()");
-    expect(sidepanel).not.toContain('type="number"');
+    expect(sidepanel).toContain('type="number"');
   });
 
-  it("サイドパネルでサイト別設定を切り替え、現在タブへ追従する", () => {
+  it("サイドパネルは現在タブへ追従し、他の設定は設定ページで管理する", () => {
     const sidepanel = readEntrypoint("entrypoints/sidepanel/sidepanel-app.tsx");
+    const options = readEntrypoint("entrypoints/options/main.tsx");
 
     expect(sidepanel).toContain("withSiteEnabled");
     expect(sidepanel).toContain("withSiteSettings");
     expect(sidepanel).toContain("siteSettingsKeyForControl");
     expect(sidepanel).toContain("browser.tabs.onActivated.addListener");
-    expect(sidepanel).toContain("value={selectedSite}");
+    expect(sidepanel).toContain("browser.runtime.openOptionsPage");
+    expect(sidepanel).not.toContain("value={selectedSite}");
+    expect(options).toContain("<SidepanelApp manageAll />");
   });
 
   it("サイドパネルで現在タブの URL を読める", () => {
