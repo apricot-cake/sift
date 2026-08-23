@@ -31,6 +31,7 @@ const BLUESKY_SELECTORS = Object.freeze({
 
 const BLUESKY_LIST_PATH = /^\/profile\/([^/]+)\/lists\/([^/]+)\/?$/;
 const BLUESKY_FEED_PATH = /^\/profile\/([^/]+)\/feed\/([^/]+)\/?$/;
+const BLUESKY_POST_ID = /\/profile\/([^/]+)\/post\/([^/?#]+)/;
 
 export function isBlueskyFollowingTimeline(root: ParentNode): boolean {
   return Boolean(
@@ -135,14 +136,20 @@ export const blueskyAdapter = Object.freeze({
       : null;
   },
 
-  findEmptyStateContainer(root: ParentNode) {
-    return root.querySelector<HTMLElement>('[data-testid="homeScreen"]');
-  },
-
   // 隠される単位。X と違い Bluesky は区切り線と余白をカードの内側に持つので、
   // 外側のセルを探しに行く必要が無い。
   findPostCell(postCard: Element) {
     return postCard;
+  },
+
+  readPostId(postCard: Element) {
+    for (const link of postCard.querySelectorAll(BLUESKY_SELECTORS.postLink)) {
+      const match = BLUESKY_POST_ID.exec(link.getAttribute("href") ?? "");
+      if (match) {
+        return `${match[1]}:${match[2]}`;
+      }
+    }
+    return null;
   },
 
   readMetricCount(postCard: Element) {

@@ -21,6 +21,14 @@ const X_SELECTORS = Object.freeze({
   homeTab: '[role="tab"]',
 });
 const X_LIST_PATH = /^\/i\/lists\/([^/]+)\/?$/;
+const X_STATUS_ID = /\/status\/(\d+)/;
+
+function timelinePostCards(root: ParentNode): Element[] {
+  return Array.from(root.querySelectorAll(X_SELECTORS.postCard)).filter(
+    (postCard) =>
+      postCard.parentElement?.closest(X_SELECTORS.postCard) === null,
+  );
+}
 
 // Home の先頭はプラットフォームが選ぶ「おすすめ」、2番目は「フォロー中」、
 // それ以降は利用者がピン留めしたリスト。Home ではフォロー中だけを対象にし、
@@ -44,11 +52,11 @@ export const xAdapter = Object.freeze({
   settingsKey: "x",
 
   getPostCards(root: ParentNode) {
-    return Array.from(root.querySelectorAll(X_SELECTORS.postCard));
+    return timelinePostCards(root);
   },
 
   hasPostCards(root: ParentNode) {
-    return Boolean(root.querySelector(X_SELECTORS.postCard));
+    return timelinePostCards(root).length > 0;
   },
 
   // Home は投稿を仮想化していて、描き直し中は一時的にカードが無くなる。それでも
@@ -72,6 +80,14 @@ export const xAdapter = Object.freeze({
   // カードだけを隠すと隙間が残る。
   findPostCell(postCard: Element) {
     return postCard.closest(X_SELECTORS.postCell) || postCard;
+  },
+
+  readPostId(postCard: Element) {
+    const createdAt = postCard.querySelector(X_SELECTORS.createdAt);
+    const href = createdAt
+      ?.closest('a[href*="/status/"]')
+      ?.getAttribute("href");
+    return X_STATUS_ID.exec(href ?? "")?.[1] ?? null;
   },
 
   readMetricCount(postCard: Element) {

@@ -14,12 +14,24 @@ describe("抽出の操作入口", () => {
     expect(background).not.toContain("openOptionsPage");
   });
 
-  it("タイムライン内の空状態からフィルターを調整できる", () => {
+  it("ページ上に操作UIを追加しない", () => {
     const content = readEntrypoint("entrypoints/content/index.ts");
+    const sidepanel = readEntrypoint("entrypoints/sidepanel/sidepanel-app.tsx");
 
-    expect(content).toContain("OPEN_LIVE_CONTROLS");
-    expect(content).toContain("siftOpenLiveControls");
-    expect(content).not.toContain('data-role="toggle-show-all"');
+    expect(content).not.toContain("siftEmptyState");
+    expect(content).not.toContain('createElement("button")');
+    expect(sidepanel).not.toContain("timelineSafetyStop");
+    expect(sidepanel).not.toContain("resumeLoading");
+  });
+
+  it("連続読み込みは停止せずサイドパネルから解除できる", () => {
+    const content = readEntrypoint("entrypoints/content/index.ts");
+    const sidepanel = readEntrypoint("entrypoints/sidepanel/sidepanel-app.tsx");
+
+    expect(content).toContain("continuousLoadingWarning");
+    expect(content).not.toContain('adapter.id === "x"');
+    expect(sidepanel).toContain("continuousLoadingWarningTitle");
+    expect(sidepanel).toContain("updateFiltering(false)");
   });
 
   it("しきい値は直接打ち替えられる", () => {

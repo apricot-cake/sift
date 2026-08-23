@@ -16,6 +16,28 @@ function renderVideo(inner = ""): Element {
   return video;
 }
 
+describe("動画IDを読む", () => {
+  it("通常動画のクエリからIDを読む", () => {
+    const video = renderVideo(
+      '<a id="video-title" href="/watch?v=abc123">動画</a>',
+    );
+
+    expect(youtubeAdapter.readPostId?.(video)).toBe("abc123");
+  });
+
+  it("ショートのパスからIDを読む", () => {
+    const video = renderVideo(
+      '<a class="shortsLockupViewModelHostEndpoint" href="/shorts/xyz789">動画</a>',
+    );
+
+    expect(youtubeAdapter.readPostId?.(video)).toBe("xyz789");
+  });
+
+  it("動画リンクが無ければ null を返す", () => {
+    expect(youtubeAdapter.readPostId?.(renderVideo())).toBeNull();
+  });
+});
+
 describe("YouTube の動画を見つける", () => {
   it("通常動画とショートを見つける", () => {
     const page = render(`

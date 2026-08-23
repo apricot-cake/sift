@@ -33,6 +33,20 @@ function renderNote(options?: Parameters<typeof renderNoteRoot>[0]): Element {
   return note;
 }
 
+describe("ノートIDを読む", () => {
+  it("ノートへのリンクから固定IDを読む", () => {
+    const note = renderNote({
+      body: '<a href="/notes/a1b2c3d4">3分前</a>',
+    });
+
+    expect(misskeyAdapter.readPostId?.(note)).toBe("a1b2c3d4");
+  });
+
+  it("ノートへのリンクが無ければ null を返す", () => {
+    expect(misskeyAdapter.readPostId?.(renderNote())).toBeNull();
+  });
+});
+
 describe("ノートを見つける", () => {
   it("タイムラインにあるノートを見つける", () => {
     const timeline = render(

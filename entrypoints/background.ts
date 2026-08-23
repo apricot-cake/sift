@@ -15,7 +15,6 @@ import {
 } from "../utils/dev-server.ts";
 import { drainErrorLog } from "../utils/error-drain.ts";
 import { errorLogItem, startUncaughtReporting } from "../utils/error-log.ts";
-import { isOpenLiveControlsRequest } from "../utils/live-controls.ts";
 import { TIMELINE_CONTROL } from "../utils/timeline-controls.ts";
 
 // このファイルは、開発時のエラーログの送り出しと dev-link の
@@ -71,19 +70,6 @@ export default defineBackground(() => {
         }
       }
     });
-  });
-
-  browser.runtime.onMessage.addListener((message: unknown, sender) => {
-    if (isOpenLiveControlsRequest(message)) {
-      if (sidePanel && sender.tab?.id !== undefined) {
-        void sidePanel.open({ tabId: sender.tab.id });
-        return;
-      }
-      const sidebarAction = (
-        browser as unknown as { sidebarAction?: { open: () => Promise<void> } }
-      ).sidebarAction;
-      void sidebarAction?.open();
-    }
   });
 
   if (!__SIFT_DEV__) {

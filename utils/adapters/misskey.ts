@@ -23,6 +23,7 @@ const MISSKEY_SELECTORS = Object.freeze({
   // カードと数えるにはノートの時刻も持っていることを条件にする。
   postCard: "article",
   createdAt: "time[title]",
+  postLink: 'a[href*="/notes/"]',
   // リアクションのチップも、フッターの返信・リノート・リアクションのボタンも、
   // どれも `button._button`。見分けているのは下の readMetricCount()。
   reactionButton: "button._button",
@@ -71,6 +72,7 @@ const COUNT_ONLY = /^\d[\d,]*$/;
 
 const MISSKEY_SELECTED_TIMELINE_PATH =
   /^\/timeline\/(?:list\/[^/]+|antenna\/[^/]+)\/?$/;
+const MISSKEY_NOTE_ID = /\/notes\/([^/?#]+)/;
 
 export function isMisskeyFilterPage(pathname: string): boolean {
   return (
@@ -175,6 +177,16 @@ export const misskeyAdapter = Object.freeze({
   // ノートは article の外に描かれるので、article だけを隠すとそれらが残る。
   findPostCell(postCard: Element) {
     return postCard.parentElement ?? postCard;
+  },
+
+  readPostId(postCard: Element) {
+    for (const link of postCard.querySelectorAll(MISSKEY_SELECTORS.postLink)) {
+      const noteId = MISSKEY_NOTE_ID.exec(link.getAttribute("href") ?? "")?.[1];
+      if (noteId) {
+        return noteId;
+      }
+    }
+    return null;
   },
 
   // Misskey はリアクションの総数をページに出さない。フッターに出せはするが、

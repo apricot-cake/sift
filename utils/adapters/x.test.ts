@@ -34,6 +34,18 @@ describe("投稿を見つける", () => {
     expect(xAdapter.hasPostCards(timeline)).toBe(true);
   });
 
+  it("引用投稿は外側の投稿と別の読み込みとして数えない", () => {
+    const timeline = renderTimeline(`
+      <span>outer</span>
+      <article data-testid="tweet"><span>quoted</span></article>
+    `);
+
+    const posts = xAdapter.getPostCards(timeline);
+
+    expect(posts).toHaveLength(1);
+    expect(posts[0]?.textContent).toContain("outer");
+  });
+
   it("投稿が並んでいない画面では1件も見つけない", () => {
     const page = render('<div data-testid="primaryColumn">settings</div>');
 
@@ -197,6 +209,22 @@ describe("投稿時刻を読む", () => {
     const card = renderPost('<time datetime="not a date">8月1日</time>');
 
     expect(xAdapter.readCreatedAt(card)).toBeNaN();
+  });
+});
+
+describe("投稿IDを読む", () => {
+  it("時刻のリンクから固定の投稿IDを読む", () => {
+    const card = renderPost(
+      '<a href="/example/status/123456789"><time datetime="2026-08-01T12:00:00.000Z"></time></a>',
+    );
+
+    expect(xAdapter.readPostId?.(card)).toBe("123456789");
+  });
+
+  it("時刻を持つ投稿リンクが無ければ null を返す", () => {
+    const card = renderPost('<a href="/example/status/123456789">詳細</a>');
+
+    expect(xAdapter.readPostId?.(card)).toBeNull();
   });
 });
 

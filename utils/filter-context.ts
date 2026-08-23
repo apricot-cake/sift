@@ -13,6 +13,7 @@ export interface FilterContextResponse {
   readonly pageTitle: string;
   readonly pageKey: string;
   readonly filteringEnabled: boolean;
+  readonly continuousLoadingWarning: boolean;
 }
 
 export function isFilterContextRequest(
@@ -46,6 +47,7 @@ export function isFilterContextResponse(
       response.scopeKind === "antenna") &&
     typeof response.pageTitle === "string" &&
     typeof response.pageKey === "string" &&
-    typeof response.filteringEnabled === "boolean"
+    typeof response.filteringEnabled === "boolean" &&
+    typeof response.continuousLoadingWarning === "boolean"
   );
 }

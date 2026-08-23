@@ -250,6 +250,21 @@ export const youtubeAdapter = Object.freeze({
     return postCard.closest(YOUTUBE_SELECTORS.cell) || postCard;
   },
 
+  readPostId(postCard: Element) {
+    const href = postCard
+      .querySelector(YOUTUBE_SELECTORS.title)
+      ?.getAttribute("href");
+    if (!href) {
+      return null;
+    }
+    const url = new URL(href, "https://www.youtube.com");
+    const videoId =
+      url.pathname === "/watch"
+        ? url.searchParams.get("v")
+        : /^\/shorts\/([^/?#]+)/.exec(url.pathname)?.[1];
+    return videoId || null;
+  },
+
   readMetricCount(postCard: Element) {
     const text = metadataTexts(postCard).find((entry) =>
       VIEW_LABEL.test(entry),

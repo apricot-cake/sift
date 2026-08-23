@@ -504,6 +504,29 @@ export function SidepanelApp({
           </SettingsGroup>
         )}
 
+        {!manageAll &&
+          filteringEnabled &&
+          activeContext?.continuousLoadingWarning && (
+            <Card className="mb-6 mt-3 border-amber-500/60 bg-amber-50/70 dark:bg-amber-950/20">
+              <CardContent className="space-y-3 p-4 text-sm leading-6">
+                <div>
+                  <p className="m-0 font-medium">
+                    {t("continuousLoadingWarningTitle")}
+                  </p>
+                  <p className="m-0 mt-1 text-muted-foreground">
+                    {t("continuousLoadingWarningDescription")}
+                  </p>
+                </div>
+                <Button
+                  className="w-full"
+                  onClick={() => updateFiltering(false)}
+                >
+                  {t("continuousLoadingWarningDisable")}
+                </Button>
+              </CardContent>
+            </Card>
+          )}
+
         {!manageAll && (
           <Button
             className="mb-6 mt-3 w-full"
@@ -600,19 +623,6 @@ export function SidepanelApp({
                   )}
                 </CardContent>
               </Card>
-              {reactionFilterEnabled && (
-                <FilterSummary
-                  minimum={
-                    selectedSettings.kind === "youtube"
-                      ? selectedSettings.minViews
-                      : selectedSettings.minReactions
-                  }
-                  mode={selectedSettings.periodMode}
-                  site={selectedSite}
-                  unit={selectedSettings.periodUnit}
-                  value={selectedSettings.periodValue}
-                />
-              )}
               {selectedSettings.kind === "reactions" && (
                 <Card>
                   <CardContent className="divide-y p-0">
@@ -889,58 +899,5 @@ function PeriodSetting({
         )}
       </div>
     </fieldset>
-  );
-}
-
-function periodUnitLabel(unit: PeriodUnit): string {
-  const labels: Readonly<Record<PeriodUnit, string>> = {
-    hour: t("optionsUnitHours"),
-    day: t("optionsUnitDays"),
-    week: t("optionsUnitWeeks"),
-    month: t("optionsUnitMonths"),
-    year: t("optionsUnitYears"),
-  };
-  return labels[unit];
-}
-
-function FilterSummary({
-  minimum,
-  mode,
-  site,
-  unit,
-  value,
-}: {
-  minimum: number;
-  mode: PeriodMode;
-  site: SiteSettingsKey;
-  unit: PeriodUnit;
-  value: number;
-}): React.JSX.Element {
-  const formattedMinimum = minimum.toLocaleString();
-  const periodArgs = {
-    value: String(value),
-    unit: periodUnitLabel(unit),
-    minimum: formattedMinimum,
-  };
-  let message: string;
-  if (mode === "all") {
-    message =
-      site === "youtube"
-        ? t("optionsFilterSummaryAllViews", { minimum: formattedMinimum })
-        : site === "misskey"
-          ? t("optionsFilterSummaryAllReactions", { minimum: formattedMinimum })
-          : t("optionsFilterSummaryAllLikes", { minimum: formattedMinimum });
-  } else {
-    message =
-      site === "youtube"
-        ? t("optionsFilterSummaryPeriodViews", periodArgs)
-        : site === "misskey"
-          ? t("optionsFilterSummaryPeriodReactions", periodArgs)
-          : t("optionsFilterSummaryPeriodLikes", periodArgs);
-  }
-  return (
-    <p className="mt-3 px-1 text-sm leading-6 text-muted-foreground">
-      {message}
-    </p>
   );
 }

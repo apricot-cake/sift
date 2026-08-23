@@ -4,7 +4,10 @@ import { ContentScriptContext } from "wxt/utils/content-script-context";
 import { blueskyAdapter } from "../../utils/adapters/bluesky.ts";
 import { xAdapter } from "../../utils/adapters/x.ts";
 import { youtubeAdapter } from "../../utils/adapters/youtube.ts";
-import { OPEN_LIVE_CONTROLS } from "../../utils/live-controls.ts";
+import {
+  FILTER_CONTEXT_REQUEST,
+  type FilterContextResponse,
+} from "../../utils/filter-context.ts";
 import { TIMELINE_CONTROL } from "../../utils/timeline-controls.ts";
 import { startContentRuntime } from "./index.ts";
 
@@ -18,14 +21,18 @@ const timelineMarkup = `
   </div>
 `;
 
-const hiddenTimelineMarkup = `
-  <div data-testid="cellInnerDiv">
-    <article data-testid="tweet">
-      <button data-testid="like" aria-label="0 likes"></button>
-      <time datetime="2026-08-01T12:00:00.000Z"></time>
-    </article>
-  </div>
-`;
+function xPostMarkup(id: string, likes = 0): string {
+  return `
+    <div data-testid="cellInnerDiv">
+      <article data-testid="tweet">
+        <a href="/example/status/${id}">
+          <time datetime="2026-08-01T12:00:00.000Z"></time>
+        </a>
+        <button data-testid="like" aria-label="${likes} likes"></button>
+      </article>
+    </div>
+  `;
+}
 
 beforeEach(() => {
   fakeBrowser.reset();
@@ -39,6 +46,15 @@ async function setFiltering(enabled: boolean): Promise<void> {
     {},
     () => {},
   );
+}
+
+async function getFilterContext(): Promise<FilterContextResponse> {
+  const [response] = await fakeBrowser.runtime.onMessage.trigger(
+    { type: FILTER_CONTEXT_REQUEST },
+    {},
+    () => {},
+  );
+  return response as unknown as FilterContextResponse;
 }
 
 describe("タイムラインのフィルター", () => {
@@ -61,6 +77,56 @@ describe("タイムラインのフィルター", () => {
     runtime.dispose();
   });
 
+  it("不一致投稿が続いてもフィルターを解除しない", async () => {
+    document.body.innerHTML = timelineMarkup;
+    const runtime = startContentRuntime(
+      new ContentScriptContext("sift-test"),
+      xAdapter,
+    );
+    await setFiltering(true);
+    document.body.insertAdjacentHTML(
+      "beforeend",
+      timelineMarkup.replace("1,100", "0").repeat(30),
+    );
+
+    await vi.waitFor(() => {
+      expect(
+        document.querySelectorAll('[data-sift-filter-state="hidden"]'),
+      ).toHaveLength(30);
+    });
+    expect((await getFilterContext()).filteringEnabled).toBe(true);
+
+    runtime.dispose();
+  });
+
+  it("ユーザー操作なしの全件不一致取得が3回続いたら警告だけを出す", async () => {
+    document.body.innerHTML = xPostMarkup("baseline", 1_100);
+    const runtime = startContentRuntime(
+      new ContentScriptContext("sift-test"),
+      xAdapter,
+    );
+    await setFiltering(true);
+    await vi.waitFor(() => {
+      expect(
+        document.querySelector('[data-sift-filter-state="matched"]'),
+      ).not.toBeNull();
+    });
+
+    for (const id of ["1", "2", "3"]) {
+      document.body.insertAdjacentHTML("beforeend", xPostMarkup(id));
+      await new Promise((resolve) => window.setTimeout(resolve, 900));
+    }
+
+    const context = await getFilterContext();
+    expect(context.continuousLoadingWarning).toBe(true);
+    expect(context.filteringEnabled).toBe(true);
+    expect(
+      document.querySelectorAll('[data-sift-filter-state="hidden"]'),
+    ).toHaveLength(3);
+
+    runtime.dispose();
+  });
+
   it("投稿のない画面には操作UIもフィルター状態も残さない", async () => {
     document.body.innerHTML = '<div data-testid="primaryColumn">settings</div>';
     const runtime = startContentRuntime(
@@ -79,37 +145,7 @@ describe("タイムラインのフィルター", () => {
     runtime.dispose();
   });
 
-  it("すべての投稿が隠れたときは空状態からフィルターを調整できる", async () => {
-    document.body.innerHTML = hiddenTimelineMarkup;
-    const runtime = startContentRuntime(
-      new ContentScriptContext("sift-test"),
-      xAdapter,
-    );
-    await setFiltering(true);
-
-    await vi.waitFor(() => {
-      expect(document.querySelector("[data-sift-empty-state]")).not.toBeNull();
-    });
-    expect(
-      document
-        .querySelector<HTMLElement>("[data-sift-filter-state]")
-        ?.getAttribute("data-sift-filter-state"),
-    ).toBe("hidden");
-
-    const sendMessage = vi
-      .spyOn(fakeBrowser.runtime, "sendMessage")
-      .mockResolvedValue();
-
-    document
-      .querySelector<HTMLButtonElement>("[data-sift-open-live-controls]")
-      ?.click();
-
-    expect(sendMessage).toHaveBeenCalledWith({ type: OPEN_LIVE_CONTROLS });
-
-    runtime.dispose();
-  });
-
-  it("Blueskyの空の専用リストでは画面本体に空状態を出す", async () => {
+  it("Blueskyの空の専用リストでもページへUIを足さない", async () => {
     history.replaceState({}, "", "/profile/alice.test/lists/abc");
     document.body.innerHTML = '<div data-testid="homeScreen"></div>';
     const runtime = startContentRuntime(
@@ -118,82 +154,10 @@ describe("タイムラインのフィルター", () => {
     );
     await setFiltering(true);
 
-    await vi.waitFor(() => {
-      expect(document.querySelector("[data-sift-empty-state]")).not.toBeNull();
-    });
+    await new Promise((resolve) => window.setTimeout(resolve, 50));
     expect(
-      document.querySelector("[data-sift-empty-state]")?.parentElement,
-    ).toBe(document.querySelector('[data-testid="homeScreen"]'));
-
-    runtime.dispose();
-  });
-
-  it("表示対象の投稿が加わると空状態を消す", async () => {
-    document.body.innerHTML = hiddenTimelineMarkup;
-    const runtime = startContentRuntime(
-      new ContentScriptContext("sift-test"),
-      xAdapter,
-    );
-    await setFiltering(true);
-
-    await vi.waitFor(() => {
-      expect(document.querySelector("[data-sift-empty-state]")).not.toBeNull();
-    });
-
-    document.body.insertAdjacentHTML("beforeend", timelineMarkup);
-
-    await vi.waitFor(() => {
-      expect(document.querySelector("[data-sift-empty-state]")).toBeNull();
-      expect(
-        document.querySelector<HTMLElement>(
-          '[data-sift-filter-state="matched"]',
-        ),
-      ).not.toBeNull();
-    });
-
-    runtime.dispose();
-  });
-
-  it("フィルターを無効にすると空状態を消す", async () => {
-    document.body.innerHTML = hiddenTimelineMarkup;
-    const runtime = startContentRuntime(
-      new ContentScriptContext("sift-test"),
-      xAdapter,
-    );
-    await setFiltering(true);
-
-    await vi.waitFor(() => {
-      expect(document.querySelector("[data-sift-empty-state]")).not.toBeNull();
-    });
-
-    await setFiltering(false);
-
-    await vi.waitFor(() => {
-      expect(document.querySelector("[data-sift-empty-state]")).toBeNull();
-      expect(document.querySelector("[data-sift-filter-state]")).toBeNull();
-    });
-
-    runtime.dispose();
-  });
-
-  it("投稿のない画面へ移ると空状態を消す", async () => {
-    document.body.innerHTML = hiddenTimelineMarkup;
-    const runtime = startContentRuntime(
-      new ContentScriptContext("sift-test"),
-      xAdapter,
-    );
-    await setFiltering(true);
-
-    await vi.waitFor(() => {
-      expect(document.querySelector("[data-sift-empty-state]")).not.toBeNull();
-    });
-
-    document.body.innerHTML = '<div data-testid="primaryColumn">settings</div>';
-
-    await vi.waitFor(() => {
-      expect(document.querySelector("[data-sift-empty-state]")).toBeNull();
-      expect(document.querySelector("[data-sift-filter-state]")).toBeNull();
-    });
+      document.querySelector('[data-testid="homeScreen"]')?.children,
+    ).toHaveLength(0);
 
     runtime.dispose();
   });

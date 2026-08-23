@@ -27,9 +27,11 @@ export interface ServiceAdapter {
     root: ParentNode,
     page: Pick<Location, "pathname">,
   ): SettingsScope | null;
-  findEmptyStateContainer?(root: ParentNode): HTMLElement | null;
   // 隠される単位＝投稿カードそのものとは限らない。
   findPostCell(postCard: Element): Element;
+  // 仮想リストが同じ投稿を描き直しても、新しい取得として数え直さないための
+  // 識別子。連続読み込みを観測するサービスだけが実装する。
+  readPostId?(postCard: Element): string | null;
   // サービスが一覧で公開している主指標。X / Bluesky / Misskey は反応数、
   // YouTube は再生回数を返す。
   readMetricCount(postCard: Element): number;

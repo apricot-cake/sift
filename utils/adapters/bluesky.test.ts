@@ -29,6 +29,20 @@ function renderPost(inner = ""): Element {
   return card;
 }
 
+describe("投稿IDを読む", () => {
+  it("投稿者とrecord keyを組み合わせる", () => {
+    const card = renderPost(`<a href="${postHref}">投稿時刻</a>`);
+
+    expect(blueskyAdapter.readPostId?.(card)).toBe(
+      "example.bsky.social:3mqcze2d6k23e",
+    );
+  });
+
+  it("投稿リンクが無ければ null を返す", () => {
+    expect(blueskyAdapter.readPostId?.(renderPost())).toBeNull();
+  });
+});
+
 describe("投稿を見つける", () => {
   it("フィードにある投稿を見つける", () => {
     const feed = renderFeed(likeButton, likeButton);

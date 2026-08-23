@@ -2,6 +2,10 @@ import { browser } from "wxt/browser";
 import type { ContentScriptContext } from "wxt/utils/content-script-context";
 import { selectAdapter } from "../../utils/adapters/index.ts";
 import type { ServiceAdapter } from "../../utils/adapters/types.ts";
+import {
+  type ContinuousLoadObservation,
+  ContinuousLoadWarningTracker,
+} from "../../utils/continuous-load-warning.ts";
 import { DEV_CONTENT_STARTED, DEV_FILTER_PASS } from "../../utils/dev-link.ts";
 import { startUncaughtReporting } from "../../utils/error-log.ts";
 import {
@@ -13,8 +17,6 @@ import {
   type ClassifyState,
   classifyPost,
 } from "../../utils/filter-core.ts";
-import { t } from "../../utils/i18n.ts";
-import { OPEN_LIVE_CONTROLS } from "../../utils/live-controls.ts";
 import { CONTENT_RUNTIME_KEY } from "../../utils/runtime-key.ts";
 import {
   defaults,
@@ -64,6 +66,10 @@ export function startContentRuntime(
   let disposed = false;
   let reportedFilterPass = false;
   let pageFilteringEnabled = false;
+  const loadWarningTracker = adapter.readPostId
+    ? new ContinuousLoadWarningTracker()
+    : null;
+  let observedPageKey = pageKey();
 
   function filteringEnabled(): boolean {
     return pageFilteringEnabled;
@@ -116,46 +122,14 @@ export function startContentRuntime(
     delete cell.dataset.siftFilterReason;
   }
 
-  function clearEmptyState(): void {
-    document.querySelector("[data-sift-empty-state]")?.remove();
-  }
-
-  function showEmptyState(cells: readonly HTMLElement[]): void {
-    const current = document.querySelector<HTMLElement>(
-      "[data-sift-empty-state]",
-    );
-    const container =
-      adapter.findEmptyStateContainer?.(document) ??
-      cells[0]?.parentElement ??
-      document.querySelector<HTMLElement>("main") ??
-      document.body;
-    if (current?.parentElement === container) {
-      return;
+  function readCurrentPostIds(): string[] {
+    if (!adapter.readPostId) {
+      return [];
     }
-
-    current?.remove();
-
-    const state = document.createElement("section");
-    state.dataset.siftEmptyState = "";
-    state.setAttribute("role", "status");
-
-    const message = document.createElement("p");
-    message.textContent = t("timelineEmptyState");
-
-    const openLiveControls = document.createElement("button");
-    openLiveControls.type = "button";
-    openLiveControls.dataset.siftOpenLiveControls = "";
-    openLiveControls.textContent = t("timelineOpenSettings");
-    openLiveControls.addEventListener("click", () => {
-      void browser.runtime
-        .sendMessage({ type: OPEN_LIVE_CONTROLS })
-        .catch(() => {
-          // サイドパネルを開けない場合も、タイムライン上の抽出状態は変えない。
-        });
-    });
-
-    state.append(message, openLiveControls);
-    container.append(state);
+    return adapter
+      .getPostCards(document)
+      .map((postCard) => adapter.readPostId?.(postCard) ?? null)
+      .filter((id): id is string => id !== null);
   }
 
   // CSS の scroll anchoring はページ側がどの投稿をアンカーにするかで結果が変わる。
@@ -220,16 +194,12 @@ export function startContentRuntime(
     const postCards = adapter.getPostCards(document);
     if (postCards.length === 0) {
       clearAllFiltering();
-      if (filteringEnabled()) {
-        showEmptyState([]);
-      } else {
-        clearEmptyState();
-      }
       return;
     }
 
     const counts = { visible: 0, matched: 0, hidden: 0 };
     const siteSettings = selectedSiteSettings();
+    const loadObservations: ContinuousLoadObservation[] = [];
     const updates: {
       cell: HTMLElement;
       state: ClassifyState | null;
@@ -240,9 +210,14 @@ export function startContentRuntime(
       // 生きたページ上の投稿は必ず HTMLElement。アダプターの約束が Element
       // までなのは、そこまでしか読まないから。
       const cell = adapter.findPostCell(postCard) as HTMLElement;
+      const createdAtMs = adapter.readCreatedAt(postCard);
 
       if (!filteringEnabled()) {
-        updates.push({ cell, state: null, reason: null });
+        updates.push({
+          cell,
+          state: null,
+          reason: null,
+        });
         continue;
       }
 
@@ -250,36 +225,38 @@ export function startContentRuntime(
         {
           mediaMatches: matchesMediaFilter(postCard, siteSettings),
           metricCount: adapter.readMetricCount(postCard),
-          createdAtMs: adapter.readCreatedAt(postCard),
+          createdAtMs,
           isRepost: adapter.readIsRepost(postCard),
           text: adapter.readText(postCard),
         },
         thresholdsFor(siteSettings),
       );
 
-      updates.push({ cell, state: result.state, reason: result.reason });
+      updates.push({
+        cell,
+        state: result.state,
+        reason: result.reason,
+      });
       counts[result.state] += 1;
+      const postId = adapter.readPostId?.(postCard);
+      if (postId) {
+        loadObservations.push({ id: postId, state: result.state });
+      }
     }
+
+    loadWarningTracker?.observe(loadObservations);
 
     const viewportAnchor = keepViewportOnNextFilter
       ? findViewportAnchor(updates)
       : null;
     keepViewportOnNextFilter = false;
 
-    const allPostsAreHidden = updates.every(
-      (update) => update.state === "hidden",
-    );
     for (const update of updates) {
       if (update.state === null || update.reason === null) {
         clearCellState(update.cell);
       } else {
         setCellState(update.cell, update.state, update.reason);
       }
-    }
-    if (filteringEnabled() && allPostsAreHidden) {
-      showEmptyState(updates.map(({ cell }) => cell));
-    } else {
-      clearEmptyState();
     }
     restoreViewportAnchor(viewportAnchor);
 
@@ -312,11 +289,16 @@ export function startContentRuntime(
   }
 
   function clearTimelineState(): void {
+    loadWarningTracker?.reset();
     clearAllFiltering();
-    clearEmptyState();
   }
 
   function handleRoute(): void {
+    const nextPageKey = pageKey();
+    if (nextPageKey !== observedPageKey) {
+      observedPageKey = nextPageKey;
+      loadWarningTracker?.reset(readCurrentPostIds());
+    }
     if (adapter.isTimelineAvailable(document, location)) {
       scheduleFilter();
     } else {
@@ -329,6 +311,7 @@ export function startContentRuntime(
       return;
     }
     pageFilteringEnabled = enabled;
+    loadWarningTracker?.reset(readCurrentPostIds());
     keepViewportOnNextFilter = true;
     if (adapter.isTimelineAvailable(document, location)) {
       scheduleFilter();
@@ -351,6 +334,8 @@ export function startContentRuntime(
         pageTitle: document.title,
         pageKey: pageKey(),
         filteringEnabled: filteringEnabled(),
+        continuousLoadingWarning:
+          filteringEnabled() && (loadWarningTracker?.warning ?? false),
       };
     }
     if (!isTimelineControlRequest(message)) {
@@ -372,9 +357,8 @@ export function startContentRuntime(
       return;
     }
 
-    const wasFilteringEnabled = filteringEnabled();
     settings = normalizeSettings(storedSettings);
-    keepViewportOnNextFilter ||= wasFilteringEnabled !== filteringEnabled();
+    loadWarningTracker?.reset(readCurrentPostIds());
     scheduleFilter();
   }
 
@@ -396,6 +380,11 @@ export function startContentRuntime(
     }
     window.removeEventListener("pagehide", handlePageHide);
     browser.runtime.onMessage.removeListener(handleTimelineControlMessage);
+    window.removeEventListener("wheel", handleUserNavigation, true);
+    window.removeEventListener("touchstart", handleUserNavigation, true);
+    window.removeEventListener("pointerdown", handleUserNavigation, true);
+    window.removeEventListener("keydown", handleUserNavigation, true);
+    loadWarningTracker?.dispose();
     stopUncaughtReporting();
     try {
       unwatchSettings();
@@ -409,34 +398,63 @@ export function startContentRuntime(
     dispose();
   }
 
+  function handleUserNavigation(event: Event): void {
+    if (!event.isTrusted) {
+      return;
+    }
+    if (
+      event instanceof KeyboardEvent &&
+      ![
+        "ArrowDown",
+        "ArrowUp",
+        "End",
+        "Home",
+        "PageDown",
+        "PageUp",
+        " ",
+      ].includes(event.key)
+    ) {
+      return;
+    }
+    if (filteringEnabled()) {
+      loadWarningTracker?.reset(readCurrentPostIds());
+    }
+  }
+
   void settingsItem
     .getValue()
     .then((storedSettings) => {
       if (disposed) {
         return;
       }
-
       settings = normalizeSettings(storedSettings);
       scheduleFilter();
-
       observer = new MutationObserver(scheduleFilter);
       observer.observe(document.body, {
         childList: true,
         characterData: true,
         subtree: true,
       });
-
       routeTimer = window.setInterval(handleRoute, 750);
     })
     .catch(() => {
-      // 拡張機能のコンテキストが既に無効になっているかもしれない＝この実行環境が
-      // 差し替えられている最中か、ページの足元で拡張機能が再読み込みされたか。
-      // 起動時の既定値がそのまま残り、他には何も走らない。
+      // 拡張機能のコンテキストが差し替わった可能性がある。監視は始めず、次の
+      // 注入に任せる。
     });
 
   const unwatchSettings = settingsItem.watch(handleSettingsChange);
   browser.runtime.onMessage.addListener(handleTimelineControlMessage);
   window.addEventListener("pagehide", handlePageHide);
+  window.addEventListener("wheel", handleUserNavigation, {
+    capture: true,
+    passive: true,
+  });
+  window.addEventListener("touchstart", handleUserNavigation, {
+    capture: true,
+    passive: true,
+  });
+  window.addEventListener("pointerdown", handleUserNavigation, true);
+  window.addEventListener("keydown", handleUserNavigation, true);
 
   return { dispose };
 }
