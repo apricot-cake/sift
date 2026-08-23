@@ -12,8 +12,10 @@ const payload = {
 function createServer() {
   const listeners = new Map<string, () => void>();
   const reloadContentScript = vi.fn();
+  const reloadExtension = vi.fn();
   const server = {
     reloadContentScript,
+    reloadExtension,
     ws: {
       on: vi.fn((event: string, listener: () => void) => {
         listeners.set(event, listener);
@@ -21,7 +23,7 @@ function createServer() {
     },
   } as unknown as WxtDevServer;
 
-  return { listeners, reloadContentScript, server };
+  return { listeners, reloadContentScript, reloadExtension, server };
 }
 
 describe("requireExplicitContentScriptReload", () => {
@@ -45,6 +47,24 @@ describe("requireExplicitContentScriptReload", () => {
     server.reloadContentScript(payload);
 
     expect(reloadContentScript).toHaveBeenCalledOnce();
+    vi.useRealTimers();
+  });
+
+  it("連続する拡張機能全体の再読み込みを一度にまとめる", () => {
+    vi.useFakeTimers();
+    const { reloadExtension, server } = createServer();
+    requireExplicitContentScriptReload(server);
+
+    server.reloadExtension();
+    vi.advanceTimersByTime(400);
+    server.reloadExtension();
+
+    vi.advanceTimersByTime(499);
+    expect(reloadExtension).not.toHaveBeenCalled();
+
+    vi.advanceTimersByTime(1);
+    expect(reloadExtension).toHaveBeenCalledOnce();
+
     vi.useRealTimers();
   });
 });

@@ -130,6 +130,9 @@ const child = spawn(
     `--user-data-dir=${PROFILE}`,
     `--remote-debugging-address=${CDP_HOST}`,
     `--remote-debugging-port=${CDP_PORT}`,
+    "--disable-backgrounding-occluded-windows",
+    "--disable-background-timer-throttling",
+    "--disable-renderer-backgrounding",
   ],
   {
     detached: true,
