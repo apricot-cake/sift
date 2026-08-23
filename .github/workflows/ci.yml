@@ -65,9 +65,3 @@ jobs:
       # `wxt build` のあとに verify:manifest＝生成された release の manifest
       # が、ソースの宣言どおりのものを持っているか（content script を含む）。
       - run: npm run build
-
-      # Firefox 向けの同じビルド。Sift が Firefox で動くという主張ではない
-      # ＝一度も検証していない。wxt.config.ts が manifestVersion を 3 に固定
-      # しているのは Firefox を MV2 へ落とさないためで、その判断を実際に通す
-      # のはここだけ。無ければ設定が Chrome 専用へ流れても誰も言わない。
-      - run: npm run build:firefox

@@ -37,9 +37,6 @@ export default defineConfig({
   // GeneratedI18nStructure）は locales/<default_locale>.yml から作られる＝
   // manifest.default_locale の設定が要る（下の manifest 節）。
   modules: ["@wxt-dev/i18n/module", "@wxt-dev/module-react"],
-  // Firefox も対象。WXT は Firefox を既定で MV2 にするが、manifest の版を1つに
-  // 揃えておけばリリース時の確認も1組で済む。
-  manifestVersion: 3,
   // 決して取り違えてはならない2つの出力先。
   //   開発     → 上の固定の経路。読むのは開発用プロファイルだけ
   //   リリース → .output/<ブラウザ>-mv3-release。scripts/deploy-extension.ts が

@@ -19,20 +19,9 @@ import { readFile } from "node:fs/promises";
 import { SITE_MATCHES } from "../utils/site-matches.ts";
 import config from "../wxt.config.ts";
 
-// どのビルドを読むか。`wxt build -b <対象>` は .output/<対象>-mv3-release へ書き、
-// 以下はどちらの対象でも成り立つ＝manifest は wxt.config.ts の中の1つの宣言で
-// あり、2つ目の対象を確かめる意味は、それがそのままであり続けることにある。
-const TARGETS = new Set(["chrome", "firefox"]);
-const target = process.argv[2] ?? "chrome";
-if (!TARGETS.has(target)) {
-  throw new Error(
-    `知らないビルド対象: ${target}（${[...TARGETS].join(" / ")} のどれかのはず）`,
-  );
-}
-
 const packageJson = JSON.parse(await readFile("package.json", "utf8"));
 const generatedManifest = JSON.parse(
-  await readFile(`.output/${target}-mv3-release/manifest.json`, "utf8"),
+  await readFile(".output/chrome-mv3-release/manifest.json", "utf8"),
 );
 
 // WXT はここにオブジェクトのほか関数や promise も受け取る。このプロジェクトが
@@ -49,17 +38,14 @@ if (
   );
 }
 
-assert.equal(generatedManifest.manifest_version, config.manifestVersion);
+assert.equal(generatedManifest.manifest_version, 3);
 assert.equal(generatedManifest.name, declaredManifest.name);
 assert.equal(generatedManifest.description, declaredManifest.description);
 // 固定の署名鍵＝それに伴い、どのプロファイルも既に入れてある拡張機能の id。
 // これを失ったビルドは、別の拡張機能として入ることになる。
 assert.equal(generatedManifest.key, declaredManifest.key);
 const declaredPermissions = declaredManifest.permissions ?? [];
-const expectedPermissions =
-  target === "chrome"
-    ? [...declaredPermissions, "sidePanel"]
-    : declaredPermissions;
+const expectedPermissions = [...declaredPermissions, "sidePanel"];
 assert.deepEqual(generatedManifest.permissions, expectedPermissions);
 // misskey.io はビルド時に確定した既定ホスト（#41）＝ここが静的な
 // host_permissions と一致しなければ、インストール直後から追加操作なしに動く
@@ -81,7 +67,7 @@ assert.equal(generatedManifest.version, packageJson.version);
 assert.equal(generatedManifest.default_locale, declaredManifest.default_locale);
 const defaultMessages = JSON.parse(
   await readFile(
-    `.output/${target}-mv3-release/_locales/${generatedManifest.default_locale}/messages.json`,
+    `.output/chrome-mv3-release/_locales/${generatedManifest.default_locale}/messages.json`,
     "utf8",
   ),
 );
@@ -107,35 +93,19 @@ assert.equal(
 );
 assert.equal(generatedManifest.action.default_popup, undefined);
 
-// WXT の sidepanel エントリポイントは対象ブラウザごとに API の異なる manifest
-// 項目へ変換する。Chrome は side_panel と sidePanel 権限、Firefox は
-// sidebar_action を持つ。entrypoint がページを出力しただけでは、ブラウザの
-// サイドバーから開けることは保証されないため、生成物で両方を確かめる。
-if (target === "firefox") {
-  assert.equal(
-    generatedManifest.sidebar_action.default_panel,
-    "sidepanel.html",
-  );
-  assert.equal(generatedManifest.sidebar_action.open_at_install, false);
-} else {
-  assert.equal(generatedManifest.side_panel.default_path, "sidepanel.html");
-  assert.ok(generatedManifest.permissions.includes("sidePanel"));
-}
+// WXT の sidepanel エントリポイントが Chrome の manifest へ届いていることを
+// 確かめる。ページを出力しただけでは、ブラウザのサイドパネルから開けることは
+// 保証されない。
+assert.equal(generatedManifest.side_panel.default_path, "sidepanel.html");
+assert.ok(generatedManifest.permissions.includes("sidePanel"));
 
 // サイドパネルは現在のページだけを調整する。他のサイトや保存済みページの設定は
 // ブラウザの拡張機能設定からも開ける専用ページに分ける。
 assert.equal(generatedManifest.options_ui.page, "options.html");
 assert.equal(generatedManifest.options_ui.open_in_tab, true);
 
-// 2つの対象が本当に違う唯一の項目＝Chrome MV3 は service worker を取り、
-// Firefox MV3 はスクリプトの一覧を取る。どちらも同じ entrypoints/background.ts
-// から作られるので、これは「WXT が頼まれた対象に合わせて出力を形作った」ことを
-// 言っている＝Chrome 用のものを二度出したのではなく。
-if (target === "firefox") {
-  assert.deepEqual(generatedManifest.background.scripts, ["background.js"]);
-} else {
-  assert.equal(generatedManifest.background.service_worker, "background.js");
-}
+// Chrome MV3 の service worker が entrypoints/background.ts から生成されている。
+assert.equal(generatedManifest.background.service_worker, "background.js");
 
 // content script。wxt.config.ts のどの宣言もこれを生まない＝ここにあるのは
 // entrypoints/content/index.ts がそこへビルドされたからでしかない。
@@ -151,5 +121,5 @@ assert.equal(generatedContentScript.js.length, 1);
 assert.equal(generatedContentScript.css.length, 1);
 
 console.log(
-  `生成された ${target} の manifest は、ソースの宣言どおりのものを持っている`,
+  "生成された chrome の manifest は、ソースの宣言どおりのものを持っている",
 );

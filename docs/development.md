@@ -147,14 +147,6 @@ npm run build
 
 ビルドは `.output\chrome-mv3-release` に出力します。`verify-manifest.ts` は、生成した manifest がソースの宣言と一致することを検証します。検証対象は、`wxt.config.ts` の権限、署名鍵、名前、`utils/site-matches.ts` の対象ホスト、`package.json` のバージョン、content script の登録です。`.output\chrome-mv3` は更新しません。
 
-Firefox 向けのビルドと manifest の検証は、次のコマンドで実行します。
-
-```powershell
-npm run build:firefox
-```
-
-出力先は `.output\firefox-mv3-release` です。Firefox での動作は検証していません。このビルドは、`wxt.config.ts` で manifest version を 3 に固定した設定を検証するために CI でも実行します。
-
 型検査と単体テストは、次のコマンドで実行します。
 
 ```powershell

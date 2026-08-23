@@ -1,5 +1,5 @@
 {
-  "$schema": "https://biomejs.dev/schemas/2.5.7/schema.json",
+  "$schema": "https://biomejs.dev/schemas/2.5.8/schema.json",
   // .gitignore is the list of things not to look at, and it already names the
   // two generated trees (.output, .wxt). Repeating them here would be a second
   // list to keep in step with the first.
