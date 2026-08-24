@@ -47,17 +47,6 @@ describe("normalizeSettings", () => {
     expect(normalizeSettings({}).siteSettings.bluesky.mediaMode).toBe("all");
   });
 
-  it("既存のメディア指定と除外キーワードを有効な個別条件へ移行する", () => {
-    const settings = normalizeSettings({
-      siteSettings: {
-        x: { mediaMode: "images", excludedKeywords: "spoiler" },
-      },
-    });
-
-    expect(settings.siteSettings.x.mediaEnabled).toBe(true);
-    expect(settings.siteSettings.x.excludedKeywordsEnabled).toBe(true);
-  });
-
   it("除外キーワードをサイト別に正規化する", () => {
     const settings = normalizeSettings({
       siteSettings: {
@@ -70,94 +59,6 @@ describe("normalizeSettings", () => {
     expect(
       excludedKeywordsFrom(settings.siteSettings.bluesky.excludedKeywords),
     ).toEqual(["spoiler", "new release"]);
-  });
-
-  it("旧版の有効状態を保存設定へ引き継がない", () => {
-    const settings = normalizeSettings({
-      enabled: false,
-      siteEnabled: { defaultEnabled: false, hosts: { "x.com": false } },
-    });
-    expect(settings).not.toHaveProperty("siteEnabled");
-  });
-
-  it("旧共有設定を全サイトへ全期間の条件として引き継ぐ", () => {
-    const settings = normalizeSettings({
-      minLikes: 42,
-      mediaMode: "images",
-      excludedKeywords: "spoiler",
-      hideReposts: false,
-      misskeyMinReactions: 9,
-    });
-    expect(settings.siteSettings.x).toMatchObject({
-      minReactions: 42,
-      periodMode: "all",
-      mediaMode: "images",
-      excludedKeywords: "spoiler",
-      hideReposts: false,
-    });
-    expect(settings.siteSettings.bluesky).toEqual(settings.siteSettings.x);
-    expect(settings.siteSettings.misskey.minReactions).toBe(9);
-  });
-
-  it("旧版で急上昇だけが有効なら期間指定の一条件へ移行する", () => {
-    const settings = normalizeSettings({
-      siteSettings: {
-        x: {
-          minReactionsEnabled: false,
-          risingEnabled: true,
-          risingMinReactions: 500,
-          risingMaxAgeHours: 6,
-        },
-      },
-    });
-
-    expect(settings.siteSettings.x).toMatchObject({
-      minReactionsEnabled: true,
-      minReactions: 500,
-      periodMode: "limited",
-      periodValue: 6,
-      periodUnit: "hour",
-    });
-  });
-
-  it("旧版で累計条件が有効なら全期間の一条件へ移行する", () => {
-    const settings = normalizeSettings({
-      siteSettings: {
-        x: {
-          minReactionsEnabled: true,
-          minReactions: 1000,
-          risingEnabled: true,
-          risingMinReactions: 500,
-          risingMaxAgeHours: 6,
-        },
-      },
-    });
-
-    expect(settings.siteSettings.x).toMatchObject({
-      minReactionsEnabled: true,
-      minReactions: 1000,
-      periodMode: "all",
-    });
-  });
-
-  it("旧版で再生ペースだけが有効なら1日以内の一条件へ移行する", () => {
-    const settings = normalizeSettings({
-      siteSettings: {
-        youtube: {
-          minViewsEnabled: false,
-          viewRateEnabled: true,
-          minViewsPerDay: 1500,
-        },
-      },
-    });
-
-    expect(settings.siteSettings.youtube).toMatchObject({
-      minCountEnabled: true,
-      minCount: 1500,
-      periodMode: "limited",
-      periodValue: 1,
-      periodUnit: "day",
-    });
   });
 
   it("XとBlueskyの設定一式を独立して保持する", () => {
@@ -251,6 +152,7 @@ describe("thresholdsFor", () => {
           periodMode: "limited",
           periodValue: 2,
           periodUnit: "day",
+          excludedKeywordsEnabled: true,
           excludedKeywords: "spoiler",
           hideReposts: false,
         },

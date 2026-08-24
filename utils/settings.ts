@@ -183,10 +183,6 @@ function normalizeReactionSiteSettings(
 ): ReactionSiteSettings {
   const source = objectSource(value);
   const mediaMode = normalizeMediaMode(source.mediaMode, fallback.mediaMode);
-  const legacyLimitedOnly =
-    source.periodMode === undefined &&
-    source.minReactionsEnabled === false &&
-    source.risingEnabled === true;
   const excludedKeywords =
     source.excludedKeywords === undefined
       ? fallback.excludedKeywords
@@ -196,29 +192,23 @@ function normalizeReactionSiteSettings(
     mediaEnabled:
       typeof source.mediaEnabled === "boolean"
         ? source.mediaEnabled
-        : source.mediaMode === undefined
-          ? fallback.mediaEnabled
-          : mediaMode !== "all",
+        : fallback.mediaEnabled,
     mediaMode,
     minReactionsEnabled:
-      legacyLimitedOnly || source.minReactionsEnabled === true
+      source.minReactionsEnabled === true
         ? true
         : source.minReactionsEnabled === false
           ? false
           : fallback.minReactionsEnabled,
     minReactions: clampInteger(
-      legacyLimitedOnly ? source.risingMinReactions : source.minReactions,
+      source.minReactions,
       fallback.minReactions,
       0,
       1000000000,
     ),
-    periodMode: normalizePeriodMode(
-      source.periodMode,
-      legacyLimitedOnly ? "limited" : fallback.periodMode,
-    ),
+    periodMode: normalizePeriodMode(source.periodMode, fallback.periodMode),
     periodValue: clampInteger(
-      source.periodValue ??
-        (legacyLimitedOnly ? source.risingMaxAgeHours : undefined),
+      source.periodValue,
       fallback.periodValue,
       1,
       1000,
@@ -227,9 +217,7 @@ function normalizeReactionSiteSettings(
     excludedKeywordsEnabled:
       typeof source.excludedKeywordsEnabled === "boolean"
         ? source.excludedKeywordsEnabled
-        : source.excludedKeywords === undefined
-          ? fallback.excludedKeywordsEnabled
-          : excludedKeywords !== "",
+        : fallback.excludedKeywordsEnabled,
     excludedKeywords,
     hideReposts:
       typeof source.hideReposts === "boolean"
@@ -243,42 +231,23 @@ function normalizeMetricSiteSettings(
   fallback: MetricSiteSettings,
 ): MetricSiteSettings {
   const source = objectSource(value);
-  const legacyLimitedOnly =
-    source.periodMode === undefined &&
-    source.minViewsEnabled === false &&
-    source.viewRateEnabled === true;
   return {
     kind: "metric",
     minCountEnabled:
-      legacyLimitedOnly ||
-      source.minCountEnabled === true ||
-      source.minViewsEnabled === true
+      source.minCountEnabled === true
         ? true
-        : source.minCountEnabled === false || source.minViewsEnabled === false
+        : source.minCountEnabled === false
           ? false
           : fallback.minCountEnabled,
-    minCount: clampInteger(
-      legacyLimitedOnly
-        ? source.minViewsPerDay
-        : (source.minCount ?? source.minViews),
-      fallback.minCount,
-      0,
-      1000000000,
-    ),
-    periodMode: normalizePeriodMode(
-      source.periodMode,
-      legacyLimitedOnly ? "limited" : fallback.periodMode,
-    ),
+    minCount: clampInteger(source.minCount, fallback.minCount, 0, 1000000000),
+    periodMode: normalizePeriodMode(source.periodMode, fallback.periodMode),
     periodValue: clampInteger(
       source.periodValue,
-      legacyLimitedOnly ? 1 : fallback.periodValue,
+      fallback.periodValue,
       1,
       1000,
     ),
-    periodUnit: normalizePeriodUnit(
-      source.periodUnit,
-      legacyLimitedOnly ? "day" : fallback.periodUnit,
-    ),
+    periodUnit: normalizePeriodUnit(source.periodUnit, fallback.periodUnit),
   };
 }
 
@@ -337,37 +306,6 @@ function normalizeSourceSettings(
   return normalized;
 }
 
-function legacyReactionSiteSettings(
-  source: Record<string, unknown>,
-  key: ReactionSiteSettingsKey,
-): ReactionSiteSettings {
-  const defaultsForSite = defaults.siteSettings[key];
-  const minReactions =
-    key === "misskey"
-      ? source.misskeyMinReactions
-      : key === "bluesky"
-        ? (source.blueskyMinLikes ?? source.minLikes)
-        : (source.xMinLikes ?? source.minLikes);
-  const risingMinReactions =
-    key === "misskey"
-      ? source.misskeyRisingMinReactions
-      : key === "bluesky"
-        ? (source.blueskyRisingMinLikes ?? source.risingMinLikes)
-        : (source.xRisingMinLikes ?? source.risingMinLikes);
-  return normalizeReactionSiteSettings(
-    {
-      mediaMode: source.mediaMode,
-      minReactions,
-      risingEnabled: source.risingEnabled,
-      risingMinReactions,
-      risingMaxAgeHours: source.risingMaxAgeHours,
-      excludedKeywords: source.excludedKeywords,
-      hideReposts: source.hideReposts,
-    },
-    defaultsForSite,
-  );
-}
-
 export function normalizeSettings(value: unknown): Settings {
   const source = objectSource(value);
   const storedSiteSettings = objectSource(source.siteSettings);
@@ -376,7 +314,7 @@ export function normalizeSettings(value: unknown): Settings {
   ): ReactionSiteSettings =>
     normalizeReactionSiteSettings(
       storedSiteSettings[key],
-      legacyReactionSiteSettings(source, key),
+      defaults.siteSettings[key],
     );
 
   const siteSettings: SiteSettingsMap = {
