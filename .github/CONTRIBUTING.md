@@ -6,10 +6,7 @@ Sift に興味を持っていただきありがとうございます。不具合
 
 | 伝えたいこと | 行き先 |
 | --- | --- |
-| 不具合 | [不具合報告フォーム](https://github.com/apricot-cake/sift/issues/new?template=bug_report.yml) |
-| 機能の提案 | [機能提案フォーム](https://github.com/apricot-cake/sift/issues/new?template=feature_request.yml) |
-| 質問 | [質問フォーム](https://github.com/apricot-cake/sift/issues/new?template=question.yml) |
-| 脆弱性 | [セキュリティポリシー](SECURITY.md)を読んでから報告してください |
+| 不具合、機能の提案、質問 | [Issue](https://github.com/apricot-cake/sift/issues) |
 
 採用や優先度は、既存の Issue とプロジェクトの方針を確認して判断します。
 
