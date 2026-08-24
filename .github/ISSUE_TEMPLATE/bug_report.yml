@@ -1,0 +1,55 @@
+name: 不具合の報告
+description: 拡張機能が説明どおりに動かない。
+labels: ["バグ"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        報告に時間を割いていただきありがとうございます。
+
+        **このフォームは壊れているものを扱います。** 質問は[質問フォーム](https://github.com/apricot-cake/sift/issues/new?template=question.yml)、新しい機能の案は[機能を提案する Issue](https://github.com/apricot-cake/sift/issues/new?template=feature_request.yml)、セキュリティの問題は[非公開の報告フォーム](https://github.com/apricot-cake/sift/security/advisories/new)へお願いします。
+
+  - type: input
+    id: browser
+    attributes:
+      label: ブラウザ
+      placeholder: "Chrome 141"
+    validations:
+      required: true
+
+  - type: input
+    id: site
+    attributes:
+      label: サイトと画面
+      description: "サイト名と、検索・フィード・プロフィールなどの画面の種類を書いてください。"
+      placeholder: "ニコニコ動画の検索結果"
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: 再現手順
+      value: |
+        1.
+        2.
+        3.
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected-actual
+    attributes:
+      label: 期待した動きと、実際に起きたこと
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: 送る前に
+      options:
+        - label: "既存の Issue を検索し、まだ報告されていないことを確認した。"
+          required: true
+        - label: "認証情報、非公開の投稿、個人情報を本文や画像から取り除いた。"
+          required: true

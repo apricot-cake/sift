@@ -1,0 +1,29 @@
+# 貢献者ガイドライン
+
+Sift に興味を持っていただきありがとうございます。不具合報告や機能の提案などは随時受け付けています。
+
+## どこへ持っていくか
+
+| 伝えたいこと | 行き先 |
+| --- | --- |
+| 不具合 | [不具合報告フォーム](https://github.com/apricot-cake/sift/issues/new?template=bug_report.yml) |
+| 機能の提案 | [機能提案フォーム](https://github.com/apricot-cake/sift/issues/new?template=feature_request.yml) |
+| 質問 | [質問フォーム](https://github.com/apricot-cake/sift/issues/new?template=question.yml) |
+| 脆弱性 | [セキュリティポリシー](SECURITY.md)を読んでから報告してください |
+
+採用や優先度は、既存の Issue とプロジェクトの方針を確認して判断します。
+
+## プルリクエスト
+
+修正の域を超える変更なら、先に Issue を立ててください。予告なく届いたプルリクエストは、単にこのプロジェクトが向かっていない方向だという理由で断ることがあります。
+
+## 関連文書
+
+| 確認したいこと | 文書 |
+| --- | --- |
+| 開発環境の準備、起動、検証、配布 | [開発ガイド.md](../docs/開発ガイド.md) |
+| 対象画面、判定指標、実装上の制約 | [対応サービス.md](../docs/対応サービス.md) |
+
+## ライセンス
+
+貢献したものは、プロジェクトの他の部分と同じく [MIT License](../LICENSE) のもとで公開されることに同意したものとみなします。
