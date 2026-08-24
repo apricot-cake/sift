@@ -4,8 +4,10 @@
 
 | 伝えたいこと | 行き先 |
 | --- | --- |
-| 不具合、機能の提案、質問 | [Issue](https://github.com/apricot-cake/sift/issues) |
+| 不具合、機能の提案、そのほか | [Issue](https://github.com/apricot-cake/sift/issues) |
+| 質問 | [質問用 Issue](https://github.com/apricot-cake/sift/issues/new?template=question.md) |
 | コードや文書の変更 | [Pull Request](https://github.com/apricot-cake/sift/pulls) |
+| 脆弱性 | [非公開の報告フォーム](https://github.com/apricot-cake/sift/security/advisories/new) |
 
 ## 関連文書
 
