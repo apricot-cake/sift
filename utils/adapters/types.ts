@@ -33,7 +33,7 @@ export interface ServiceAdapter {
   // 識別子。連続読み込みを観測するサービスだけが実装する。
   readPostId?(postCard: Element): string | null;
   // サービスが一覧で公開している主指標。X / Bluesky / Misskey は反応数、
-  // YouTube は再生回数を返す。
+  // 動画とトラックのサービスは再生回数を返す。
   readMetricCount(postCard: Element): number;
   // 投稿時刻が読めないときは NaN。
   readCreatedAt(postCard: Element): number;

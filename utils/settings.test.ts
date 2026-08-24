@@ -32,11 +32,13 @@ describe("normalizeSettings", () => {
     expect(defaults.siteSettings.bluesky.minReactions).toBe(1000);
     expect(defaults.siteSettings.misskey.minReactions).toBe(20);
     expect(defaults.siteSettings.youtube).toMatchObject({
-      minViews: 10000,
+      minCount: 10000,
       periodMode: "all",
       periodValue: 1,
       periodUnit: "week",
     });
+    expect(defaults.siteSettings.niconico.minCount).toBe(1000);
+    expect(defaults.siteSettings.soundcloud.minCount).toBe(1000);
   });
 
   it("メディアを指定しない既定値は本文だけの投稿も含める", () => {
@@ -150,8 +152,8 @@ describe("normalizeSettings", () => {
     });
 
     expect(settings.siteSettings.youtube).toMatchObject({
-      minViewsEnabled: true,
-      minViews: 1500,
+      minCountEnabled: true,
+      minCount: 1500,
       periodMode: "limited",
       periodValue: 1,
       periodUnit: "day",
@@ -180,23 +182,27 @@ describe("normalizeSettings", () => {
     });
   });
 
-  it("YouTubeの設定を他サイトから独立して保持する", () => {
+  it("再生数を使うサービスの設定を独立して保持する", () => {
     const base = normalizeSettings({});
     const changed = withSiteSettings(base, "youtube", {
       ...settingsFor(base, "youtube"),
-      minViews: 20000,
+      minCount: 20000,
       periodMode: "limited",
       periodValue: 3,
       periodUnit: "month",
     });
 
     expect(changed.siteSettings.youtube).toMatchObject({
-      minViews: 20000,
+      minCount: 20000,
       periodMode: "limited",
       periodValue: 3,
       periodUnit: "month",
     });
     expect(changed.siteSettings.x).toEqual(base.siteSettings.x);
+    expect(changed.siteSettings.niconico).toEqual(base.siteSettings.niconico);
+    expect(changed.siteSettings.soundcloud).toEqual(
+      base.siteSettings.soundcloud,
+    );
   });
 
   it("場所を編集したときだけサイト既定値から個別設定を作る", () => {
@@ -262,12 +268,12 @@ describe("thresholdsFor", () => {
     });
   });
 
-  it("YouTubeの全期間条件は公開時期で制限しない", () => {
+  it("再生数の全期間条件は公開時期で制限しない", () => {
     const stored = normalizeSettings({
       siteSettings: {
         youtube: {
-          minViews: 20000,
-          minViewsEnabled: true,
+          minCount: 20000,
+          minCountEnabled: true,
           periodMode: "all",
         },
       },

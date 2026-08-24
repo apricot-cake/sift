@@ -2,7 +2,7 @@
 # 新しいキーはまずここへ足す。他の言語ファイルはこのキー集合と揃っているかを
 # locales/locales.test.ts が検査する。
 #
-extensionDescription: "Filters posts on X, Bluesky, and Misskey and videos on YouTube using site-specific criteria."
+extensionDescription: "Filters posts, videos, and tracks on X, Bluesky, Misskey, YouTube, Niconico, and SoundCloud."
 
 sidepanelSite: "Site to configure"
 sidepanelSettingLocation: "Location to configure"
@@ -38,6 +38,7 @@ optionsSectionDisplayConditions: "Display conditions"
 optionsLikesEnabled: "Use the likes filter"
 optionsReactionsEnabled: "Use the reactions filter"
 optionsViewsEnabled: "Use the view count filter"
+optionsPlaysEnabled: "Use the play count filter"
 optionsLikesFilterNote: "Filter posts by when they were posted and their minimum likes."
 optionsReactionsFilterNote: "Filter posts by when they were posted and their minimum reactions."
 optionsViewsFilterNote: "Filter videos by when they were published and their minimum views."
@@ -49,7 +50,9 @@ optionsPeriodUnit: "Period unit"
 optionsMinLikes: "Minimum likes"
 optionsMinReactions: "Minimum reactions"
 optionsMinViews: "Minimum views"
+optionsMinPlays: "Minimum plays"
 optionsUnitViews: "views"
+optionsUnitPlays: "plays"
 optionsUnitHours: "hours or less"
 optionsUnitDays: "days or less"
 optionsUnitWeeks: "weeks or less"

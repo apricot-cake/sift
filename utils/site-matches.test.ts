@@ -9,8 +9,14 @@ describe("SITE_MATCHES", () => {
         "https://twitter.com/*",
         "https://bsky.app/*",
         "https://www.youtube.com/*",
+        "https://www.nicovideo.jp/*",
+        "https://soundcloud.com/*",
       ]),
     );
+  });
+
+  it("Weibo を配布先に含めない", () => {
+    expect(SITE_MATCHES).not.toContain("https://weibo.com/*");
   });
 
   // Misskey の対応先は misskey.io だけ。アダプターの宣言とは別に、対応ホストの

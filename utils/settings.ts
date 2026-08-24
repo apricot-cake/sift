@@ -5,7 +5,8 @@ export type MediaMode = "all" | "any" | "images" | "video";
 export type PeriodMode = "all" | "limited";
 export type PeriodUnit = "hour" | "day" | "week" | "month" | "year";
 export type ReactionSiteSettingsKey = "x" | "bluesky" | "misskey";
-export type SiteSettingsKey = ReactionSiteSettingsKey | "youtube";
+export type MetricSiteSettingsKey = "youtube" | "niconico" | "soundcloud";
+export type SiteSettingsKey = ReactionSiteSettingsKey | MetricSiteSettingsKey;
 
 export interface ReactionSiteSettings {
   readonly kind: "reactions";
@@ -21,10 +22,10 @@ export interface ReactionSiteSettings {
   readonly hideReposts: boolean;
 }
 
-export interface YouTubeSiteSettings {
-  readonly kind: "youtube";
-  readonly minViewsEnabled: boolean;
-  readonly minViews: number;
+export interface MetricSiteSettings {
+  readonly kind: "metric";
+  readonly minCountEnabled: boolean;
+  readonly minCount: number;
   readonly periodMode: PeriodMode;
   readonly periodValue: number;
   readonly periodUnit: PeriodUnit;
@@ -34,7 +35,9 @@ export interface SiteSettingsMap {
   readonly x: ReactionSiteSettings;
   readonly bluesky: ReactionSiteSettings;
   readonly misskey: ReactionSiteSettings;
-  readonly youtube: YouTubeSiteSettings;
+  readonly youtube: MetricSiteSettings;
+  readonly niconico: MetricSiteSettings;
+  readonly soundcloud: MetricSiteSettings;
 }
 
 export type SiteSettings = SiteSettingsMap[SiteSettingsKey];
@@ -80,23 +83,27 @@ function defaultReactionSiteSettings(
   });
 }
 
-const defaultYouTubeSiteSettings: Readonly<YouTubeSiteSettings> = Object.freeze(
-  {
-    kind: "youtube",
-    minViewsEnabled: true,
-    minViews: 10000,
+function defaultMetricSiteSettings(
+  minCount: number,
+): Readonly<MetricSiteSettings> {
+  return Object.freeze({
+    kind: "metric",
+    minCountEnabled: true,
+    minCount,
     periodMode: "all",
     periodValue: 1,
     periodUnit: "week",
-  },
-);
+  });
+}
 
 export const defaults: Readonly<Settings> = Object.freeze({
   siteSettings: Object.freeze({
     x: defaultReactionSiteSettings(1000),
     bluesky: defaultReactionSiteSettings(1000),
     misskey: defaultReactionSiteSettings(20),
-    youtube: defaultYouTubeSiteSettings,
+    youtube: defaultMetricSiteSettings(10000),
+    niconico: defaultMetricSiteSettings(1000),
+    soundcloud: defaultMetricSiteSettings(1000),
   }),
   sourceSettings: Object.freeze({}),
 });
@@ -231,26 +238,30 @@ function normalizeReactionSiteSettings(
   };
 }
 
-function normalizeYouTubeSiteSettings(
+function normalizeMetricSiteSettings(
   value: unknown,
-  fallback: YouTubeSiteSettings,
-): YouTubeSiteSettings {
+  fallback: MetricSiteSettings,
+): MetricSiteSettings {
   const source = objectSource(value);
   const legacyLimitedOnly =
     source.periodMode === undefined &&
     source.minViewsEnabled === false &&
     source.viewRateEnabled === true;
   return {
-    kind: "youtube",
-    minViewsEnabled:
-      legacyLimitedOnly || source.minViewsEnabled === true
+    kind: "metric",
+    minCountEnabled:
+      legacyLimitedOnly ||
+      source.minCountEnabled === true ||
+      source.minViewsEnabled === true
         ? true
-        : source.minViewsEnabled === false
+        : source.minCountEnabled === false || source.minViewsEnabled === false
           ? false
-          : fallback.minViewsEnabled,
-    minViews: clampInteger(
-      legacyLimitedOnly ? source.minViewsPerDay : source.minViews,
-      fallback.minViews,
+          : fallback.minCountEnabled,
+    minCount: clampInteger(
+      legacyLimitedOnly
+        ? source.minViewsPerDay
+        : (source.minCount ?? source.minViews),
+      fallback.minCount,
       0,
       1000000000,
     ),
@@ -276,7 +287,9 @@ function isSiteSettingsKey(value: unknown): value is SiteSettingsKey {
     value === "x" ||
     value === "bluesky" ||
     value === "misskey" ||
-    value === "youtube"
+    value === "youtube" ||
+    value === "niconico" ||
+    value === "soundcloud"
   );
 }
 
@@ -310,8 +323,11 @@ function normalizeSourceSettings(
         ? entry.label.trim().slice(0, 100)
         : scopeKey;
     const settings =
-      site === "youtube"
-        ? normalizeYouTubeSiteSettings(entry.settings, siteSettings.youtube)
+      site === "youtube" || site === "niconico" || site === "soundcloud"
+        ? normalizeMetricSiteSettings(
+            entry.settings,
+            siteSettings[site] as MetricSiteSettings,
+          )
         : normalizeReactionSiteSettings(
             entry.settings,
             siteSettings[site] as ReactionSiteSettings,
@@ -367,9 +383,17 @@ export function normalizeSettings(value: unknown): Settings {
     x: normalizeReactionFor("x"),
     bluesky: normalizeReactionFor("bluesky"),
     misskey: normalizeReactionFor("misskey"),
-    youtube: normalizeYouTubeSiteSettings(
+    youtube: normalizeMetricSiteSettings(
       storedSiteSettings.youtube,
       defaults.siteSettings.youtube,
+    ),
+    niconico: normalizeMetricSiteSettings(
+      storedSiteSettings.niconico,
+      defaults.siteSettings.niconico,
+    ),
+    soundcloud: normalizeMetricSiteSettings(
+      storedSiteSettings.soundcloud,
+      defaults.siteSettings.soundcloud,
     ),
   };
 
@@ -480,14 +504,14 @@ export function periodInHours(value: number, unit: PeriodUnit): number {
 }
 
 export function thresholdsFor(settings: SiteSettings): ClassifyThresholds {
-  if (settings.kind === "youtube") {
+  if (settings.kind === "metric") {
     return {
       mediaEnabled: false,
       excludedKeywords: [],
       hideReposts: false,
       inclusion: {
-        enabled: settings.minViewsEnabled,
-        minimum: settings.minViews,
+        enabled: settings.minCountEnabled,
+        minimum: settings.minCount,
         maximumAgeHours:
           settings.periodMode === "all"
             ? null

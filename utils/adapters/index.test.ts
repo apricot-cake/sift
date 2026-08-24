@@ -5,7 +5,10 @@ import { SITE_MATCHES } from "../site-matches.ts";
 import { blueskyAdapter } from "./bluesky.ts";
 import { ADAPTERS, hostMatchesPattern, selectAdapter } from "./index.ts";
 import { isMisskeyPage, misskeyAdapter } from "./misskey.ts";
+import { niconicoAdapter } from "./niconico.ts";
+import { soundcloudAdapter } from "./soundcloud.ts";
 import { xAdapter } from "./x.ts";
+import { youtubeAdapter } from "./youtube.ts";
 
 // Misskey のインスタンスが、クライアントが動く前のサーバー応答の時点でページへ
 // 書き込むもの。それと、自分について何も名乗らないページ。
@@ -33,6 +36,10 @@ describe("ページに対してアダプターを選ぶ", () => {
     expect(selectAdapter("x.com", otherPage)).toBe(xAdapter);
     expect(selectAdapter("twitter.com", otherPage)).toBe(xAdapter);
     expect(selectAdapter("bsky.app", otherPage)).toBe(blueskyAdapter);
+    expect(selectAdapter("www.youtube.com", otherPage)).toBe(youtubeAdapter);
+    expect(selectAdapter("www.nicovideo.jp", otherPage)).toBe(niconicoAdapter);
+    expect(selectAdapter("soundcloud.com", otherPage)).toBe(soundcloudAdapter);
+    expect(selectAdapter("weibo.com", otherPage)).toBeNull();
   });
 
   it("どのアダプターも宣言していないホストでは何も名乗り出ない", () => {

@@ -92,7 +92,7 @@ export function startContentRuntime(
     siteSettings: ReturnType<typeof selectedSiteSettings>,
   ): boolean {
     const { hasImage, hasVideo } = adapter.readMedia(postCard);
-    if (siteSettings.kind === "youtube" || !siteSettings.mediaEnabled) {
+    if (siteSettings.kind === "metric" || !siteSettings.mediaEnabled) {
       return true;
     }
     const mediaMode = siteSettings.mediaMode;

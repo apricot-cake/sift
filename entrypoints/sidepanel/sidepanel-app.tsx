@@ -11,6 +11,7 @@ import { t } from "../../utils/i18n.ts";
 import {
   defaults,
   hasSourceSettings,
+  type MetricSiteSettings,
   normalizeSettings,
   type PeriodMode,
   type PeriodUnit,
@@ -23,7 +24,6 @@ import {
   withoutSourceSettings,
   withSiteSettings,
   withSourceSettings,
-  type YouTubeSiteSettings,
 } from "../../utils/settings.ts";
 import { settingsItem } from "../../utils/settings-storage.ts";
 import { siteSettingsKeyForControl } from "../../utils/site-controls.ts";
@@ -47,10 +47,15 @@ const SITE_LABELS: Readonly<Record<SiteSettingsKey, string>> = Object.freeze({
   bluesky: "Bluesky",
   misskey: "Misskey",
   youtube: "YouTube",
+  niconico: "ニコニコ動画",
+  soundcloud: "SoundCloud",
 });
 function cleanPageTitle(title: string): string {
   return title
-    .replace(/\s+(?:\/|—|\|)\s+(?:X|Bluesky|Misskey(?:\.io)?|YouTube).*$/u, "")
+    .replace(
+      /\s+(?:\/|—|\|)\s+(?:X|Bluesky|Misskey(?:\.io)?|YouTube|ニコニコ動画|SoundCloud).*$/u,
+      "",
+    )
     .trim();
 }
 
@@ -305,9 +310,9 @@ export function SidepanelApp({
     selectedScopeKey,
   );
 
-  const reactionFilterEnabled =
-    selectedSettings.kind === "youtube"
-      ? selectedSettings.minViewsEnabled
+  const metricFilterEnabled =
+    selectedSettings.kind === "metric"
+      ? selectedSettings.minCountEnabled
       : selectedSettings.minReactionsEnabled;
   const filteringEnabled = manageAll || pageFilteringEnabled;
 
@@ -326,14 +331,14 @@ export function SidepanelApp({
   };
 
   const saveSelectedSettings = (
-    nextSiteSettings: ReactionSiteSettings | YouTubeSiteSettings,
+    nextSiteSettings: ReactionSiteSettings | MetricSiteSettings,
   ): void => {
     if (selectedScopeKey === null) {
       saveSettings(withSiteSettings(settings, selectedSite, nextSiteSettings));
       return;
     }
     if (!selectedSourceIsSaved) {
-      if (selectedSite !== "youtube" && nextSiteSettings.kind === "reactions") {
+      if (nextSiteSettings.kind === "reactions") {
         saveSettings(
           withSourceSettings(
             settings,
@@ -367,11 +372,11 @@ export function SidepanelApp({
     saveSelectedSettings({ ...selectedSettings, [key]: value });
   };
 
-  const updateYouTubeSetting = <Key extends keyof YouTubeSiteSettings>(
+  const updateMetricSetting = <Key extends keyof MetricSiteSettings>(
     key: Key,
-    value: YouTubeSiteSettings[Key],
+    value: MetricSiteSettings[Key],
   ): void => {
-    if (selectedSettings.kind !== "youtube") {
+    if (selectedSettings.kind !== "metric") {
       return;
     }
     saveSelectedSettings({ ...selectedSettings, [key]: value });
@@ -557,53 +562,63 @@ export function SidepanelApp({
                 <CardContent className="divide-y p-0">
                   <SettingRow
                     label={
-                      selectedSettings.kind === "youtube"
-                        ? t("optionsViewsEnabled")
+                      selectedSettings.kind === "metric"
+                        ? selectedSite === "soundcloud"
+                          ? t("optionsPlaysEnabled")
+                          : t("optionsViewsEnabled")
                         : selectedSite === "misskey"
                           ? t("optionsReactionsEnabled")
                           : t("optionsLikesEnabled")
                     }
                   >
                     <Switch
-                      checked={reactionFilterEnabled}
+                      checked={metricFilterEnabled}
                       onCheckedChange={(value) =>
-                        selectedSettings.kind === "youtube"
-                          ? updateYouTubeSetting("minViewsEnabled", value)
+                        selectedSettings.kind === "metric"
+                          ? updateMetricSetting("minCountEnabled", value)
                           : updateReactionSetting("minReactionsEnabled", value)
                       }
                     />
                   </SettingRow>
-                  {reactionFilterEnabled && (
+                  {metricFilterEnabled && (
                     <>
                       <PeriodSetting
                         mode={selectedSettings.periodMode}
                         onModeChange={(value) =>
-                          selectedSettings.kind === "youtube"
-                            ? updateYouTubeSetting("periodMode", value)
+                          selectedSettings.kind === "metric"
+                            ? updateMetricSetting("periodMode", value)
                             : updateReactionSetting("periodMode", value)
                         }
                         onUnitChange={(value) =>
-                          selectedSettings.kind === "youtube"
-                            ? updateYouTubeSetting("periodUnit", value)
+                          selectedSettings.kind === "metric"
+                            ? updateMetricSetting("periodUnit", value)
                             : updateReactionSetting("periodUnit", value)
                         }
                         onValueChange={(value) =>
-                          selectedSettings.kind === "youtube"
-                            ? updateYouTubeSetting("periodValue", value)
+                          selectedSettings.kind === "metric"
+                            ? updateMetricSetting("periodValue", value)
                             : updateReactionSetting("periodValue", value)
                         }
                         unit={selectedSettings.periodUnit}
                         value={selectedSettings.periodValue}
                       />
-                      {selectedSettings.kind === "youtube" ? (
+                      {selectedSettings.kind === "metric" ? (
                         <NumberSetting
-                          label={t("optionsMinViews")}
+                          label={
+                            selectedSite === "soundcloud"
+                              ? t("optionsMinPlays")
+                              : t("optionsMinViews")
+                          }
                           min={0}
                           onValueChange={(value) =>
-                            updateYouTubeSetting("minViews", value)
+                            updateMetricSetting("minCount", value)
                           }
-                          suffix={t("optionsUnitViews")}
-                          value={selectedSettings.minViews}
+                          suffix={
+                            selectedSite === "soundcloud"
+                              ? t("optionsUnitPlays")
+                              : t("optionsUnitViews")
+                          }
+                          value={selectedSettings.minCount}
                         />
                       ) : (
                         <NumberSetting

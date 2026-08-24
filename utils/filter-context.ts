@@ -37,7 +37,9 @@ export function isFilterContextResponse(
     (response.site === "x" ||
       response.site === "bluesky" ||
       response.site === "misskey" ||
-      response.site === "youtube") &&
+      response.site === "youtube" ||
+      response.site === "niconico" ||
+      response.site === "soundcloud") &&
     (response.scopeKey === null || typeof response.scopeKey === "string") &&
     (response.scopeKind === null ||
       response.scopeKind === "following" ||
