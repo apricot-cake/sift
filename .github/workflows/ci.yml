@@ -50,10 +50,7 @@ jobs:
           node-version-file: .node-version
           cache: npm
 
-      # インストール時のフックが2つ走る。postinstall（`wxt prepare`＝この
-      # ビルドが要る WXT の設定を生成する）と prepare（`scripts/setup.ts`＝
-      # git に .githooks を指させるだけで、インストールを失敗させないように
-      # 書いてある）。
+      # postinstall の `wxt prepare` がビルドに必要な設定を生成する。
       - run: npm ci
 
       # `biome ci`＝整形・lint 規則・import 順を、いずれも書き換えずに検査
