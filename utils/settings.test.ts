@@ -15,11 +15,11 @@ describe("normalizeSettings", () => {
   it("サイト別の値を自分の範囲へ収める", () => {
     const settings = normalizeSettings({
       siteSettings: {
-        misskey: { minReactions: "-4", periodValue: "35" },
+        bluesky: { minReactions: "-4", periodValue: "35" },
       },
     });
-    expect(settings.siteSettings.misskey.minReactions).toBe(0);
-    expect(settings.siteSettings.misskey.periodValue).toBe(35);
+    expect(settings.siteSettings.bluesky.minReactions).toBe(0);
+    expect(settings.siteSettings.bluesky.periodValue).toBe(35);
   });
 
   it("サイトごとに既定値を持つ", () => {
@@ -30,7 +30,6 @@ describe("normalizeSettings", () => {
       periodUnit: "hour",
     });
     expect(defaults.siteSettings.bluesky.minReactions).toBe(1000);
-    expect(defaults.siteSettings.misskey.minReactions).toBe(20);
     expect(defaults.siteSettings.youtube).toMatchObject({
       minCount: 10000,
       periodMode: "all",
@@ -120,14 +119,14 @@ describe("normalizeSettings", () => {
 
   it("個別設定を削除するとサイト既定値へ戻る", () => {
     const base = normalizeSettings({});
-    const changed = withSourceSettings(base, "misskey", "antenna:abc", "技術", {
-      ...settingsFor(base, "misskey"),
+    const changed = withSourceSettings(base, "bluesky", "feed:abc", "技術", {
+      ...settingsFor(base, "bluesky"),
       minReactions: 50,
     });
-    const reset = withoutSourceSettings(changed, "misskey", "antenna:abc");
+    const reset = withoutSourceSettings(changed, "bluesky", "feed:abc");
 
-    expect(settingsFor(reset, "misskey", "antenna:abc")).toEqual(
-      base.siteSettings.misskey,
+    expect(settingsFor(reset, "bluesky", "feed:abc")).toEqual(
+      base.siteSettings.bluesky,
     );
     expect(reset.sourceSettings).toEqual({});
   });

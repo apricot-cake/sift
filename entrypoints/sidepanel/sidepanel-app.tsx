@@ -45,7 +45,6 @@ const REPOSITORY_URL = "https://github.com/apricot-cake/sift";
 const SITE_LABELS: Readonly<Record<SiteSettingsKey, string>> = Object.freeze({
   x: "X",
   bluesky: "Bluesky",
-  misskey: "Misskey",
   youtube: "YouTube",
   niconico: "ニコニコ動画",
   soundcloud: "SoundCloud",
@@ -53,7 +52,7 @@ const SITE_LABELS: Readonly<Record<SiteSettingsKey, string>> = Object.freeze({
 function cleanPageTitle(title: string): string {
   return title
     .replace(
-      /\s+(?:\/|—|\|)\s+(?:X|Bluesky|Misskey(?:\.io)?|YouTube|ニコニコ動画|SoundCloud).*$/u,
+      /\s+(?:\/|—|\|)\s+(?:X|Bluesky|YouTube|ニコニコ動画|SoundCloud).*$/u,
       "",
     )
     .trim();
@@ -71,7 +70,6 @@ function contextLabel(context: FilterContextResponse): string {
   > = {
     list: t("sidepanelScopeList"),
     feed: t("sidepanelScopeFeed"),
-    antenna: t("sidepanelScopeAntenna"),
   };
   const kind = context.scopeKind;
   if (kind === null) {
@@ -566,9 +564,7 @@ export function SidepanelApp({
                         ? selectedSite === "soundcloud"
                           ? t("optionsPlaysEnabled")
                           : t("optionsViewsEnabled")
-                        : selectedSite === "misskey"
-                          ? t("optionsReactionsEnabled")
-                          : t("optionsLikesEnabled")
+                        : t("optionsLikesEnabled")
                     }
                   >
                     <Switch
@@ -622,11 +618,7 @@ export function SidepanelApp({
                         />
                       ) : (
                         <NumberSetting
-                          label={
-                            selectedSite === "misskey"
-                              ? t("optionsMinReactions")
-                              : t("optionsMinLikes")
-                          }
+                          label={t("optionsMinLikes")}
                           min={0}
                           onValueChange={(value) =>
                             updateReactionSetting("minReactions", value)

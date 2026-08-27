@@ -42,8 +42,8 @@
   "overrides": [
     {
       // This stylesheet is injected into a page whose own CSS Sift does not
-      // control and cannot outrank by specificity — X, Bluesky and every
-      // Misskey instance style their own posts. !important is the only thing
+      // control and cannot outrank by specificity — supported sites style
+      // their own posts. !important is the only thing
       // that reliably hides a post there, so the rule that warns about it is
       // reporting the design rather than a mistake. Scoped to this one file:
       // everywhere else Sift owns the cascade and the warning still applies.

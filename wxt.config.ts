@@ -6,7 +6,6 @@ import { defineConfig } from "wxt";
 import { requireExplicitContentScriptReload } from "./plugins/dev-content-script-reload.ts";
 import { devErrorLog } from "./plugins/dev-error-log.ts";
 import { DEV_SERVER_HOST, DEV_SERVER_PORT } from "./utils/dev-server.ts";
-import { MISSKEY_HOSTS, originForHost } from "./utils/misskey-hosts.ts";
 
 // 開発ビルドの置き場所。作業ツリーの外にあり、どのツリーでも同じ場所なのは
 // 意図的＝開発専用の Chrome プロファイルは展開済みの置き場を一度だけ読み込む
@@ -107,8 +106,6 @@ export default defineConfig({
     // URL が伏せられ、対応する
     // タイムラインでも操作不能と表示される。常時のサイト権限にはしない。
     permissions: ["activeTab", "storage"],
-    // Misskey は misskey.io だけを正式に対応する。実行時に任意ホストの権限は求めない。
-    host_permissions: MISSKEY_HOSTS.map((host) => originForHost(host)),
     action: {
       default_title: "Sift",
     },

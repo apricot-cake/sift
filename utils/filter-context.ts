@@ -36,7 +36,6 @@ export function isFilterContextResponse(
   return (
     (response.site === "x" ||
       response.site === "bluesky" ||
-      response.site === "misskey" ||
       response.site === "youtube" ||
       response.site === "niconico" ||
       response.site === "soundcloud") &&
@@ -45,8 +44,7 @@ export function isFilterContextResponse(
       response.scopeKind === "following" ||
       response.scopeKind === "home" ||
       response.scopeKind === "list" ||
-      response.scopeKind === "feed" ||
-      response.scopeKind === "antenna") &&
+      response.scopeKind === "feed") &&
     typeof response.pageTitle === "string" &&
     typeof response.pageKey === "string" &&
     typeof response.filteringEnabled === "boolean" &&

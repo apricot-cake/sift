@@ -479,8 +479,7 @@ export default defineContentScript({
     runtimeGlobal[runtimeSymbol]?.dispose();
     runtimeGlobal[runtimeSymbol] = startContentRuntime(
       ctx,
-      // Misskey はホストをアダプターの外で登録するため、振り分けにページ自身も渡す。
-      selectAdapter(location.hostname, document),
+      selectAdapter(location.hostname),
     );
 
     // このページがスクリプトを受け取ったことを開発時の worker へ伝える。

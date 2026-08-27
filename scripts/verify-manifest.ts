@@ -40,13 +40,7 @@ assert.equal(generatedManifest.key, declaredManifest.key);
 const declaredPermissions = declaredManifest.permissions ?? [];
 const expectedPermissions = [...declaredPermissions, "sidePanel"];
 assert.deepEqual(generatedManifest.permissions, expectedPermissions);
-// misskey.io はビルド時に確定した既定ホスト（#41）＝ここが静的な
-// host_permissions と一致しなければ、インストール直後から追加操作なしに動く
-// という受け入れ条件を検査するものが無い。
-assert.deepEqual(
-  generatedManifest.host_permissions,
-  declaredManifest.host_permissions,
-);
+assert.equal(generatedManifest.host_permissions, undefined);
 assert.equal(generatedManifest.optional_host_permissions, undefined);
 
 // バージョンがあるのは package.json だけ。ここへは WXT が写す。

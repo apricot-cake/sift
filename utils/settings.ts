@@ -4,7 +4,7 @@ import type { ClassifyThresholds } from "./filter-core.ts";
 export type MediaMode = "all" | "any" | "images" | "video";
 export type PeriodMode = "all" | "limited";
 export type PeriodUnit = "hour" | "day" | "week" | "month" | "year";
-export type ReactionSiteSettingsKey = "x" | "bluesky" | "misskey";
+export type ReactionSiteSettingsKey = "x" | "bluesky";
 export type MetricSiteSettingsKey = "youtube" | "niconico" | "soundcloud";
 export type SiteSettingsKey = ReactionSiteSettingsKey | MetricSiteSettingsKey;
 
@@ -34,7 +34,6 @@ export interface MetricSiteSettings {
 export interface SiteSettingsMap {
   readonly x: ReactionSiteSettings;
   readonly bluesky: ReactionSiteSettings;
-  readonly misskey: ReactionSiteSettings;
   readonly youtube: MetricSiteSettings;
   readonly niconico: MetricSiteSettings;
   readonly soundcloud: MetricSiteSettings;
@@ -42,12 +41,7 @@ export interface SiteSettingsMap {
 
 export type SiteSettings = SiteSettingsMap[SiteSettingsKey];
 
-export type SettingsScopeKind =
-  | "following"
-  | "home"
-  | "list"
-  | "feed"
-  | "antenna";
+export type SettingsScopeKind = "following" | "home" | "list" | "feed";
 
 export interface SettingsScope {
   readonly key: string;
@@ -100,7 +94,6 @@ export const defaults: Readonly<Settings> = Object.freeze({
   siteSettings: Object.freeze({
     x: defaultReactionSiteSettings(1000),
     bluesky: defaultReactionSiteSettings(1000),
-    misskey: defaultReactionSiteSettings(20),
     youtube: defaultMetricSiteSettings(10000),
     niconico: defaultMetricSiteSettings(1000),
     soundcloud: defaultMetricSiteSettings(1000),
@@ -255,7 +248,6 @@ function isSiteSettingsKey(value: unknown): value is SiteSettingsKey {
   return (
     value === "x" ||
     value === "bluesky" ||
-    value === "misskey" ||
     value === "youtube" ||
     value === "niconico" ||
     value === "soundcloud"
@@ -320,7 +312,6 @@ export function normalizeSettings(value: unknown): Settings {
   const siteSettings: SiteSettingsMap = {
     x: normalizeReactionFor("x"),
     bluesky: normalizeReactionFor("bluesky"),
-    misskey: normalizeReactionFor("misskey"),
     youtube: normalizeMetricSiteSettings(
       storedSiteSettings.youtube,
       defaults.siteSettings.youtube,

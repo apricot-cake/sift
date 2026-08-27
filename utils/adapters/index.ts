@@ -2,9 +2,7 @@
 // script は起動したページに対してそのうち1つだけを選び、あとはどれを選んだかに
 // 関わらず同じループを回す。
 
-import { MISSKEY_HOSTS } from "../misskey-hosts.ts";
 import { blueskyAdapter } from "./bluesky.ts";
-import { isMisskeyPage, misskeyAdapter } from "./misskey.ts";
 import { niconicoAdapter } from "./niconico.ts";
 import { soundcloudAdapter } from "./soundcloud.ts";
 import type { ServiceAdapter } from "./types.ts";
@@ -14,7 +12,6 @@ import { youtubeAdapter } from "./youtube.ts";
 export const ADAPTERS: readonly ServiceAdapter[] = Object.freeze([
   xAdapter,
   blueskyAdapter,
-  misskeyAdapter,
   youtubeAdapter,
   niconicoAdapter,
   soundcloudAdapter,
@@ -40,21 +37,10 @@ export function hostMatchesPattern(pattern: string, hostname: string): boolean {
 // 既にそういうページから遠ざけているので、これは同じことを二度目に成り立たせる
 // ためのもの＝manifest を通らない注入経路のために要る。
 //
-// ホストがアダプターに宣言されているサービスは、ホストだけで決まる。
-// Misskey は固定ホストをアダプターの外で manifest に足すため、対応ホストかつ
-// ページ自身が Misskey と名乗る場合だけ振り分ける。
-export function selectAdapter(
-  hostname: string,
-  page: ParentNode,
-): ServiceAdapter | null {
-  const declared = ADAPTERS.find((adapter) =>
-    adapter.matches.some((pattern) => hostMatchesPattern(pattern, hostname)),
+export function selectAdapter(hostname: string): ServiceAdapter | null {
+  return (
+    ADAPTERS.find((adapter) =>
+      adapter.matches.some((pattern) => hostMatchesPattern(pattern, hostname)),
+    ) ?? null
   );
-  if (declared) {
-    return declared;
-  }
-
-  return MISSKEY_HOSTS.includes(hostname) && isMisskeyPage(page)
-    ? misskeyAdapter
-    : null;
 }
