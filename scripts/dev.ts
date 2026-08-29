@@ -1,10 +1,9 @@
-// `npm run dev`＝WXT の開発サーバー。開発ビルドを、作業ツリーの外の固定の経路へ
-// 書く。
+// `npm run dev`＝WXT の開発サーバー。開発ビルドを、この作業ツリーの
+// .output/chrome-mv3-dev へ書く。
 //
-// 外であること、どのツリーでも同じ場所であることは意図的＝開発専用の Chrome
-// プロファイルは展開済みの置き場を一度だけ読み込むので、作業が別の worktree へ
-// 移るたびにそれを指し直すのは、誰も覚えていないクリックになる。置き場が動かない
-// おかげで、どの worktree が開発ビルドの「本家」かを裁く必要も無い。
+// 生成物をソースの作業ツリーに所属させる＝Git 管理からは除外するが、別の
+// worktree が同じ外部フォルダを上書きすることはない。worktree を切り替える場合は、
+// 開発用 Chrome もその worktree の出力を読み込む。
 //
 // ここが `wxt` の CLI を呼び出しているのは、最初の版がやっていた WXT の JS API を
 // 呼ぶやり方が駄目だったから。`createServer().start()` はサーバーが待ち受けを
@@ -23,15 +22,13 @@
 // 同じプロファイルへ読み込まないこと＝プロファイルを分けてあるのはそのため。
 import { spawn } from "node:child_process";
 import net from "node:net";
-import { homedir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { DEV_SERVER_HOST, DEV_SERVER_PORT } from "../utils/dev-server.ts";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const output =
-  process.env.SIFT_DEV_OUTPUT ||
-  path.join(homedir(), ".sift-dev", "chrome-mv3-dev");
+  process.env.SIFT_DEV_OUTPUT || path.join(ROOT, ".output", "chrome-mv3-dev");
 
 // もう立っているか。TCP で繋がるかどうかで足りる＝ここが知りたいのは、そのポートを
 // 誰かが持っているかどうかだけ。
@@ -59,10 +56,9 @@ function devServerAlive(): Promise<boolean> {
   });
 }
 
-// もう立っているなら、誰が呼んだのであれこの呼び出しはそこで終わり。1つの
-// サーバーがどの worktree にも仕えるので（出力先もポートも固定）、2つ目の起動が
-// 呼び手の望みだったことは一度も無い＝ポートで死ぬか、呼び手が何かを起動できたと
-// 信じている間に死ぬ窓を開くか。
+// もう立っているなら、この呼び出しはそこで終わり。ポートは全 worktree で共通なので、
+// 別の worktree へ切り替える場合は、先に現在の開発サーバーを止める。2つ目を起動して
+// ポートで失敗するか、呼び手が起動できたと誤認する窓を開けない。
 //
 // 覚えておく手順ではなくコマンドの中に置いてあるのは、人に対しては「動いて
 // いるか」にタスクバーが答えるが、エージェントはタスクバーを見られないし、
@@ -72,7 +68,7 @@ if (await devServerAlive()) {
     `[sift] 開発サーバーは ${DEV_SERVER_HOST}:${DEV_SERVER_PORT} で既に立っている＝手を出さない。`,
   );
   console.log(
-    "[sift] 1つのサーバーがどの worktree にも仕える。止めるにはそのコンソール窓を閉じる。",
+    "[sift] 別の worktree へ切り替える場合は、現在のサーバーを止めてから起動する。",
   );
   process.exit(0);
 }

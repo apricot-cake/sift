@@ -8,6 +8,10 @@ const source = fs.readFileSync(
 );
 
 describe("開発用Chromeプロファイル", () => {
+  test("開発ビルドを作業ツリー内から読む", () => {
+    expect(source).toContain('path.join(ROOT, ".output", "chrome-mv3-dev")');
+  });
+
   test("背面でも描画とタイマーを維持する", () => {
     expect(source).toContain("--disable-backgrounding-occluded-windows");
     expect(source).toContain("--disable-background-timer-throttling");

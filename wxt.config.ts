@@ -1,5 +1,4 @@
 import { existsSync } from "node:fs";
-import { homedir } from "node:os";
 import { basename, dirname, resolve } from "node:path";
 import tailwindcss from "@tailwindcss/vite";
 import { defineConfig } from "wxt";
@@ -7,17 +6,15 @@ import { requireExplicitContentScriptReload } from "./plugins/dev-content-script
 import { devErrorLog } from "./plugins/dev-error-log.ts";
 import { DEV_SERVER_HOST, DEV_SERVER_PORT } from "./utils/dev-server.ts";
 
-// 開発ビルドの置き場所。作業ツリーの外にあり、どのツリーでも同じ場所なのは
-// 意図的＝開発専用の Chrome プロファイルは展開済みの置き場を一度だけ読み込む
-// ので、作業が別の worktree へ移るたびにそれを指し直すのは、誰も覚えていない
-// クリックになる。
+// 開発ビルドの置き場所。WXT の標準どおり、この作業ツリーの .output に置く。
+// 生成物はソースと同じ作業ツリーに所属し、別の worktree から上書きされない。
 //
 // SIFT_DEV_OUTPUT を設定するのは `npm run dev` だけ＝素の `wxt` はこれを未設定の
 // まま、リリースと同じく .output へ書く。それが、誰のプロファイルも読み込んで
 // いないビルドにとって正しい答え。
 const developmentOutput =
   process.env.SIFT_DEV_OUTPUT ||
-  resolve(homedir(), ".sift-dev", "chrome-mv3-dev");
+  resolve(import.meta.dirname, ".output", "chrome-mv3-dev");
 
 // 上の置き場に今ビルドが入っているかどうか。開発時の worker が自分を起動し直す
 // 前にこれを訊く＝サーバーの起動はその置き場を消して書き直すし、空になった所へ
@@ -37,7 +34,7 @@ export default defineConfig({
   // manifest.default_locale の設定が要る（下の manifest 節）。
   modules: ["@wxt-dev/i18n/module", "@wxt-dev/module-react"],
   // 決して取り違えてはならない2つの出力先。
-  //   開発     → 上の固定の経路。読むのは開発用プロファイルだけ
+  //   開発     → .output/chrome-mv3-dev。読むのは開発用プロファイルだけ
   //   リリース → .output/<ブラウザ>-mv3-release。scripts/deploy-extension.ts が
   //              これを .output/chrome-mv3 へ引き上げる＝日常の Chrome が読み
   //              込んでいる置き場。だから `wxt build` は日常の置き場へ書けない。

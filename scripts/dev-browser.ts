@@ -16,11 +16,11 @@ import fs from "node:fs";
 import { homedir } from "node:os";
 import path from "node:path";
 
+const ROOT = path.resolve(import.meta.dirname, "..");
 const PROFILE =
   process.env.SIFT_DEV_PROFILE || path.join(homedir(), ".sift-ext-profile");
 const OUTPUT =
-  process.env.SIFT_DEV_OUTPUT ||
-  path.join(homedir(), ".sift-dev", "chrome-mv3-dev");
+  process.env.SIFT_DEV_OUTPUT || path.join(ROOT, ".output", "chrome-mv3-dev");
 const CDP_HOST = "127.0.0.1";
 const CDP_PORT = Number.parseInt(process.env.SIFT_DEV_CDP_PORT || "9222", 10);
 const CDP_URL = `http://${CDP_HOST}:${CDP_PORT}`;
