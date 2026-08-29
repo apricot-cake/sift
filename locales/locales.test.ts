@@ -1,8 +1,8 @@
-// 5言語のキー網羅を検査する。1言語からキーを1つ
+// 2言語のキー網羅を検査する。1言語からキーを1つ
 // 落とす、または余計なキーを足すと、この describe が落ちる。
 //
 // @wxt-dev/i18n はビルド時に locales/*.yml を読んで _locales/*/messages.json
-// を焼くだけで、5言語すべてが同じキー集合を持つかも、対象言語がこの5つで
+// を焼くだけで、2言語が同じキー集合を持つかも、対象言語がこの2つで
 // あることも検査しない＝それを言うのは Sift 側の方針で、ここでそれを言う。
 // 対象言語を増やす判断は TARGET_LOCALES を書き換えることそのもの
 // （README の「新しい言語の足し方」）。
@@ -20,9 +20,6 @@ import { describe, expect, it } from "vitest";
 const TARGET_LOCALES: Readonly<Record<string, string>> = Object.freeze({
   en: "en",
   ja: "ja",
-  ko: "ko",
-  "zh-TW": "zh_TW",
-  "zh-CN": "zh_CN",
 });
 
 const DEFAULT_LOCALE = "en";
@@ -32,7 +29,7 @@ const localeFiles = readdirSync(localesDir).filter(
   (name) => extname(name) === ".yml",
 );
 
-it("locales/ が対象5言語のファイルだけを持っている", () => {
+it("locales/ が対象2言語のファイルだけを持っている", () => {
   const found = localeFiles.map((name) => name.replace(/\.yml$/, "")).sort();
   expect(found).toEqual(Object.keys(TARGET_LOCALES).sort());
 });

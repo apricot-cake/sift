@@ -6,10 +6,10 @@
 //
 // 以下はよくあるエラー計測の「集める側」＝Sentry 型の SDK が拡張機能の中に
 // 入れるのと同じ2つのグローバルなイベント購読で、宛先だけがサーバーではなく
-// 手元。どの画面も browser.storage.local の環状バッファへ書き、それはどの
-// ビルドでも同じ。開発時は service worker がそのバッファを開発サーバーへ送り、
-// サーバーが ~/.sift/extension-errors.log へ書き足す（plugins/dev-error-log.ts）。
-// リリースのビルドはバッファを埋め続けるが、送る相手がいない。
+// 手元。開発ビルドでは、どの画面も browser.storage.local の環状バッファへ書く。
+// service worker がそのバッファを開発サーバーへ送り、サーバーが
+// ~/.sift/extension-errors.log へ書き足す（plugins/dev-error-log.ts）。利用する
+// 経路のないリリースビルドでは購読も保存もしない。
 //
 // 作りからして best-effort＝ここには例外を投げるものが無いし、ここが見ている
 // コードがここを待つこともない。診断の1行が失われる方が、診断がフィルタを壊す
@@ -298,6 +298,10 @@ export function startUncaughtReporting({
   source,
   filterToOwnCode,
 }: StartUncaughtReportingOptions): () => void {
+  if (!__SIFT_DEV__) {
+    return () => {};
+  }
+
   return installUncaughtReporting({
     target,
     source,

@@ -9,6 +9,7 @@ import {
   installUncaughtReporting,
   isOwnExtensionError,
   recordErrorEntry,
+  startUncaughtReporting,
   type UncaughtEventLike,
 } from "./error-log.ts";
 
@@ -376,5 +377,20 @@ describe("installUncaughtReporting", () => {
 
     target.emit("unhandledrejection", { reason: "x" });
     await new Promise((resolve) => setTimeout(resolve, 0));
+  });
+});
+
+describe("startUncaughtReporting", () => {
+  it("リリースビルドでは例外を購読しない", () => {
+    const target = createFakeTarget();
+
+    startUncaughtReporting({
+      target,
+      source: "sidepanel",
+      filterToOwnCode: false,
+    });
+
+    expect(target.count("error")).toBe(0);
+    expect(target.count("unhandledrejection")).toBe(0);
   });
 });
