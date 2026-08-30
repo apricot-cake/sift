@@ -1,26 +1,17 @@
-// `npm run dev:browser`＝開発用の Chrome プロファイルを、CDP で接続できる形で開く。
-//
-// プロファイルを分けること自体が目的＝日常のブラウザが載せるのはリリース
-// ビルドだけで他は載せないので、拡張機能の開発に関わること（開発サーバーの
-// バンドル、保存のたびのタブの再読み込み）は全部こちらで起きる。
-//
-// 自分の `--user-data-dir` を持つので、日常の Chrome と並んで、自分の
-// セッションを持つ2つ目のプロセスとして動く。X へのサインインは人が一度だけ
-// 行う手順で、そのログインはプロファイルが保つ。
-//
-// --load-extension は使わない＝Chrome 137 以降はこれを無視するし（Chrome 151 で
-// 確認）、必要も無い。chrome://extensions から一度読み込んだ展開済み拡張機能は、
-// プロファイルが覚えている。その最初の読み込みだけが、人のやる部分。
-import { execFileSync, spawn } from "node:child_process";
+// 開発用の Chrome プロファイルを CDP 付きで起動し、配備済みの production
+// ビルドを読み込む。日常用プロファイルと開発用プロファイルは、どちらもこの
+// 作業ツリーの .output/chrome-mv3 を展開済み拡張機能として読む。
+import { spawn } from "node:child_process";
 import fs from "node:fs";
 import { homedir } from "node:os";
 import path from "node:path";
+import { findChromePath } from "./chrome-path.ts";
 
 const ROOT = path.resolve(import.meta.dirname, "..");
 const PROFILE =
   process.env.SIFT_DEV_PROFILE || path.join(homedir(), ".sift-ext-profile");
-const OUTPUT =
-  process.env.SIFT_DEV_OUTPUT || path.join(ROOT, ".output", "chrome-mv3-dev");
+const OUTPUT = path.join(ROOT, ".output", "chrome-mv3");
+const EXTENSION_ID = "bohbpocokkfioejlabmeaimpkpmablkm";
 const CDP_HOST = "127.0.0.1";
 const CDP_PORT = Number.parseInt(process.env.SIFT_DEV_CDP_PORT || "9222", 10);
 const CDP_URL = `http://${CDP_HOST}:${CDP_PORT}`;
@@ -29,138 +20,152 @@ if (!Number.isInteger(CDP_PORT) || CDP_PORT < 1024 || CDP_PORT > 65535) {
   throw new Error("SIFT_DEV_CDP_PORT は 1024〜65535 のポート番号にすること。");
 }
 
-async function cdpReady(): Promise<boolean> {
+interface CdpVersion {
+  webSocketDebuggerUrl: string;
+}
+
+interface ExtensionInfo {
+  id: string;
+  path: string;
+  enabled: boolean;
+}
+
+async function readCdpVersion(): Promise<CdpVersion | null> {
   try {
     const response = await fetch(`${CDP_URL}/json/version`, {
       signal: AbortSignal.timeout(500),
     });
     const value: unknown = await response.json();
-    return (
-      response.ok &&
-      typeof value === "object" &&
-      value !== null &&
-      "webSocketDebuggerUrl" in value &&
-      typeof value.webSocketDebuggerUrl === "string"
-    );
+    if (
+      !response.ok ||
+      typeof value !== "object" ||
+      value === null ||
+      !("webSocketDebuggerUrl" in value) ||
+      typeof value.webSocketDebuggerUrl !== "string"
+    ) {
+      return null;
+    }
+    return { webSocketDebuggerUrl: value.webSocketDebuggerUrl };
   } catch {
-    return false;
+    return null;
   }
 }
 
-async function waitForCdp(): Promise<boolean> {
+async function waitForCdp(): Promise<CdpVersion | null> {
   for (let attempt = 0; attempt < 20; attempt += 1) {
-    if (await cdpReady()) {
-      return true;
-    }
+    const version = await readCdpVersion();
+    if (version) return version;
     await new Promise((resolve) => setTimeout(resolve, 150));
   }
-  return false;
+  return null;
 }
 
-// Chrome が実際にどこにあるか。当てずっぽうではなく Windows に訊く＝32bit の
-// 導入先を持つ機械はいくらでもあり、64bit の経路を埋め込むと、そこでは見当違いの
-// 内容を言いながら失敗する。
-function chromePath() {
-  const candidates = [
-    path.join(
-      process.env.PROGRAMFILES || "C:\\Program Files",
-      "Google",
-      "Chrome",
-      "Application",
-      "chrome.exe",
-    ),
-    path.join(
-      process.env["PROGRAMFILES(X86)"] || "C:\\Program Files (x86)",
-      "Google",
-      "Chrome",
-      "Application",
-      "chrome.exe",
-    ),
-    path.join(
-      process.env.LOCALAPPDATA || "",
-      "Google",
-      "Chrome",
-      "Application",
-      "chrome.exe",
-    ),
-  ];
-  for (const candidate of candidates) {
-    if (candidate && fs.existsSync(candidate)) return candidate;
-  }
-  try {
-    const found = execFileSync("where.exe", ["chrome"], { encoding: "utf8" })
-      .split(/\r?\n/)
-      .find(Boolean);
-    if (found && fs.existsSync(found)) return found;
-  } catch {
-    /* PATH にも無い */
-  }
-  throw new Error(
-    "Chrome が見つからない。SIFT_CHROME にその完全な経路を設定すること。",
+async function cdpCall<T>(
+  webSocketDebuggerUrl: string,
+  method: string,
+  params: Record<string, unknown> = {},
+): Promise<T> {
+  return await new Promise<T>((resolve, reject) => {
+    const socket = new WebSocket(webSocketDebuggerUrl);
+    const timeout = setTimeout(() => {
+      socket.close();
+      reject(new Error(`CDP ${method} が時間内に応答しなかった。`));
+    }, 5000);
+
+    const finish = (callback: () => void) => {
+      clearTimeout(timeout);
+      socket.close();
+      callback();
+    };
+
+    socket.addEventListener("open", () => {
+      socket.send(JSON.stringify({ id: 1, method, params }));
+    });
+    socket.addEventListener("message", (event) => {
+      const message = JSON.parse(String(event.data));
+      if (message.id !== 1) return;
+      if (message.error) {
+        finish(() => reject(new Error(message.error.message ?? method)));
+      } else {
+        finish(() => resolve(message.result as T));
+      }
+    });
+    socket.addEventListener("error", () => {
+      finish(() => reject(new Error(`CDP ${method} の接続に失敗した。`)));
+    });
+  });
+}
+
+async function loadSharedExtension(version: CdpVersion): Promise<void> {
+  const loaded = await cdpCall<{ id: string }>(
+    version.webSocketDebuggerUrl,
+    "Extensions.loadUnpacked",
+    { path: OUTPUT },
   );
+  const listed = await cdpCall<{ extensions: ExtensionInfo[] }>(
+    version.webSocketDebuggerUrl,
+    "Extensions.getExtensions",
+  );
+  const extension = listed.extensions.find((item) => item.id === loaded.id);
+  if (
+    loaded.id !== EXTENSION_ID ||
+    !extension?.enabled ||
+    path.resolve(extension.path) !== path.resolve(OUTPUT)
+  ) {
+    throw new Error(
+      `CDP が共有ビルドを有効にできなかった: ${loaded.id} ${extension?.path ?? "(pathなし)"}`,
+    );
+  }
 }
 
-const chrome = process.env.SIFT_CHROME || chromePath();
+const chrome = process.env.SIFT_CHROME || findChromePath();
 
-// `--print` は全部を解決して何も開かない。ブラウザの窓を開くことは、その機械を
-// 使っている人から画面とキーボードを奪うので、経路が正しいかを確かめるのにそれを
-// 払わせてはならない。
 if (process.argv.includes("--print")) {
   console.log(`chrome:      ${chrome}`);
   console.log(`プロファイル: ${PROFILE}`);
   console.log(`CDP:         ${CDP_URL}`);
   console.log(
-    `ビルド:      ${OUTPUT}${fs.existsSync(path.join(OUTPUT, "manifest.json")) ? "" : "  (まだビルドされていない)"}`,
+    `ビルド:      ${OUTPUT}${fs.existsSync(path.join(OUTPUT, "manifest.json")) ? "" : "  (まだ配備されていない)"}`,
   );
   process.exit(0);
+}
+
+if (!fs.existsSync(path.join(OUTPUT, "manifest.json"))) {
+  throw new Error(
+    `[sift] 共有ビルドが無い。先に "npm run deploy" を実行すること: ${OUTPUT}`,
+  );
 }
 
 fs.mkdirSync(PROFILE, { recursive: true });
 
-if (await cdpReady()) {
-  console.log(`[sift] 開発用プロファイルは CDP で接続済み: ${CDP_URL}`);
-  process.exit(0);
-}
-
-// 切り離す＝このコマンドはブラウザを開いて戻る。立っている間ずっとそれを抱える
-// のではない。端末を閉じたことでブラウザが閉じてはならない。
-const child = spawn(
-  chrome,
-  [
-    `--user-data-dir=${PROFILE}`,
-    `--remote-debugging-address=${CDP_HOST}`,
-    `--remote-debugging-port=${CDP_PORT}`,
-    "--disable-backgrounding-occluded-windows",
-    "--disable-background-timer-throttling",
-    "--disable-renderer-backgrounding",
-  ],
-  {
-    detached: true,
-    stdio: "ignore",
-  },
-);
-child.unref();
-
-if (!(await waitForCdp())) {
-  throw new Error(
-    `[sift] ${CDP_URL} へ接続できない。開発用 Chrome が既に開いているなら閉じてから、もう一度 npm run dev:browser を実行すること。`,
+let version = await readCdpVersion();
+if (!version) {
+  const child = spawn(
+    chrome,
+    [
+      `--user-data-dir=${PROFILE}`,
+      `--remote-debugging-address=${CDP_HOST}`,
+      `--remote-debugging-port=${CDP_PORT}`,
+      "--disable-backgrounding-occluded-windows",
+      "--disable-background-timer-throttling",
+      "--disable-renderer-backgrounding",
+    ],
+    {
+      detached: true,
+      stdio: "ignore",
+      windowsHide: true,
+    },
   );
+  child.unref();
+  version = await waitForCdp();
+  if (!version) {
+    throw new Error(
+      `[sift] ${CDP_URL} へ接続できない。開発用 Chrome が既に開いているなら閉じてから、もう一度 npm run dev:browser を実行すること。`,
+    );
+  }
+  console.log(`[sift] CDP を有効にした開発用プロファイルを開いた: ${PROFILE}`);
 }
 
-console.log(
-  `[sift] CDP を有効にした開発用 Chrome プロファイルを開いた: ${PROFILE}`,
-);
+await loadSharedExtension(version);
+console.log(`[sift] 開発用プロファイルで共有ビルドを読み込んだ: ${OUTPUT}`);
 console.log(`[sift] CDP 接続先: ${CDP_URL}`);
-if (fs.existsSync(path.join(OUTPUT, "manifest.json"))) {
-  console.log(`[sift] 読み込む開発ビルド: ${OUTPUT}`);
-} else {
-  console.log(
-    `[sift] 開発ビルドがまだ無い＝先に "npm run dev" を走らせる（${OUTPUT} へ書かれる）`,
-  );
-}
-console.log(
-  "[sift] 最初の1回だけ: chrome://extensions → デベロッパーモード → パッケージ化されていない拡張機能を読み込む → 上の置き場。",
-);
-console.log(
-  "[sift] 日常のプロファイルへは読み込まないこと＝どちらのビルドも同じ拡張機能 id を持っている。検証は CDP でこの接続先だけを使う。",
-);

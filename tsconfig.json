@@ -3,7 +3,7 @@
   "compilerOptions": {
     "jsx": "react-jsx",
     // Node's built-in type stripping — which is how scripts/*.ts run at all
-    // (`npm run dev`, `npm run deploy`, `npm run verify:manifest`) — cannot
+    // (`npm run deploy`, `npm run verify:manifest`) — cannot
     // erase enums, runtime namespaces, parameter properties or decorators; it
     // only strips type-only syntax. Failing on those here, rather than at the
     // moment a script is run, keeps every .ts file in this repo directly

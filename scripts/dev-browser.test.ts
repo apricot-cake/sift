@@ -8,8 +8,10 @@ const source = fs.readFileSync(
 );
 
 describe("開発用Chromeプロファイル", () => {
-  test("開発ビルドを作業ツリー内から読む", () => {
-    expect(source).toContain('path.join(ROOT, ".output", "chrome-mv3-dev")');
+  test("日常用プロファイルと同じproductionビルドを読む", () => {
+    expect(source).toContain('path.join(ROOT, ".output", "chrome-mv3")');
+    expect(source).toContain('"Extensions.loadUnpacked"');
+    expect(source).toContain('"Extensions.getExtensions"');
   });
 
   test("背面でも描画とタイマーを維持する", () => {

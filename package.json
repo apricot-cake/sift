@@ -7,15 +7,15 @@
     "node": ">=24.12.0"
   },
   "scripts": {
-    "dev": "node scripts/dev.ts",
     "dev:browser": "node scripts/dev-browser.ts",
-    "build": "wxt build -b chrome && npm run verify:manifest",
+    "build": "node scripts/build-extension.ts store",
+    "zip:store": "node scripts/build-extension.ts store zip",
     "deploy": "node scripts/deploy-extension.ts",
     "lint": "biome ci .",
     "lint:fix": "biome check --write .",
     "test": "tsc --noEmit && vitest run",
     "check": "npm run lint && npm test",
-    "verify:manifest": "node scripts/verify-manifest.ts",
+    "verify:manifest": "node scripts/verify-manifest.ts store",
     "postinstall": "node scripts/bootstrap-i18n-types.ts && wxt prepare"
   },
   "dependencies": {

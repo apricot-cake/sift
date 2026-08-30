@@ -6,8 +6,6 @@ import {
   type ContinuousLoadObservation,
   ContinuousLoadWarningTracker,
 } from "../../utils/continuous-load-warning.ts";
-import { DEV_CONTENT_STARTED, DEV_FILTER_PASS } from "../../utils/dev-link.ts";
-import { startUncaughtReporting } from "../../utils/error-log.ts";
 import {
   type FilterContextResponse,
   isFilterContextRequest,
@@ -17,7 +15,6 @@ import {
   type ClassifyState,
   classifyPost,
 } from "../../utils/filter-core.ts";
-import { CONTENT_RUNTIME_KEY } from "../../utils/runtime-key.ts";
 import {
   defaults,
   normalizeSettings,
@@ -47,24 +44,12 @@ export function startContentRuntime(
   // られた関数宣言の中まで自分では運ばない。
   const adapter = maybeAdapter;
 
-  // 世界の寿命ではなく、この実行環境の寿命に結び付けてある＝このスクリプトを
-  // 差し替える注入は先に前の実行環境を片付けるので、両方が購読している時間は
-  // 存在しない。
-  const stopUncaughtReporting = startUncaughtReporting({
-    target: window,
-    source: "content",
-    // X 自身の例外もこの同じ window に届き、それを記録すれば誤報になる。Sift の
-    // ものは、拡張機能のオリジンを名乗るフレームだけ。
-    filterToOwnCode: true,
-  });
-
   let settings = normalizeSettings(defaults);
   let observer: MutationObserver | null = null;
   let routeTimer: number | null = null;
   let filterFrame: number | null = null;
   let keepViewportOnNextFilter = false;
   let disposed = false;
-  let reportedFilterPass = false;
   let pageFilteringEnabled = false;
   const loadWarningTracker = adapter.readPostId
     ? new ContinuousLoadWarningTracker()
@@ -197,7 +182,6 @@ export function startContentRuntime(
       return;
     }
 
-    const counts = { visible: 0, matched: 0, hidden: 0 };
     const siteSettings = selectedSiteSettings();
     const loadObservations: ContinuousLoadObservation[] = [];
     const updates: {
@@ -237,7 +221,6 @@ export function startContentRuntime(
         state: result.state,
         reason: result.reason,
       });
-      counts[result.state] += 1;
       const postId = adapter.readPostId?.(postCard);
       if (postId) {
         loadObservations.push({ id: postId, state: result.state });
@@ -259,18 +242,6 @@ export function startContentRuntime(
       }
     }
     restoreViewportAnchor(viewportAnchor);
-
-    // 実行環境につき1回、最初の一巡が何をしたかを開発時の worker へ伝える。
-    // utils/dev-link.ts を参照＝門と一緒にリリースから落とされる。
-    if (__SIFT_DEV__ && !reportedFilterPass) {
-      reportedFilterPass = true;
-      browser.runtime
-        .sendMessage({
-          type: DEV_FILTER_PASS,
-          counts,
-        })
-        .catch(() => {});
-    }
   }
 
   function scheduleFilter(): void {
@@ -385,7 +356,6 @@ export function startContentRuntime(
     window.removeEventListener("pointerdown", handleUserNavigation, true);
     window.removeEventListener("keydown", handleUserNavigation, true);
     loadWarningTracker?.dispose();
-    stopUncaughtReporting();
     try {
       unwatchSettings();
     } catch {
@@ -463,40 +433,6 @@ export default defineContentScript({
   matches: SITE_MATCHES,
   runAt: "document_idle",
   main(ctx) {
-    // 注入し直し＝WXT の開発モードが、前の世代がまだ握っているタブへ新しい写しを
-    // 注入すること。これはこのファイルを、古いリスナーと DOM をまだ抱えている
-    // かもしれない領域でもう一度走らせる。入ってくる世代が出ていく世代を見つけ、
-    // 先にそれを降ろすための手掛かりが、持ち主を示すシンボル。これが無いと2つが
-    // 同じ投稿を二重にフィルタする。
-    //
-    // globalThis は任意のシンボルに対する添字の型を持たない＝globalThis の型を
-    // プロジェクト全体で広げるのではなく、この1箇所でだけ変換する。
-    const runtimeSymbol = Symbol.for(CONTENT_RUNTIME_KEY);
-    const runtimeGlobal = globalThis as unknown as Record<
-      symbol,
-      ReturnType<typeof startContentRuntime> | undefined
-    >;
-    runtimeGlobal[runtimeSymbol]?.dispose();
-    runtimeGlobal[runtimeSymbol] = startContentRuntime(
-      ctx,
-      selectAdapter(location.hostname),
-    );
-
-    // このページがスクリプトを受け取ったことを開発時の worker へ伝える。
-    // 「拡張機能が実際にページに載っている」ことの証拠のうち、人がブラウザを
-    // 見なくても読める唯一のもので、開発モードではこの問いにどちらの答えも
-    // 現実にありうる（#31）。門と一緒にリリースから落とされる。経路だけを送る＝
-    // ログファイルがクエリ文字列を抱える理由は無い。
-    if (__SIFT_DEV__) {
-      browser.runtime
-        .sendMessage({
-          type: DEV_CONTENT_STARTED,
-          page: `${location.origin}${location.pathname}`,
-        })
-        .catch(() => {
-          // それを聞ける worker が起きていない＝そしてそれを起こすことがこの
-          // メッセージの目的。
-        });
-    }
+    startContentRuntime(ctx, selectAdapter(location.hostname));
   },
 });

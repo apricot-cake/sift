@@ -3,17 +3,9 @@ import { WxtVitest } from "wxt/testing/vitest-plugin";
 
 export default defineConfig({
   // WXT 自身の Vitest プラグイン。テストがビルドと同じプロジェクトを見るように
-  // しているのがこれ＝wxt.config.ts を読むので、Vite の設定も別名も、ビルド時の
-  // 定数（`__SIFT_DEV__`）も、ここで抱える2つ目の組ではなく拡張機能自身のものに
-  // なる。
+  // しているのがこれ＝wxt.config.ts を読むので、Vite の設定も別名も、ここで
+  // 抱える2つ目の組ではなく拡張機能自身のものになる。
   plugins: [WxtVitest()],
-  define: {
-    // wxt.config.ts はこれを Vite の command で分けるが、テストの実行は、あちらが
-    // 知っている2つの command のどちらでもない＝だから定数が欠け、content script
-    // はそこへ届いた時点で例外になる。テストにはリリースビルドの答えを渡す＝
-    // 開発時だけの半分が話しかける相手のサーバーを、どのテストも立てないから。
-    __SIFT_DEV__: "false",
-  },
   test: {
     // どのアダプターもページに対して走らせるセレクタの集まりなので、ページは
     // 本物でなければならない。`querySelector`・`closest`・`firstElementChild`・

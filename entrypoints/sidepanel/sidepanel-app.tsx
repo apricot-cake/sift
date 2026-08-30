@@ -1,7 +1,6 @@
 import { Settings2, SlidersHorizontal, Trash2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { browser } from "wxt/browser";
-import { startUncaughtReporting } from "../../utils/error-log.ts";
 import {
   FILTER_CONTEXT_REQUEST,
   type FilterContextResponse,
@@ -104,12 +103,6 @@ export function SidepanelApp({
   }, [settings]);
 
   useEffect(() => {
-    startUncaughtReporting({
-      target: window,
-      source: "sidepanel",
-      filterToOwnCode: false,
-    });
-
     const updateSettings = (storedSettings: Settings): void => {
       setSettings(normalizeSettings(storedSettings));
       setStatus("");

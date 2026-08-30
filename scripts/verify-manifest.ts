@@ -8,13 +8,23 @@
 // script が manifest へ届いたかどうかに関わらず 0 で終了するし、content script を
 // 欠いた拡張機能は、読み込まれ、worker を動かし、目に見えることを何もしない。
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { readdir, readFile } from "node:fs/promises";
+import path from "node:path";
+import { HOST_NAME } from "../native-host/install.ts";
 import { SITE_MATCHES } from "../utils/site-matches.ts";
 import config from "../wxt.config.ts";
 
+const kind = process.argv[2];
+if (kind !== "local" && kind !== "store") {
+  throw new Error(
+    "manifest の検査には local または store を指定してください。",
+  );
+}
 const packageJson = JSON.parse(await readFile("package.json", "utf8"));
+const output =
+  kind === "local" ? ".output/chrome-mv3" : ".output/store/chrome-mv3";
 const generatedManifest = JSON.parse(
-  await readFile(".output/chrome-mv3-release/manifest.json", "utf8"),
+  await readFile(`${output}/manifest.json`, "utf8"),
 );
 
 // WXT はここにオブジェクトのほか関数や promise も受け取る。このプロジェクトが
@@ -40,6 +50,10 @@ assert.equal(generatedManifest.key, declaredManifest.key);
 const declaredPermissions = declaredManifest.permissions ?? [];
 const expectedPermissions = [...declaredPermissions, "sidePanel"];
 assert.deepEqual(generatedManifest.permissions, expectedPermissions);
+assert.equal(
+  generatedManifest.permissions.includes("nativeMessaging"),
+  kind === "local",
+);
 assert.equal(generatedManifest.host_permissions, undefined);
 assert.equal(generatedManifest.optional_host_permissions, undefined);
 
@@ -54,7 +68,7 @@ assert.equal(generatedManifest.version, packageJson.version);
 assert.equal(generatedManifest.default_locale, declaredManifest.default_locale);
 const defaultMessages = JSON.parse(
   await readFile(
-    `.output/chrome-mv3-release/_locales/${generatedManifest.default_locale}/messages.json`,
+    `${output}/_locales/${generatedManifest.default_locale}/messages.json`,
     "utf8",
   ),
 );
@@ -107,6 +121,57 @@ assert.deepEqual(
 assert.equal(generatedContentScript.js.length, 1);
 assert.equal(generatedContentScript.css.length, 1);
 
+async function listFiles(directory: string): Promise<string[]> {
+  const result: string[] = [];
+  for (const entry of await readdir(directory, { withFileTypes: true })) {
+    const file = path.join(directory, entry.name);
+    if (entry.isDirectory()) result.push(...(await listFiles(file)));
+    else result.push(file);
+  }
+  return result;
+}
+
+const generatedText = (
+  await Promise.all(
+    (
+      await listFiles(output)
+    )
+      .filter((file) => /\.(?:css|html|js|json)$/u.test(file))
+      .map((file) => readFile(file, "utf8")),
+  )
+).join("\n");
+if (kind === "local") {
+  assert.ok(
+    generatedText.includes(HOST_NAME),
+    "ローカル配備ビルドにNative Hostの接続処理が無い",
+  );
+  assert.ok(
+    generatedText.includes("sift.localBuildReload.attempted"),
+    "ローカル配備ビルドに自己リロードのループ防止が無い",
+  );
+  assert.ok(
+    process.env.SIFT_BUILD_ID &&
+      generatedText.includes(process.env.SIFT_BUILD_ID),
+    "ローカル配備ビルドにbuild IDが埋め込まれていない",
+  );
+  assert.ok(
+    generatedText.includes("pagehide"),
+    "ローカル配備ビルドがサイドパネル終了時にNative Hostを切断しない",
+  );
+} else {
+  for (const localOnlyValue of [
+    "nativeMessaging",
+    HOST_NAME,
+    "sift.localBuildReload.attempted",
+    "connectNative",
+  ]) {
+    assert.equal(
+      generatedText.includes(localOnlyValue),
+      false,
+      `ストア提出ビルドにローカル専用処理が残っている: ${localOnlyValue}`,
+    );
+  }
+}
 console.log(
-  "生成された chrome の manifest は、ソースの宣言どおりのものを持っている",
+  `生成された chrome の ${kind} manifest は、ソースの宣言どおりのものを持っている`,
 );
