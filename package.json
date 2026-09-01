@@ -8,6 +8,7 @@
   },
   "scripts": {
     "dev:browser": "node scripts/dev-browser.ts",
+    "verify:browser": "node scripts/dev-browser.ts --verify",
     "build": "node scripts/build-extension.ts store",
     "zip:store": "node scripts/build-extension.ts store zip",
     "deploy": "node scripts/deploy-extension.ts",

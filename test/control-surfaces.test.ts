@@ -48,20 +48,37 @@ describe("抽出の操作入口", () => {
 
     expect(sidepanel).toContain("TIMELINE_CONTROL.setFiltering");
     expect(sidepanel).toContain("withSiteSettings");
-    expect(sidepanel).toContain("siteSettingsKeyForControl");
+    expect(sidepanel).toContain("setActiveSite(site)");
+    expect(sidepanel).toContain("disabled={!filteringIsAvailable}");
+    expect(sidepanel).toContain(
+      'data-sift-sidepanel={manageAll ? undefined : ""}',
+    );
+    expect(sidepanel).toContain("defaultOpen={manageAll}");
+    expect(sidepanel).toContain("<h1");
+    expect(sidepanel).toContain(">Sift</h1>");
+    expect(sidepanel).toContain("max-w-3xl");
+    expect(sidepanel).toContain("disabled={!filteringEnabled}");
+    expect(sidepanel).toContain("aria-disabled={disabled}");
     expect(sidepanel).toContain("browser.tabs.onActivated.addListener");
     expect(sidepanel).toContain("browser.runtime.openOptionsPage");
+    expect(sidepanel).toContain('size="icon"');
+    expect(sidepanel).toContain('variant="ghost"');
+    expect(sidepanel.indexOf('data-manage-settings=""')).toBeLessThan(
+      sidepanel.indexOf("<fieldset"),
+    );
     expect(sidepanel).not.toContain("value={selectedSite}");
     expect(options).toContain("<SidepanelApp manageAll />");
   });
 
-  it("サイドパネルで現在タブの URL を読める", () => {
+  it("ページ内の検出結果からサイトを選ぶ", () => {
     const config = readEntrypoint("wxt.config.ts");
+    const sidepanel = readEntrypoint("entrypoints/sidepanel/sidepanel-app.tsx");
 
-    expect(config).toContain('"activeTab"');
+    expect(config).not.toContain('"activeTab"');
+    expect(sidepanel).toContain("context?.site ?? null");
   });
 
-  it("サイドパネルのフッターからリポジトリを開ける", () => {
+  it("設定ページの左ナビゲーションからリポジトリを開ける", () => {
     const sidepanel = readEntrypoint("entrypoints/sidepanel/sidepanel-app.tsx");
 
     expect(sidepanel).toContain("href={REPOSITORY_URL}");

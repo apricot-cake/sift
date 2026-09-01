@@ -3,7 +3,6 @@ import { SITE_MATCHES } from "../site-matches.ts";
 import { blueskyAdapter } from "./bluesky.ts";
 import { ADAPTERS, hostMatchesPattern, selectAdapter } from "./index.ts";
 import { niconicoAdapter } from "./niconico.ts";
-import { soundcloudAdapter } from "./soundcloud.ts";
 import { xAdapter } from "./x.ts";
 import { youtubeAdapter } from "./youtube.ts";
 
@@ -29,7 +28,7 @@ describe("ページに対してアダプターを選ぶ", () => {
     expect(selectAdapter("bsky.app")).toBe(blueskyAdapter);
     expect(selectAdapter("www.youtube.com")).toBe(youtubeAdapter);
     expect(selectAdapter("www.nicovideo.jp")).toBe(niconicoAdapter);
-    expect(selectAdapter("soundcloud.com")).toBe(soundcloudAdapter);
+    expect(selectAdapter("soundcloud.com")).toBeNull();
     expect(selectAdapter("weibo.com")).toBeNull();
   });
 

@@ -61,15 +61,13 @@ export function startContentRuntime(
   }
 
   function pageKey(): string {
-    const scope = adapter.settingsScope(document, location);
-    return `${location.origin}${location.pathname}${location.search}#${scope?.key ?? "default"}`;
+    return `${location.origin}${location.pathname}${location.search}`;
   }
 
   // 画像と動画のどちらを絞り込むかは読み手の設定なので、2つはアダプターから
   // 別々に届き、ここで畳み合わされる。`all` は本文だけの投稿も通す。
   function selectedSiteSettings() {
-    const scope = adapter.settingsScope(document, location);
-    return settingsFor(settings, adapter.settingsKey, scope?.key);
+    return settingsFor(settings, adapter.settingsKey);
   }
 
   function matchesMediaFilter(
@@ -169,9 +167,8 @@ export function startContentRuntime(
       return;
     }
 
-    const scope = adapter.settingsScope(document, location);
     const timelineAvailable = adapter.isTimelineAvailable(document, location);
-    if (!timelineAvailable && scope === null) {
+    if (!timelineAvailable) {
       clearTimelineState();
       return;
     }
@@ -295,13 +292,8 @@ export function startContentRuntime(
     message: unknown,
   ): Promise<FilterContextResponse | undefined> {
     if (isFilterContextRequest(message)) {
-      const scope = adapter.isTimelineAvailable(document, location)
-        ? adapter.settingsScope(document, location)
-        : null;
       return {
         site: adapter.settingsKey,
-        scopeKey: scope?.key ?? null,
-        scopeKind: scope?.kind ?? null,
         pageTitle: document.title,
         pageKey: pageKey(),
         filteringEnabled: filteringEnabled(),

@@ -25,19 +25,15 @@ const BLUESKY_SELECTORS = Object.freeze({
   animatedImage: 'video[src*="t.gifs.bsky.app"]',
   postText: '[data-testid="postText"]',
   profileLink: 'a[href^="/profile/"]',
-  followingTab: '[data-testid="homeScreenFeedTabs-selector-0"]',
+  homeTab: '[data-testid^="homeScreenFeedTabs-selector-"]',
   selectedTabMark: '[style*="background-color"]',
 });
 
-const BLUESKY_LIST_PATH = /^\/profile\/([^/]+)\/lists\/([^/]+)\/?$/;
-const BLUESKY_FEED_PATH = /^\/profile\/([^/]+)\/feed\/([^/]+)\/?$/;
 const BLUESKY_POST_ID = /\/profile\/([^/]+)\/post\/([^/?#]+)/;
 
-export function isBlueskyFollowingTimeline(root: ParentNode): boolean {
-  return Boolean(
-    root
-      .querySelector(BLUESKY_SELECTORS.followingTab)
-      ?.querySelector(BLUESKY_SELECTORS.selectedTabMark),
+export function isBlueskySupportedHomeTimeline(root: ParentNode): boolean {
+  return Array.from(root.querySelectorAll(BLUESKY_SELECTORS.homeTab)).some(
+    (tab) => Boolean(tab.querySelector(BLUESKY_SELECTORS.selectedTabMark)),
   );
 }
 
@@ -114,26 +110,9 @@ export const blueskyAdapter = Object.freeze({
   },
 
   isTimelineAvailable(root: ParentNode, page: Pick<Location, "pathname">) {
-    const selectedPage =
-      page.pathname !== "/" || isBlueskyFollowingTimeline(root);
-    return selectedPage && this.hasPostCards(root);
-  },
-
-  settingsScope(root: ParentNode, page: Pick<Location, "pathname">) {
-    if (page.pathname === "/" && isBlueskyFollowingTimeline(root)) {
-      return { key: "following", kind: "following" } as const;
-    }
-    const list = BLUESKY_LIST_PATH.exec(page.pathname);
-    if (list) {
-      return {
-        key: `list:${list[1]}:${list[2]}`,
-        kind: "list",
-      } as const;
-    }
-    const feed = BLUESKY_FEED_PATH.exec(page.pathname);
-    return feed
-      ? ({ key: `feed:${feed[1]}:${feed[2]}`, kind: "feed" } as const)
-      : null;
+    return page.pathname === "/"
+      ? isBlueskySupportedHomeTimeline(root)
+      : this.hasPostCards(root);
   },
 
   // 隠される単位。X と違い Bluesky は区切り線と余白をカードの内側に持つので、

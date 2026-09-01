@@ -4,7 +4,6 @@
 
 import { blueskyAdapter } from "./bluesky.ts";
 import { niconicoAdapter } from "./niconico.ts";
-import { soundcloudAdapter } from "./soundcloud.ts";
 import type { ServiceAdapter } from "./types.ts";
 import { xAdapter } from "./x.ts";
 import { youtubeAdapter } from "./youtube.ts";
@@ -14,7 +13,6 @@ export const ADAPTERS: readonly ServiceAdapter[] = Object.freeze([
   blueskyAdapter,
   youtubeAdapter,
   niconicoAdapter,
-  soundcloudAdapter,
 ]);
 
 // Chrome の match パターンのホスト部＝"*" なら任意、"*.example.com" ならその

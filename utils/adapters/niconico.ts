@@ -46,9 +46,6 @@ export const niconicoAdapter = Object.freeze({
   isTimelineAvailable(root: ParentNode, page: Pick<Location, "pathname">) {
     return isNiconicoFilterPage(page.pathname) && this.hasPostCards(root);
   },
-  settingsScope() {
-    return null;
-  },
   findPostCell(card: Element) {
     return card;
   },

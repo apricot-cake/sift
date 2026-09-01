@@ -5,7 +5,7 @@ export type MediaMode = "all" | "any" | "images" | "video";
 export type PeriodMode = "all" | "limited";
 export type PeriodUnit = "hour" | "day" | "week" | "month" | "year";
 export type ReactionSiteSettingsKey = "x" | "bluesky";
-export type MetricSiteSettingsKey = "youtube" | "niconico" | "soundcloud";
+export type MetricSiteSettingsKey = "youtube" | "niconico";
 export type SiteSettingsKey = ReactionSiteSettingsKey | MetricSiteSettingsKey;
 
 export interface ReactionSiteSettings {
@@ -36,27 +36,12 @@ export interface SiteSettingsMap {
   readonly bluesky: ReactionSiteSettings;
   readonly youtube: MetricSiteSettings;
   readonly niconico: MetricSiteSettings;
-  readonly soundcloud: MetricSiteSettings;
 }
 
 export type SiteSettings = SiteSettingsMap[SiteSettingsKey];
 
-export type SettingsScopeKind = "following" | "home" | "list" | "feed";
-
-export interface SettingsScope {
-  readonly key: string;
-  readonly kind: SettingsScopeKind;
-}
-
-export interface SourceSettingsEntry {
-  readonly site: SiteSettingsKey;
-  readonly label: string;
-  readonly settings: SiteSettings;
-}
-
 export interface Settings {
   readonly siteSettings: SiteSettingsMap;
-  readonly sourceSettings: Readonly<Record<string, SourceSettingsEntry>>;
 }
 
 function defaultReactionSiteSettings(
@@ -96,9 +81,7 @@ export const defaults: Readonly<Settings> = Object.freeze({
     bluesky: defaultReactionSiteSettings(1000),
     youtube: defaultMetricSiteSettings(10000),
     niconico: defaultMetricSiteSettings(1000),
-    soundcloud: defaultMetricSiteSettings(1000),
   }),
-  sourceSettings: Object.freeze({}),
 });
 
 function clampInteger(
@@ -244,60 +227,6 @@ function normalizeMetricSiteSettings(
   };
 }
 
-function isSiteSettingsKey(value: unknown): value is SiteSettingsKey {
-  return (
-    value === "x" ||
-    value === "bluesky" ||
-    value === "youtube" ||
-    value === "niconico" ||
-    value === "soundcloud"
-  );
-}
-
-function sourceSettingsStorageKey(
-  site: SiteSettingsKey,
-  scopeKey: string,
-): string {
-  return `${site}:${scopeKey}`;
-}
-
-function normalizeSourceSettings(
-  value: unknown,
-  siteSettings: SiteSettingsMap,
-): Readonly<Record<string, SourceSettingsEntry>> {
-  const normalized: Record<string, SourceSettingsEntry> = {};
-  for (const [storageKey, rawEntry] of Object.entries(objectSource(value))) {
-    const entry = objectSource(rawEntry);
-    const site = entry.site;
-    const separator = storageKey.indexOf(":");
-    const scopeKey = separator < 0 ? "" : storageKey.slice(separator + 1);
-    if (
-      !isSiteSettingsKey(site) ||
-      storageKey !== sourceSettingsStorageKey(site, scopeKey) ||
-      scopeKey === "" ||
-      scopeKey.length > 500
-    ) {
-      continue;
-    }
-    const label =
-      typeof entry.label === "string" && entry.label.trim() !== ""
-        ? entry.label.trim().slice(0, 100)
-        : scopeKey;
-    const settings =
-      site === "youtube" || site === "niconico" || site === "soundcloud"
-        ? normalizeMetricSiteSettings(
-            entry.settings,
-            siteSettings[site] as MetricSiteSettings,
-          )
-        : normalizeReactionSiteSettings(
-            entry.settings,
-            siteSettings[site] as ReactionSiteSettings,
-          );
-    normalized[storageKey] = { site, label, settings };
-  }
-  return normalized;
-}
-
 export function normalizeSettings(value: unknown): Settings {
   const source = objectSource(value);
   const storedSiteSettings = objectSource(source.siteSettings);
@@ -320,92 +249,16 @@ export function normalizeSettings(value: unknown): Settings {
       storedSiteSettings.niconico,
       defaults.siteSettings.niconico,
     ),
-    soundcloud: normalizeMetricSiteSettings(
-      storedSiteSettings.soundcloud,
-      defaults.siteSettings.soundcloud,
-    ),
   };
 
-  return {
-    siteSettings,
-    sourceSettings: normalizeSourceSettings(
-      source.sourceSettings,
-      siteSettings,
-    ),
-  };
+  return { siteSettings };
 }
 
 export function settingsFor<Key extends SiteSettingsKey>(
   settings: Settings,
   key: Key,
-  scopeKey?: string | null,
 ): SiteSettingsMap[Key] {
-  if (scopeKey) {
-    const entry =
-      settings.sourceSettings[sourceSettingsStorageKey(key, scopeKey)];
-    if (
-      entry?.site === key &&
-      entry.settings.kind === settings.siteSettings[key].kind
-    ) {
-      return entry.settings as SiteSettingsMap[Key];
-    }
-  }
   return settings.siteSettings[key];
-}
-
-export function sourceSettingsFor(
-  settings: Settings,
-  site: SiteSettingsKey,
-): readonly (SourceSettingsEntry & { readonly scopeKey: string })[] {
-  const prefix = `${site}:`;
-  return Object.entries(settings.sourceSettings)
-    .filter(
-      ([storageKey, entry]) =>
-        storageKey.startsWith(prefix) && entry.site === site,
-    )
-    .map(([storageKey, entry]) => ({
-      ...entry,
-      scopeKey: storageKey.slice(prefix.length),
-    }));
-}
-
-export function hasSourceSettings(
-  settings: Settings,
-  site: SiteSettingsKey,
-  scopeKey: string,
-): boolean {
-  return Object.hasOwn(
-    settings.sourceSettings,
-    sourceSettingsStorageKey(site, scopeKey),
-  );
-}
-
-export function withSourceSettings(
-  settings: Settings,
-  site: SiteSettingsKey,
-  scopeKey: string,
-  label: string,
-  siteSettings: SiteSettings,
-): Settings {
-  const storageKey = sourceSettingsStorageKey(site, scopeKey);
-  return normalizeSettings({
-    ...settings,
-    sourceSettings: {
-      ...settings.sourceSettings,
-      [storageKey]: { site, label, settings: siteSettings },
-    },
-  });
-}
-
-export function withoutSourceSettings(
-  settings: Settings,
-  site: SiteSettingsKey,
-  scopeKey: string,
-): Settings {
-  const storageKey = sourceSettingsStorageKey(site, scopeKey);
-  const sourceSettings = { ...settings.sourceSettings };
-  delete sourceSettings[storageKey];
-  return normalizeSettings({ ...settings, sourceSettings });
 }
 
 export function withSiteSettings(

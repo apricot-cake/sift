@@ -3,3 +3,38 @@
 body {
   min-width: 0;
 }
+
+[data-sift-sidepanel] > div {
+  padding-block: 0.75rem;
+}
+
+[data-sift-sidepanel] [data-settings-group] {
+  margin-top: 0.75rem;
+}
+
+[data-sift-sidepanel] [data-settings-group] > h2 {
+  margin-bottom: 0.375rem;
+}
+
+[data-sift-sidepanel] [data-settings-group] > summary + * {
+  margin-top: 0.375rem;
+}
+
+[data-sift-sidepanel] [data-setting-row] {
+  min-height: 2.75rem;
+  padding: 0.625rem 0.75rem;
+}
+
+[data-sift-sidepanel] [data-period-setting] {
+  padding-inline: 0.75rem;
+  padding-bottom: 0.625rem;
+}
+
+[data-sift-sidepanel] [data-period-setting] > legend {
+  margin-bottom: 0.375rem;
+  padding-top: 0.625rem;
+}
+
+[data-sift-sidepanel] [data-period-setting] > div {
+  row-gap: 0.375rem;
+}

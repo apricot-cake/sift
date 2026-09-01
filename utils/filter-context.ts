@@ -1,4 +1,4 @@
-import type { SettingsScopeKind, SiteSettingsKey } from "./settings.ts";
+import type { SiteSettingsKey } from "./settings.ts";
 
 export const FILTER_CONTEXT_REQUEST = "sift:get-filter-context";
 
@@ -8,8 +8,6 @@ export interface FilterContextRequest {
 
 export interface FilterContextResponse {
   readonly site: SiteSettingsKey;
-  readonly scopeKey: string | null;
-  readonly scopeKind: SettingsScopeKind | null;
   readonly pageTitle: string;
   readonly pageKey: string;
   readonly filteringEnabled: boolean;
@@ -37,14 +35,7 @@ export function isFilterContextResponse(
     (response.site === "x" ||
       response.site === "bluesky" ||
       response.site === "youtube" ||
-      response.site === "niconico" ||
-      response.site === "soundcloud") &&
-    (response.scopeKey === null || typeof response.scopeKey === "string") &&
-    (response.scopeKind === null ||
-      response.scopeKind === "following" ||
-      response.scopeKind === "home" ||
-      response.scopeKind === "list" ||
-      response.scopeKind === "feed") &&
+      response.site === "niconico") &&
     typeof response.pageTitle === "string" &&
     typeof response.pageKey === "string" &&
     typeof response.filteringEnabled === "boolean" &&

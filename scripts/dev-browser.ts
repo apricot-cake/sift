@@ -5,6 +5,7 @@ import { spawn } from "node:child_process";
 import fs from "node:fs";
 import { homedir } from "node:os";
 import path from "node:path";
+import { selectAdapter } from "../utils/adapters/index.ts";
 import { findChromePath } from "./chrome-path.ts";
 
 const ROOT = path.resolve(import.meta.dirname, "..");
@@ -28,6 +29,19 @@ interface ExtensionInfo {
   id: string;
   path: string;
   enabled: boolean;
+}
+
+interface CdpTarget {
+  id: string;
+  type: string;
+  url: string;
+  webSocketDebuggerUrl: string;
+}
+
+interface CdpTargetInfo {
+  targetId: string;
+  type: string;
+  url: string;
 }
 
 async function readCdpVersion(): Promise<CdpVersion | null> {
@@ -58,6 +72,14 @@ async function waitForCdp(): Promise<CdpVersion | null> {
     await new Promise((resolve) => setTimeout(resolve, 150));
   }
   return null;
+}
+
+async function readCdpTargets(): Promise<CdpTarget[]> {
+  const response = await fetch(`${CDP_URL}/json/list`);
+  if (!response.ok) {
+    throw new Error("[sift] CDP からタブ一覧を読めなかった。");
+  }
+  return (await response.json()) as CdpTarget[];
 }
 
 async function cdpCall<T>(
@@ -118,6 +140,47 @@ async function loadSharedExtension(version: CdpVersion): Promise<void> {
   }
 }
 
+async function verifySupportedPage(version: CdpVersion): Promise<void> {
+  const target = (await readCdpTargets()).find((candidate) => {
+    if (candidate.type !== "page") return false;
+    try {
+      return selectAdapter(new URL(candidate.url).hostname) !== null;
+    } catch {
+      return false;
+    }
+  });
+  if (!target) {
+    throw new Error(
+      "[sift] 開発用 Chrome に対応サイトのタブが無い。確認対象を開いてから再実行すること。",
+    );
+  }
+
+  await cdpCall(target.webSocketDebuggerUrl, "Page.reload", {
+    ignoreCache: true,
+  });
+  await new Promise((resolve) => setTimeout(resolve, 500));
+  const targetInfos = await cdpCall<{ targetInfos: CdpTargetInfo[] }>(
+    version.webSocketDebuggerUrl,
+    "Target.getTargets",
+    { filter: [{ type: "tab", exclude: false }, { exclude: true }] },
+  );
+  const tabTarget = targetInfos.targetInfos.find(
+    (candidate) => candidate.type === "tab" && candidate.url === target.url,
+  );
+  if (!tabTarget) {
+    throw new Error(
+      "[sift] 再読み込みしたページのタブを CDP で特定できなかった。",
+    );
+  }
+  await cdpCall(version.webSocketDebuggerUrl, "Extensions.triggerAction", {
+    id: EXTENSION_ID,
+    targetId: tabTarget.targetId,
+  });
+  console.log(
+    `[sift] 対応サイトを再読み込み、サイドパネルを開いた: ${target.url}`,
+  );
+}
+
 const chrome = process.env.SIFT_CHROME || findChromePath();
 
 if (process.argv.includes("--print")) {
@@ -169,3 +232,7 @@ if (!version) {
 await loadSharedExtension(version);
 console.log(`[sift] 開発用プロファイルで共有ビルドを読み込んだ: ${OUTPUT}`);
 console.log(`[sift] CDP 接続先: ${CDP_URL}`);
+
+if (process.argv.includes("--verify")) {
+  await verifySupportedPage(version);
+}

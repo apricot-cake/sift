@@ -1,7 +1,7 @@
 // サービスごとのアダプターが満たす契約。どれか1つのアダプターから推論させず
 // ここに置いてあるのは、個々のアダプターが互いを基準にするのではなく、同じ形に
 // 対して検査されるようにするため。
-import type { SettingsScope, SiteSettingsKey } from "../settings.ts";
+import type { SiteSettingsKey } from "../settings.ts";
 
 export interface PostMedia {
   hasImage: boolean;
@@ -22,17 +22,13 @@ export interface ServiceAdapter {
     root: ParentNode,
     page: Pick<Location, "pathname">,
   ): boolean;
-  settingsScope(
-    root: ParentNode,
-    page: Pick<Location, "pathname">,
-  ): SettingsScope | null;
   // 隠される単位＝投稿カードそのものとは限らない。
   findPostCell(postCard: Element): Element;
   // 仮想リストが同じ投稿を描き直しても、新しい取得として数え直さないための
   // 識別子。連続読み込みを観測するサービスだけが実装する。
   readPostId?(postCard: Element): string | null;
-  // サービスが一覧で公開している主指標。X / Bluesky は反応数、動画とトラックの
-  // サービスは再生回数を返す。
+  // サービスが一覧で公開している主指標。X / Bluesky は反応数、動画サービスは
+  // 再生回数を返す。
   readMetricCount(postCard: Element): number;
   // 投稿時刻が読めないときは NaN。
   readCreatedAt(postCard: Element): number;

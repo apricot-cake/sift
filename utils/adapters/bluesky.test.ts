@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { render } from "../../test/dom.ts";
-import { blueskyAdapter, timestampFromRecordKey } from "./bluesky.ts";
+import {
+  blueskyAdapter,
+  isBlueskySupportedHomeTimeline,
+  timestampFromRecordKey,
+} from "./bluesky.ts";
 
 const postHref = "/profile/example.bsky.social/post/3mqcze2d6k23e";
 const recordKeyTime = Date.parse("2026-07-10T20:46:00.000Z");
@@ -76,28 +80,44 @@ describe("投稿を見つける", () => {
   });
 });
 
-describe("場所別設定の識別", () => {
-  it("Following・専用リスト・専用フィードを安定したキーへ分ける", () => {
-    const following = render(`
+describe("Home の対象フィード", () => {
+  it("Following は投稿の描き直し中でも操作できる", () => {
+    const page = render(`
       <div data-testid="homeScreenFeedTabs-selector-0">
-        <div style="background-color: rgb(0, 106, 255)"></div>
+        Following
+        <div style="background-color: rgb(0, 96, 255)"></div>
+      </div>
+      <div data-testid="homeScreenFeedTabs-selector-1">開発</div>
+    `);
+
+    expect(isBlueskySupportedHomeTimeline(page)).toBe(true);
+    expect(blueskyAdapter.isTimelineAvailable(page, { pathname: "/" })).toBe(
+      true,
+    );
+  });
+
+  it("ピン留めフィードも投稿の描き直し中に操作できる", () => {
+    const page = render(`
+      <div data-testid="homeScreenFeedTabs-selector-0">Following</div>
+      <div data-testid="homeScreenFeedTabs-selector-1">
+        開発
+        <div style="background-color: rgb(0, 96, 255)"></div>
       </div>
     `);
 
-    expect(blueskyAdapter.settingsScope(following, { pathname: "/" })).toEqual({
-      key: "following",
-      kind: "following",
-    });
-    expect(
-      blueskyAdapter.settingsScope(following, {
-        pathname: "/profile/alice.test/lists/abc",
-      }),
-    ).toEqual({ key: "list:alice.test:abc", kind: "list" });
-    expect(
-      blueskyAdapter.settingsScope(following, {
-        pathname: "/profile/alice.test/feed/news",
-      }),
-    ).toEqual({ key: "feed:alice.test:news", kind: "feed" });
+    expect(isBlueskySupportedHomeTimeline(page)).toBe(true);
+    expect(blueskyAdapter.isTimelineAvailable(page, { pathname: "/" })).toBe(
+      true,
+    );
+  });
+
+  it("選択状態をまだ読めない間は対象外", () => {
+    const page = render(`
+      <div data-testid="homeScreenFeedTabs-selector-0">Following</div>
+      <div data-testid="homeScreenFeedTabs-selector-1">開発</div>
+    `);
+
+    expect(isBlueskySupportedHomeTimeline(page)).toBe(false);
   });
 });
 

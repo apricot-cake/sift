@@ -10,9 +10,12 @@ describe("SITE_MATCHES", () => {
         "https://bsky.app/*",
         "https://www.youtube.com/*",
         "https://www.nicovideo.jp/*",
-        "https://soundcloud.com/*",
       ]),
     );
+  });
+
+  it("廃止したSoundCloudを配布先に含めない", () => {
+    expect(SITE_MATCHES).not.toContain("https://soundcloud.com/*");
   });
 
   it("Weibo を配布先に含めない", () => {

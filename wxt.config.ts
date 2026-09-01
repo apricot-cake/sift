@@ -46,11 +46,7 @@ export default defineConfig({
     // __MSG_extensionName__ はそう言うために間接の層を1つ増やすだけ。
     name: "Sift",
     description: "__MSG_extensionDescription__",
-    // サイドパネルは現在のタブのホストごとに設定を切り替える。この権限が無いと
-    // URL が伏せられ、対応する
-    // タイムラインでも操作不能と表示される。常時のサイト権限にはしない。
     permissions: [
-      "activeTab",
       "storage",
       ...(localDeploy ? (["nativeMessaging"] as const) : []),
     ],

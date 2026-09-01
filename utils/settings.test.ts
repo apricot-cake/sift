@@ -6,9 +6,7 @@ import {
   periodInHours,
   settingsFor,
   thresholdsFor,
-  withoutSourceSettings,
   withSiteSettings,
-  withSourceSettings,
 } from "./settings.ts";
 
 describe("normalizeSettings", () => {
@@ -37,7 +35,6 @@ describe("normalizeSettings", () => {
       periodUnit: "week",
     });
     expect(defaults.siteSettings.niconico.minCount).toBe(1000);
-    expect(defaults.siteSettings.soundcloud.minCount).toBe(1000);
   });
 
   it("メディアを指定しない既定値は本文だけの投稿も含める", () => {
@@ -100,35 +97,29 @@ describe("normalizeSettings", () => {
     });
     expect(changed.siteSettings.x).toEqual(base.siteSettings.x);
     expect(changed.siteSettings.niconico).toEqual(base.siteSettings.niconico);
-    expect(changed.siteSettings.soundcloud).toEqual(
-      base.siteSettings.soundcloud,
-    );
   });
 
-  it("場所を編集したときだけサイト既定値から個別設定を作る", () => {
-    const base = normalizeSettings({});
-    const changed = withSourceSettings(base, "x", "list:123", "開発", {
-      ...settingsFor(base, "x"),
-      minReactions: 250,
+  it("廃止したSoundCloud設定は読み込まない", () => {
+    const settings = normalizeSettings({
+      siteSettings: { soundcloud: { minCount: 1 } },
     });
 
-    expect(settingsFor(base, "x", "list:123")).toEqual(base.siteSettings.x);
-    expect(settingsFor(changed, "x", "list:123").minReactions).toBe(250);
-    expect(changed.siteSettings.x.minReactions).toBe(1000);
+    expect(settings.siteSettings).toEqual(defaults.siteSettings);
+    expect("soundcloud" in settings.siteSettings).toBe(false);
   });
 
-  it("個別設定を削除するとサイト既定値へ戻る", () => {
-    const base = normalizeSettings({});
-    const changed = withSourceSettings(base, "bluesky", "feed:abc", "技術", {
-      ...settingsFor(base, "bluesky"),
-      minReactions: 50,
+  it("旧形式のページ別設定は読み込まない", () => {
+    const settings = normalizeSettings({
+      sourceSettings: {
+        "x:list:123": {
+          site: "x",
+          label: "開発",
+          settings: { minReactions: 250 },
+        },
+      },
     });
-    const reset = withoutSourceSettings(changed, "bluesky", "feed:abc");
 
-    expect(settingsFor(reset, "bluesky", "feed:abc")).toEqual(
-      base.siteSettings.bluesky,
-    );
-    expect(reset.sourceSettings).toEqual({});
+    expect(settings).toEqual({ siteSettings: defaults.siteSettings });
   });
 });
 

@@ -242,10 +242,6 @@ export const youtubeAdapter = Object.freeze({
     );
   },
 
-  settingsScope() {
-    return null;
-  },
-
   findPostCell(postCard: Element) {
     return postCard.closest(YOUTUBE_SELECTORS.cell) || postCard;
   },

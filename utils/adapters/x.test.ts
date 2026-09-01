@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { render } from "../../test/dom.ts";
-import { isXFollowingTimeline, xAdapter } from "./x.ts";
+import { isXSupportedHomeTimeline, xAdapter } from "./x.ts";
 
 // X は投稿を、区切り線と周囲の余白も持つセルで包んでいて、投稿そのものはその
 // セルの中の article。
@@ -74,13 +74,13 @@ describe("投稿を見つける", () => {
       </div>
     `);
 
-    expect(isXFollowingTimeline(page)).toBe(false);
+    expect(isXSupportedHomeTimeline(page)).toBe(false);
     expect(xAdapter.isTimelineAvailable(page, { pathname: "/home" })).toBe(
       false,
     );
   });
 
-  it("Home のピン留めリストは対象外", () => {
+  it("Home のピン留めリストも対象", () => {
     const page = render(`
       <div data-testid="ScrollSnap-List" role="tablist">
         <div role="tab" aria-selected="false">おすすめ</div>
@@ -89,9 +89,9 @@ describe("投稿を見つける", () => {
       </div>
     `);
 
-    expect(isXFollowingTimeline(page)).toBe(false);
+    expect(isXSupportedHomeTimeline(page)).toBe(true);
     expect(xAdapter.isTimelineAvailable(page, { pathname: "/home" })).toBe(
-      false,
+      true,
     );
   });
 
@@ -103,7 +103,7 @@ describe("投稿を見つける", () => {
       </div>
     `);
 
-    expect(isXFollowingTimeline(page)).toBe(false);
+    expect(isXSupportedHomeTimeline(page)).toBe(false);
   });
 
   it("投稿のない他の画面は操作できない", () => {
@@ -112,25 +112,6 @@ describe("投稿を見つける", () => {
     expect(xAdapter.isTimelineAvailable(page, { pathname: "/settings" })).toBe(
       false,
     );
-  });
-});
-
-describe("場所別設定の識別", () => {
-  it("フォロー中と専用リストを安定したキーへ分ける", () => {
-    const following = render(`
-      <div data-testid="ScrollSnap-List" role="tablist">
-        <div role="tab" aria-selected="false">おすすめ</div>
-        <div role="tab" aria-selected="true">フォロー中</div>
-      </div>
-    `);
-
-    expect(xAdapter.settingsScope(following, { pathname: "/home" })).toEqual({
-      key: "following",
-      kind: "following",
-    });
-    expect(
-      xAdapter.settingsScope(following, { pathname: "/i/lists/12345" }),
-    ).toEqual({ key: "list:12345", kind: "list" });
   });
 });
 

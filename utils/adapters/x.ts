@@ -20,7 +20,6 @@ const X_SELECTORS = Object.freeze({
   homeTabs: '[data-testid="ScrollSnap-List"][role="tablist"]',
   homeTab: '[role="tab"]',
 });
-const X_LIST_PATH = /^\/i\/lists\/([^/]+)\/?$/;
 const X_STATUS_ID = /\/status\/(\d+)/;
 
 function timelinePostCards(root: ParentNode): Element[] {
@@ -31,16 +30,15 @@ function timelinePostCards(root: ParentNode): Element[] {
 }
 
 // Home の先頭はプラットフォームが選ぶ「おすすめ」、2番目は「フォロー中」、
-// それ以降は利用者がピン留めしたリスト。Home ではフォロー中だけを対象にし、
-// リストは固定 URL を持つ専用ページで扱う。表示名はロケールで変わるため、
-// 順序と WAI-ARIA の選択状態だけでフォロー中かを読む。
-export function isXFollowingTimeline(root: ParentNode): boolean {
+// それ以降は利用者がピン留めしたリスト。表示名はロケールやリスト名で変わるため、
+// 順序と WAI-ARIA の選択状態だけで対象タイムラインかを読む。
+export function isXSupportedHomeTimeline(root: ParentNode): boolean {
   const tabList = root.querySelector(X_SELECTORS.homeTabs);
   const tabs = Array.from(tabList?.querySelectorAll(X_SELECTORS.homeTab) ?? []);
   const selectedIndex = tabs.findIndex(
     (tab) => tab.getAttribute("aria-selected") === "true",
   );
-  return selectedIndex === 1;
+  return selectedIndex >= 1;
 }
 
 // `:` の注釈ではなく `satisfies` を使うのは、Object.freeze が保つリテラル型
@@ -60,20 +58,12 @@ export const xAdapter = Object.freeze({
   },
 
   // Home は投稿を仮想化していて、描き直し中は一時的にカードが無くなる。それでも
-  // フォロー中では抽出を受け付ける。おすすめとピン留めリストは対象外。
-  // リストは固定 URL を持つ専用ページで扱う。
+  // フォロー中とピン留めリストでは、投稿の描き直し中も抽出を受け付ける。
+  // おすすめだけは対象外。固定 URL を持つリストの専用ページも従来どおり扱う。
   isTimelineAvailable(root: ParentNode, page: Pick<Location, "pathname">) {
     return page.pathname === "/home"
-      ? isXFollowingTimeline(root)
+      ? isXSupportedHomeTimeline(root)
       : this.hasPostCards(root);
-  },
-
-  settingsScope(root: ParentNode, page: Pick<Location, "pathname">) {
-    if (page.pathname === "/home" && isXFollowingTimeline(root)) {
-      return { key: "following", kind: "following" } as const;
-    }
-    const listId = X_LIST_PATH.exec(page.pathname)?.[1];
-    return listId ? ({ key: `list:${listId}`, kind: "list" } as const) : null;
   },
 
   // 隠される単位。X は投稿を、区切り線と周囲の余白も持つセルで包んでいるので、
