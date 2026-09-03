@@ -48,6 +48,10 @@ export function startContentRuntime(
   let observer: MutationObserver | null = null;
   let routeTimer: number | null = null;
   let filterFrame: number | null = null;
+  let layoutProbeFrame: number | null = null;
+  let layoutProbeTimer: number | null = null;
+  let scrollTopBeforeLayoutProbe: number | null = null;
+  let layoutProbePausedByUser = false;
   let keepViewportOnNextFilter = false;
   let disposed = false;
   let pageFilteringEnabled = false;
@@ -79,9 +83,6 @@ export function startContentRuntime(
       return true;
     }
     const mediaMode = siteSettings.mediaMode;
-    if (mediaMode === "all") {
-      return true;
-    }
     if (mediaMode === "images") {
       return hasImage;
     }
@@ -161,6 +162,74 @@ export function startContentRuntime(
     });
   }
 
+  function stopLayoutProbe(restoreScroll = true): void {
+    if (layoutProbeFrame !== null) {
+      window.cancelAnimationFrame(layoutProbeFrame);
+      layoutProbeFrame = null;
+    }
+    if (layoutProbeTimer !== null) {
+      window.clearTimeout(layoutProbeTimer);
+      layoutProbeTimer = null;
+    }
+    document.documentElement.removeAttribute("data-sift-layout-probe");
+    if (scrollTopBeforeLayoutProbe !== null) {
+      const scrollTop = scrollTopBeforeLayoutProbe;
+      scrollTopBeforeLayoutProbe = null;
+      if (restoreScroll) {
+        window.requestAnimationFrame(() => {
+          if (!disposed) {
+            window.scrollTo({ top: scrollTop, behavior: "instant" });
+          }
+        });
+      }
+    }
+  }
+
+  function startLayoutProbe(): void {
+    if (
+      disposed ||
+      !adapter.needsLayoutProbeForPagination ||
+      adapter.hasReachedTimelineEnd?.(document) ||
+      layoutProbePausedByUser ||
+      layoutProbeFrame !== null ||
+      layoutProbeTimer !== null
+    ) {
+      return;
+    }
+
+    const scrollingElement =
+      document.scrollingElement ?? document.documentElement;
+    scrollTopBeforeLayoutProbe = scrollingElement.scrollTop;
+    document.documentElement.setAttribute("data-sift-layout-probe", "");
+    layoutProbeFrame = window.requestAnimationFrame(() => {
+      layoutProbeFrame = null;
+      if (disposed || !filteringEnabled()) {
+        stopLayoutProbe();
+        return;
+      }
+      window.scrollTo({
+        top: scrollingElement.scrollHeight,
+        behavior: "instant",
+      });
+      layoutProbeTimer = window.setTimeout(() => {
+        layoutProbeTimer = null;
+        stopLayoutProbe();
+        scheduleFilter();
+      }, 2_000);
+    });
+  }
+
+  function isAtPageBottom(): boolean {
+    const scrollingElement =
+      document.scrollingElement ?? document.documentElement;
+    return (
+      scrollingElement.scrollHeight -
+        scrollingElement.clientHeight -
+        scrollingElement.scrollTop <=
+      4
+    );
+  }
+
   function filterVisiblePosts(): void {
     filterFrame = null;
     if (disposed) {
@@ -191,8 +260,6 @@ export function startContentRuntime(
       // 生きたページ上の投稿は必ず HTMLElement。アダプターの約束が Element
       // までなのは、そこまでしか読まないから。
       const cell = adapter.findPostCell(postCard) as HTMLElement;
-      const createdAtMs = adapter.readCreatedAt(postCard);
-
       if (!filteringEnabled()) {
         updates.push({
           cell,
@@ -206,9 +273,10 @@ export function startContentRuntime(
         {
           mediaMatches: matchesMediaFilter(postCard, siteSettings),
           metricCount: adapter.readMetricCount(postCard),
-          createdAtMs,
+          createdAtMs: adapter.readCreatedAt?.(postCard) ?? Number.NaN,
+          isReply: adapter.readIsReply?.(postCard) ?? false,
+          isQuote: adapter.readIsQuote?.(postCard) ?? false,
           isRepost: adapter.readIsRepost(postCard),
-          text: adapter.readText(postCard),
         },
         thresholdsFor(siteSettings),
       );
@@ -238,6 +306,21 @@ export function startContentRuntime(
         setCellState(update.cell, update.state, update.reason);
       }
     }
+    const hasMatchedPostBelowViewport = updates.some(
+      (update) =>
+        update.state === "matched" &&
+        update.cell.getBoundingClientRect().bottom > window.innerHeight + 4,
+    );
+    if (
+      filteringEnabled() &&
+      adapter.needsLayoutProbeForPagination &&
+      !adapter.hasReachedTimelineEnd?.(document) &&
+      !hasMatchedPostBelowViewport
+    ) {
+      startLayoutProbe();
+    } else {
+      stopLayoutProbe();
+    }
     restoreViewportAnchor(viewportAnchor);
   }
 
@@ -257,6 +340,7 @@ export function startContentRuntime(
   }
 
   function clearTimelineState(): void {
+    stopLayoutProbe();
     loadWarningTracker?.reset();
     clearAllFiltering();
   }
@@ -265,6 +349,7 @@ export function startContentRuntime(
     const nextPageKey = pageKey();
     if (nextPageKey !== observedPageKey) {
       observedPageKey = nextPageKey;
+      layoutProbePausedByUser = false;
       loadWarningTracker?.reset(readCurrentPostIds());
     }
     if (adapter.isTimelineAvailable(document, location)) {
@@ -279,6 +364,11 @@ export function startContentRuntime(
       return;
     }
     pageFilteringEnabled = enabled;
+    if (enabled) {
+      layoutProbePausedByUser = false;
+    } else {
+      stopLayoutProbe();
+    }
     loadWarningTracker?.reset(readCurrentPostIds());
     keepViewportOnNextFilter = true;
     if (adapter.isTimelineAvailable(document, location)) {
@@ -341,12 +431,15 @@ export function startContentRuntime(
       window.cancelAnimationFrame(filterFrame);
       filterFrame = null;
     }
+    stopLayoutProbe();
     window.removeEventListener("pagehide", handlePageHide);
+    window.removeEventListener("pageshow", handlePageShow);
     browser.runtime.onMessage.removeListener(handleTimelineControlMessage);
     window.removeEventListener("wheel", handleUserNavigation, true);
     window.removeEventListener("touchstart", handleUserNavigation, true);
     window.removeEventListener("pointerdown", handleUserNavigation, true);
     window.removeEventListener("keydown", handleUserNavigation, true);
+    window.removeEventListener("scroll", handleScroll);
     loadWarningTracker?.dispose();
     try {
       unwatchSettings();
@@ -356,8 +449,21 @@ export function startContentRuntime(
     clearTimelineState();
   }
 
-  function handlePageHide(): void {
-    dispose();
+  function handlePageHide(event: PageTransitionEvent): void {
+    if (!event.persisted) {
+      dispose();
+    }
+  }
+
+  function handlePageShow(event: PageTransitionEvent): void {
+    if (!event.persisted || disposed) {
+      return;
+    }
+    void settingsItem
+      .getValue()
+      .then(handleSettingsChange)
+      .catch(() => {});
+    handleRoute();
   }
 
   function handleUserNavigation(event: Event): void {
@@ -380,6 +486,72 @@ export function startContentRuntime(
     }
     if (filteringEnabled()) {
       loadWarningTracker?.reset(readCurrentPostIds());
+      if (!adapter.needsLayoutProbeForPagination) {
+        return;
+      }
+
+      const movesTowardStart =
+        (event instanceof WheelEvent && event.deltaY < 0) ||
+        (event instanceof KeyboardEvent &&
+          (["ArrowUp", "Home", "PageUp"].includes(event.key) ||
+            (event.key === " " && event.shiftKey)));
+      const movesTowardEnd =
+        (event instanceof WheelEvent && event.deltaY > 0) ||
+        (event instanceof KeyboardEvent &&
+          (["ArrowDown", "End", "PageDown"].includes(event.key) ||
+            (event.key === " " && !event.shiftKey)));
+      const layoutProbeRunning =
+        layoutProbeFrame !== null ||
+        layoutProbeTimer !== null ||
+        document.documentElement.hasAttribute("data-sift-layout-probe");
+
+      if (movesTowardStart && layoutProbeRunning) {
+        const scrollingElement =
+          document.scrollingElement ?? document.documentElement;
+        const initialScrollTop =
+          scrollTopBeforeLayoutProbe ?? scrollingElement.scrollTop;
+        let targetScrollTop = 0;
+        if (event instanceof WheelEvent) {
+          const pixelsPerUnit =
+            event.deltaMode === WheelEvent.DOM_DELTA_LINE
+              ? 40
+              : event.deltaMode === WheelEvent.DOM_DELTA_PAGE
+                ? window.innerHeight
+                : 1;
+          targetScrollTop = Math.max(
+            0,
+            initialScrollTop + event.deltaY * pixelsPerUnit,
+          );
+        } else if (event instanceof KeyboardEvent && event.key !== "Home") {
+          const distance =
+            event.key === "ArrowUp" ? 40 : window.innerHeight * 0.9;
+          targetScrollTop = Math.max(0, initialScrollTop - distance);
+        }
+        layoutProbePausedByUser = true;
+        stopLayoutProbe(false);
+        window.requestAnimationFrame(() => {
+          if (!disposed) {
+            window.scrollTo({ top: targetScrollTop, behavior: "instant" });
+          }
+        });
+      } else if (
+        layoutProbePausedByUser &&
+        movesTowardEnd &&
+        isAtPageBottom()
+      ) {
+        layoutProbePausedByUser = false;
+        scheduleFilter();
+      }
+    }
+  }
+
+  function handleScroll(): void {
+    if (
+      filteringEnabled() &&
+      adapter.needsLayoutProbeForPagination &&
+      !layoutProbePausedByUser
+    ) {
+      scheduleFilter();
     }
   }
 
@@ -407,6 +579,7 @@ export function startContentRuntime(
   const unwatchSettings = settingsItem.watch(handleSettingsChange);
   browser.runtime.onMessage.addListener(handleTimelineControlMessage);
   window.addEventListener("pagehide", handlePageHide);
+  window.addEventListener("pageshow", handlePageShow);
   window.addEventListener("wheel", handleUserNavigation, {
     capture: true,
     passive: true,
@@ -417,6 +590,7 @@ export function startContentRuntime(
   });
   window.addEventListener("pointerdown", handleUserNavigation, true);
   window.addEventListener("keydown", handleUserNavigation, true);
+  window.addEventListener("scroll", handleScroll, { passive: true });
 
   return { dispose };
 }

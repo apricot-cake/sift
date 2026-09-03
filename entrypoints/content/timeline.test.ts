@@ -57,6 +57,21 @@ async function getFilterContext(): Promise<FilterContextResponse> {
   return response as unknown as FilterContextResponse;
 }
 
+function dispatchPageTransition(
+  type: "pagehide" | "pageshow",
+  persisted: boolean,
+): void {
+  const event = new Event(type) as PageTransitionEvent;
+  Object.defineProperty(event, "persisted", { value: persisted });
+  window.dispatchEvent(event);
+}
+
+function dispatchTrustedWheel(deltaY: number): void {
+  const event = new WheelEvent("wheel", { deltaY });
+  Object.defineProperty(event, "isTrusted", { value: true });
+  window.dispatchEvent(event);
+}
+
 describe("タイムラインのフィルター", () => {
   it("投稿を絞り込み、ページ上の操作UIは作らない", async () => {
     document.body.innerHTML = timelineMarkup;
@@ -162,6 +177,203 @@ describe("タイムラインのフィルター", () => {
     runtime.dispose();
   });
 
+  it("Blueskyで初期投稿が全件不一致でも次ページ判定を進める", async () => {
+    document.body.innerHTML = `
+      <div data-testid="homeScreenFeedTabs-selector-Following">
+        <div style="background-color: blue"></div>
+      </div>
+      <div data-testid="feedItem-by-alice.test">
+        <a href="/profile/alice.test/post/abc"></a>
+        <button data-testid="likeBtn" aria-label="0 likes"></button>
+      </div>
+    `;
+    const scrollTo = vi.spyOn(window, "scrollTo").mockImplementation(() => {});
+    scrollTo.mockClear();
+    const runtime = startContentRuntime(
+      new ContentScriptContext("sift-test"),
+      blueskyAdapter,
+    );
+    await setFiltering(true);
+
+    await vi.waitFor(() => {
+      expect(
+        document.documentElement.hasAttribute("data-sift-layout-probe"),
+      ).toBe(true);
+      expect(scrollTo).toHaveBeenCalled();
+    });
+    expect(
+      document.querySelector('[data-sift-filter-state="hidden"]'),
+    ).not.toBeNull();
+
+    runtime.dispose();
+    expect(
+      document.documentElement.hasAttribute("data-sift-layout-probe"),
+    ).toBe(false);
+  });
+
+  it("Blueskyで一致が一件だけで表示範囲を満たさなくても次ページ判定を進める", async () => {
+    document.body.innerHTML = `
+      <div data-testid="homeScreenFeedTabs-selector-Following">
+        <div style="background-color: blue"></div>
+      </div>
+      <div data-testid="feedItem-by-alice.test">
+        <a href="/profile/alice.test/post/matched"></a>
+        <button data-testid="likeBtn" aria-label="1,100 likes"></button>
+      </div>
+      <div data-testid="feedItem-by-bob.test">
+        <a href="/profile/bob.test/post/hidden"></a>
+        <button data-testid="likeBtn" aria-label="0 likes"></button>
+      </div>
+    `;
+    const scrollTo = vi.spyOn(window, "scrollTo").mockImplementation(() => {});
+    const runtime = startContentRuntime(
+      new ContentScriptContext("sift-test"),
+      blueskyAdapter,
+    );
+    await setFiltering(true);
+
+    await vi.waitFor(() => {
+      expect(
+        document.documentElement.hasAttribute("data-sift-layout-probe"),
+      ).toBe(true);
+      expect(scrollTo).toHaveBeenCalled();
+    });
+    expect(
+      document.querySelectorAll('[data-sift-filter-state="matched"]'),
+    ).toHaveLength(1);
+
+    runtime.dispose();
+  });
+
+  it("Blueskyで連続読み込みの警告が出ても次ページ判定を止めない", async () => {
+    document.body.innerHTML = `
+      <div data-testid="homeScreenFeedTabs-selector-Following">
+        <div style="background-color: blue"></div>
+      </div>
+      <div data-testid="feedItem-by-baseline.test">
+        <a href="/profile/baseline.test/post/baseline"></a>
+        <button data-testid="likeBtn" aria-label="0 likes"></button>
+      </div>
+    `;
+    const scrollTo = vi.spyOn(window, "scrollTo").mockImplementation(() => {});
+    const runtime = startContentRuntime(
+      new ContentScriptContext("sift-test"),
+      blueskyAdapter,
+    );
+    await setFiltering(true);
+
+    for (const id of ["1", "2", "3"]) {
+      document.body.insertAdjacentHTML(
+        "beforeend",
+        `<div data-testid="feedItem-by-${id}.test">
+          <a href="/profile/${id}.test/post/${id}"></a>
+          <button data-testid="likeBtn" aria-label="0 likes"></button>
+        </div>`,
+      );
+      await new Promise((resolve) => window.setTimeout(resolve, 900));
+    }
+
+    expect((await getFilterContext()).continuousLoadingWarning).toBe(true);
+    scrollTo.mockClear();
+    await new Promise((resolve) => window.setTimeout(resolve, 2_500));
+
+    expect((await getFilterContext()).continuousLoadingWarning).toBe(true);
+    expect(scrollTo).toHaveBeenCalled();
+    expect(
+      document.documentElement.hasAttribute("data-sift-layout-probe"),
+    ).toBe(true);
+
+    runtime.dispose();
+  }, 10_000);
+
+  it("Blueskyがフィードの終端を示した後は読み込み判定を再開しない", async () => {
+    document.body.innerHTML = `
+      <div data-testid="homeScreenFeedTabs-selector-Following">
+        <div style="background-color: blue"></div>
+      </div>
+      <div data-testid="postsFeed-flatlist">
+        <div data-testid="feedItem-by-alice.test">
+          <a href="/profile/alice.test/post/abc"></a>
+          <button data-testid="likeBtn" aria-label="0 likes"></button>
+        </div>
+        <div><div dir="auto">フィードの終わり</div></div>
+      </div>
+    `;
+    const scrollTo = vi.spyOn(window, "scrollTo").mockImplementation(() => {});
+    scrollTo.mockClear();
+    const runtime = startContentRuntime(
+      new ContentScriptContext("sift-test"),
+      blueskyAdapter,
+    );
+    await setFiltering(true);
+
+    await vi.waitFor(() => {
+      expect(
+        document.querySelector('[data-sift-filter-state="hidden"]'),
+      ).not.toBeNull();
+    });
+    expect(
+      document.documentElement.hasAttribute("data-sift-layout-probe"),
+    ).toBe(false);
+    expect(scrollTo).not.toHaveBeenCalled();
+
+    dispatchTrustedWheel(100);
+    await new Promise((resolve) => window.setTimeout(resolve, 50));
+    expect(
+      document.documentElement.hasAttribute("data-sift-layout-probe"),
+    ).toBe(false);
+    expect(scrollTo).not.toHaveBeenCalled();
+
+    runtime.dispose();
+  });
+
+  it("Blueskyで読み込み判定中に上へスクロールしたら最下部への移動を止める", async () => {
+    document.body.innerHTML = `
+      <div data-testid="homeScreenFeedTabs-selector-Following">
+        <div style="background-color: blue"></div>
+      </div>
+      <div data-testid="feedItem-by-alice.test">
+        <a href="/profile/alice.test/post/abc"></a>
+        <button data-testid="likeBtn" aria-label="0 likes"></button>
+      </div>
+    `;
+    vi.spyOn(window, "scrollTo").mockImplementation(() => {});
+    const scrollingElement =
+      document.scrollingElement ?? document.documentElement;
+    scrollingElement.scrollTop = 600;
+    const runtime = startContentRuntime(
+      new ContentScriptContext("sift-test"),
+      blueskyAdapter,
+    );
+    await setFiltering(true);
+
+    await vi.waitFor(() => {
+      expect(
+        document.documentElement.hasAttribute("data-sift-layout-probe"),
+      ).toBe(true);
+    });
+
+    dispatchTrustedWheel(-100);
+    window.dispatchEvent(new Event("scroll"));
+    await new Promise((resolve) => window.setTimeout(resolve, 50));
+    expect(
+      document.documentElement.hasAttribute("data-sift-layout-probe"),
+    ).toBe(false);
+    expect(window.scrollTo).toHaveBeenLastCalledWith({
+      top: 500,
+      behavior: "instant",
+    });
+
+    dispatchTrustedWheel(100);
+    await vi.waitFor(() => {
+      expect(
+        document.documentElement.hasAttribute("data-sift-layout-probe"),
+      ).toBe(true);
+    });
+
+    runtime.dispose();
+  });
+
   it("YouTubeの対象外ページへ移るとフィルター状態を消す", async () => {
     history.replaceState({}, "", "/results");
     document.body.innerHTML = `
@@ -187,6 +399,25 @@ describe("タイムラインのフィルター", () => {
 
     await vi.waitFor(() => {
       expect(document.querySelector("[data-sift-filter-state]")).toBeNull();
+    });
+
+    runtime.dispose();
+  });
+
+  it("戻る操作でキャッシュから復元された後もサイドパネルへ応答する", async () => {
+    document.body.innerHTML = timelineMarkup;
+    const runtime = startContentRuntime(
+      new ContentScriptContext("sift-test"),
+      xAdapter,
+    );
+    await setFiltering(true);
+
+    dispatchPageTransition("pagehide", true);
+    dispatchPageTransition("pageshow", true);
+
+    await expect(getFilterContext()).resolves.toMatchObject({
+      site: "x",
+      filteringEnabled: true,
     });
 
     runtime.dispose();

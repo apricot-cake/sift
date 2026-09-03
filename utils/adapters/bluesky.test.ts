@@ -1,13 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { render } from "../../test/dom.ts";
-import {
-  blueskyAdapter,
-  isBlueskySupportedHomeTimeline,
-  timestampFromRecordKey,
-} from "./bluesky.ts";
+import { blueskyAdapter, isBlueskySupportedHomeTimeline } from "./bluesky.ts";
 
 const postHref = "/profile/example.bsky.social/post/3mqcze2d6k23e";
-const recordKeyTime = Date.parse("2026-07-10T20:46:00.000Z");
 
 const likeButton =
   '<button data-testid="likeBtn" aria-label="いいねする（63,561件のいいね）"><span>6万</span></button>';
@@ -80,6 +75,27 @@ describe("投稿を見つける", () => {
   });
 });
 
+describe("フィードの終端を読む", () => {
+  it.each(["フィードの終わり", "End of feed"])(
+    "%s を終端として読む",
+    (label) => {
+      const page = render(`
+        <div data-testid="postsFeed-flatlist">
+          <div><div dir="auto">${label}</div></div>
+        </div>
+      `);
+
+      expect(blueskyAdapter.hasReachedTimelineEnd?.(page)).toBe(true);
+    },
+  );
+
+  it("フィードの外にある同じ文言は終端として読まない", () => {
+    const page = render('<div dir="auto">フィードの終わり</div>');
+
+    expect(blueskyAdapter.hasReachedTimelineEnd?.(page)).toBe(false);
+  });
+});
+
 describe("Home の対象フィード", () => {
   it("Following は投稿の描き直し中でも操作できる", () => {
     const page = render(`
@@ -148,107 +164,6 @@ describe("いいね数を読む", () => {
   });
 });
 
-describe("投稿時刻を読む", () => {
-  // Bluesky は <time datetime> を書かない。あるのはパーマリンクに付いた
-  // 現地語の絶対時刻と、そのパーマリンクの経路に入っているレコードキー。
-  it("Date.parse が解釈できるラベルを読む", () => {
-    const card = renderPost(
-      `<a href="${postHref}" aria-label="2026-08-01T12:00:00.000Z">1時間前</a>`,
-    );
-
-    expect(blueskyAdapter.readCreatedAt(card)).toBe(
-      Date.parse("2026-08-01T12:00:00.000Z"),
-    );
-  });
-
-  // Bluesky が実際に書くラベルは現地語の絶対時刻で、Date.parse はこれを
-  // 受け付けない＝実際に時刻を運んでいるのはレコードキーの方。
-  it("Date.parse が拒むラベルではレコードキーに落ちる", () => {
-    expect(Date.parse("2026年7月10日 20:46")).toBeNaN();
-    const card = renderPost(
-      `<a href="${postHref}" aria-label="2026年7月10日 20:46">1時間前</a>`,
-    );
-
-    expect(blueskyAdapter.readCreatedAt(card)).toBe(recordKeyTime);
-  });
-
-  // 詳細の画面が主題にしている投稿にはパーマリンクが無い＝そこがリンクの
-  // 行き先だから。最初に来るのは自分の下位ページへのリンクで、ラベルは時刻では
-  // なく動作、レコードキーは経路の途中に乗っている。勝つのは最初のリンクでは
-  // なく、最初の「読めた」リンク。
-  it("詳細の画面が先に置く下位ページのリンクから読む", () => {
-    const card = renderPost(`
-      <a href="${postHref}/reposted-by" aria-label="この投稿をリポストする"></a>
-      <a href="${postHref}/liked-by" aria-label="この投稿をいいねする"></a>
-    `);
-
-    expect(blueskyAdapter.readCreatedAt(card)).toBe(recordKeyTime);
-  });
-
-  // 引用した投稿は、自分のパーマリンクの後ろに引用元のパーマリンクも持つ。
-  it("引用元ではなく、引用した投稿自身の時刻を読む", () => {
-    const card = renderPost(`
-      <a href="${postHref}" aria-label="2026年7月10日 20:46"></a>
-      <a href="/profile/quoted.bsky.social/post/3ms3mmsbt223e"></a>
-    `);
-
-    expect(blueskyAdapter.readCreatedAt(card)).toBe(recordKeyTime);
-  });
-
-  // どちらの読み方もできない場合も、全期間の判定は動く。
-  it("キーがレコードキーでないリンクには NaN を返す", () => {
-    const card = renderPost(
-      '<a href="/profile/example.bsky.social/post/self"></a>',
-    );
-
-    expect(blueskyAdapter.readCreatedAt(card)).toBeNaN();
-  });
-
-  it("リンクを1本も持たない投稿には NaN を返す", () => {
-    expect(blueskyAdapter.readCreatedAt(renderPost())).toBeNaN();
-  });
-});
-
-describe("timestampFromRecordKey", () => {
-  it("パーマリンクからキーを解く", () => {
-    expect(timestampFromRecordKey(postHref)).toBe(recordKeyTime);
-    expect(timestampFromRecordKey(`${postHref}?foo=1`)).toBe(recordKeyTime);
-    expect(timestampFromRecordKey(`https://bsky.app${postHref}#anchor`)).toBe(
-      recordKeyTime,
-    );
-  });
-
-  // キーは /post/ の次の区画なので、その投稿自身の下位ページへのリンクも
-  // パーマリンクと同じようにキーを運んでいる。
-  it("下位ページのリンクからもキーを解く", () => {
-    expect(timestampFromRecordKey(`${postHref}/reposted-by`)).toBe(
-      recordKeyTime,
-    );
-  });
-
-  // レコードキーが TID なのは慣習でしかないので、投稿の時刻としてありえない
-  // ものは拒む＝長さ違い・字種の外・投稿のものになりえない時刻。
-  it("投稿の時刻としてありえないものは拒む", () => {
-    expect(timestampFromRecordKey("/post/tooshort")).toBeNaN();
-    expect(timestampFromRecordKey("/post/3111111111111")).toBeNaN();
-    expect(timestampFromRecordKey("")).toBeNaN();
-    expect(timestampFromRecordKey(null)).toBeNaN();
-    // "aaaaaaaaaaaaa" は 2190 年に解ける＝上限がそもそも要る理由。
-    expect(timestampFromRecordKey("/post/aaaaaaaaaaaaa")).toBeNaN();
-    // ネットワークが存在するより前の時刻。
-    expect(timestampFromRecordKey("/post/3i5p64yyc222b")).toBeNaN();
-  });
-
-  // そして投稿は、それを読んでいる側の時計より先に立てない＝ずれの許容ぶんを
-  // 超えては。
-  it("時計のずれは許すが、それ以上は許さない", () => {
-    expect(timestampFromRecordKey(postHref, recordKeyTime - 3600000)).toBeNaN();
-    expect(timestampFromRecordKey(postHref, recordKeyTime - 60000)).toBe(
-      recordKeyTime,
-    );
-  });
-});
-
 describe("メディアを読む", () => {
   it("投稿自身の画像を読む", () => {
     const card = renderPost(
@@ -308,13 +223,45 @@ describe("メディアを読む", () => {
   });
 });
 
-describe("投稿本文を読む", () => {
-  it("投稿本文とハッシュタグだけを読む", () => {
-    const card = renderPost(
-      '<div data-testid="postText">New trailer <a>#Spoiler</a></div><button>Like</button>',
-    );
+describe("返信を読む", () => {
+  it("親投稿から続く縦線を持つ投稿を返信として読む", () => {
+    const card = renderPost(`
+      <div style="width: 42px;">
+        <div style="background-color: rgb(220, 226, 234); margin-bottom: 4px;"></div>
+      </div>
+    `);
 
-    expect(blueskyAdapter.readText(card)).toBe("New trailer #Spoiler");
+    expect(blueskyAdapter.readIsReply?.(card)).toBe(true);
+  });
+
+  it("縦線の無い投稿を返信として読まない", () => {
+    expect(blueskyAdapter.readIsReply?.(renderPost())).toBe(false);
+  });
+});
+
+describe("引用投稿を読む", () => {
+  it("本文内の引用カードを読む", () => {
+    const card = renderPost(`
+      <div data-testid="contentHider-post">
+        <div role="link">
+          <div data-testid="userAvatarImage"><img src="/quoted.jpg"></div>
+        </div>
+      </div>
+    `);
+
+    expect(blueskyAdapter.readIsQuote?.(card)).toBe(true);
+  });
+
+  it("外部リンクカードを引用として読まない", () => {
+    const card = renderPost(`
+      <div data-testid="contentHider-post">
+        <a role="link" href="https://example.com">
+          <img src="/preview.jpg">
+        </a>
+      </div>
+    `);
+
+    expect(blueskyAdapter.readIsQuote?.(card)).toBe(false);
   });
 });
 

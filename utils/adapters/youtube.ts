@@ -282,12 +282,6 @@ export const youtubeAdapter = Object.freeze({
     return { hasImage: false, hasVideo: true };
   },
 
-  readText(postCard: Element) {
-    return (
-      postCard.querySelector(YOUTUBE_SELECTORS.title)?.textContent ?? ""
-    ).trim();
-  },
-
   readIsRepost(_postCard: Element) {
     return false;
   },

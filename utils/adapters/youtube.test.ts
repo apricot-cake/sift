@@ -197,7 +197,7 @@ describe("YouTube の再生回数を読む", () => {
 });
 
 describe("YouTube の公開時期を読む", () => {
-  const now = Date.parse("2026-08-22T12:00:00Z");
+  const now = Date.parse("2026-09-02T12:00:00Z");
 
   it.each([
     ["12時間前", 12],
@@ -211,16 +211,26 @@ describe("YouTube の公開時期を読む", () => {
     );
   });
 
+  it("一覧カードのメタデータから公開時期を読む", () => {
+    const video = renderVideo(`
+      <div id="metadata-line">
+        <span class="inline-metadata-item">1.4万回視聴</span>
+        <span class="inline-metadata-item">12時間前</span>
+      </div>
+    `);
+
+    expect(youtubeAdapter.readCreatedAt?.(video)).toBeGreaterThan(0);
+  });
+
   it("公開時期が無ければ判定不能にする", () => {
     expect(publishedAtFromYouTubeText("新着", now)).toBeNaN();
   });
 });
 
 describe("YouTube の動画情報を読む", () => {
-  it("タイトルを本文として読む", () => {
+  it("動画をメディアとして読む", () => {
     const video = renderVideo('<a id="video-title">新しい動画</a>');
 
-    expect(youtubeAdapter.readText(video)).toBe("新しい動画");
     expect(youtubeAdapter.readMedia(video)).toEqual({
       hasImage: false,
       hasVideo: true,

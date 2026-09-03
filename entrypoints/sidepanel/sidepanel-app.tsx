@@ -2,6 +2,10 @@ import { Settings as SettingsIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { browser } from "wxt/browser";
 import {
+  shouldDisablePreviousFiltering,
+  shouldEnableFiltering,
+} from "../../utils/filter-activation.ts";
+import {
   FILTER_CONTEXT_REQUEST,
   type FilterContextResponse,
   isFilterContextResponse,
@@ -11,8 +15,7 @@ import {
   defaults,
   type MetricSiteSettings,
   normalizeSettings,
-  type PeriodMode,
-  type PeriodUnit,
+  type PublicationPeriodUnit,
   type ReactionSiteSettings,
   type Settings,
   type SiteSettingsKey,
@@ -32,7 +35,6 @@ import {
   SelectValue,
 } from "../options/components/ui/select.tsx";
 import { Switch } from "../options/components/ui/switch.tsx";
-import { Textarea } from "../options/components/ui/textarea.tsx";
 
 const REPOSITORY_URL = "https://github.com/apricot-cake/sift";
 const SITE_LABELS: Readonly<Record<SiteSettingsKey, string>> = Object.freeze({
@@ -60,6 +62,7 @@ export function SidepanelApp({
   const activePageRef = useRef<{ tabId: number; pageKey: string } | null>(null);
   const panelInitialized = useRef(false);
   const [pageFilteringEnabled, setPageFilteringEnabled] = useState(false);
+  const pageFilteringExpected = useRef(false);
 
   useEffect(() => {
     settingsRef.current = settings;
@@ -102,6 +105,13 @@ export function SidepanelApp({
       .catch(() => setStatus(t("optionsErrorSaveFailed")));
   };
 
+  const resetSettings = (): void => {
+    if (!window.confirm(t("optionsResetConfirm"))) {
+      return;
+    }
+    saveSettings(defaults);
+  };
+
   useEffect(() => {
     if (manageAll) {
       return;
@@ -131,7 +141,14 @@ export function SidepanelApp({
           (nextPage === null ||
             previousPage.tabId !== nextPage.tabId ||
             previousPage.pageKey !== nextPage.pageKey);
-        if (pageChanged) {
+        if (
+          previousPage !== null &&
+          shouldDisablePreviousFiltering({
+            pageChanged,
+            previousTabId: previousPage.tabId,
+            nextTabId: nextPage?.tabId ?? null,
+          })
+        ) {
           void browser.tabs
             .sendMessage(previousPage.tabId, {
               type: TIMELINE_CONTROL.setFiltering,
@@ -139,17 +156,28 @@ export function SidepanelApp({
             })
             .catch(() => {});
         }
-        if (!panelInitialized.current && nextPage !== null) {
+        const enableFiltering = shouldEnableFiltering({
+          contentFilteringEnabled: context?.filteringEnabled ?? false,
+          hasNextPage: nextPage !== null,
+          hasPreviousPage: previousPage !== null,
+          pageChanged,
+          panelExpectedFiltering: pageFilteringExpected.current,
+          panelInitialized: panelInitialized.current,
+        });
+        if (enableFiltering && nextPage !== null) {
           void browser.tabs
             .sendMessage(nextPage.tabId, {
               type: TIMELINE_CONTROL.setFiltering,
               enabled: true,
             })
             .catch(() => {});
+          pageFilteringExpected.current = true;
           setPageFilteringEnabled(true);
-        } else if (pageChanged) {
+        } else if (nextPage === null) {
+          pageFilteringExpected.current = false;
           setPageFilteringEnabled(false);
         } else {
+          pageFilteringExpected.current = context?.filteringEnabled ?? false;
           setPageFilteringEnabled(context?.filteringEnabled ?? false);
         }
         panelInitialized.current = true;
@@ -193,10 +221,6 @@ export function SidepanelApp({
   }, [manageAll]);
 
   const selectedSettings = settingsFor(settings, selectedSite);
-  const metricFilterEnabled =
-    selectedSettings.kind === "metric"
-      ? selectedSettings.minCountEnabled
-      : selectedSettings.minReactionsEnabled;
   const filteringEnabled = manageAll || pageFilteringEnabled;
 
   const updateFiltering = (enabled: boolean): void => {
@@ -204,13 +228,17 @@ export function SidepanelApp({
     if (activePage === null) {
       return;
     }
+    pageFilteringExpected.current = enabled;
     setPageFilteringEnabled(enabled);
     void browser.tabs
       .sendMessage(activePage.tabId, {
         type: TIMELINE_CONTROL.setFiltering,
         enabled,
       })
-      .catch(() => setPageFilteringEnabled(false));
+      .catch(() => {
+        pageFilteringExpected.current = false;
+        setPageFilteringEnabled(false);
+      });
   };
 
   const saveSiteSettings = (
@@ -248,7 +276,7 @@ export function SidepanelApp({
       data-sift-sidepanel={manageAll ? undefined : ""}
     >
       <div
-        className={`relative mx-auto px-5 py-6 ${manageAll ? "max-w-3xl" : "max-w-xl"}`}
+        className={`relative mx-auto px-5 py-6 ${manageAll ? "max-w-lg" : "max-w-xl"}`}
       >
         {manageAll && (
           <header className="mb-8 flex items-center justify-between gap-4">
@@ -283,27 +311,133 @@ export function SidepanelApp({
         )}
 
         {!manageAll && (
-          <SettingsGroup title={t("sidepanelCurrentPage")}>
-            {!manageAll && !currentPageIsEditable && (
-              <div className="p-5 text-sm leading-6 text-muted-foreground sm:px-6">
+          <div className="mt-7" data-filter-controls="">
+            {!currentPageIsEditable && (
+              <div className="px-3 py-2 text-sm leading-6 text-muted-foreground">
                 {t("sidepanelStatusUnavailable")}
               </div>
             )}
-            {!manageAll && currentPageIsEditable && (
-              <SettingRow label={t("sidepanelFiltering")}>
-                <Switch
-                  checked={filteringEnabled}
-                  disabled={!filteringIsAvailable}
-                  onCheckedChange={updateFiltering}
-                />
-              </SettingRow>
+            {currentPageIsEditable && (
+              <>
+                {!filteringIsAvailable && (
+                  <div className="px-3 py-2 text-sm leading-6 text-muted-foreground">
+                    {t("sidepanelStatusReloadRequired")}
+                  </div>
+                )}
+                {filteringIsAvailable && !filteringEnabled && (
+                  <div className="space-y-3 px-3 py-2">
+                    <p className="m-0 text-sm font-medium leading-6 text-muted-foreground">
+                      {t("sidepanelStatusFilteringDisabled")}
+                    </p>
+                    <Button
+                      className="w-full"
+                      onClick={() => updateFiltering(true)}
+                      variant="outline"
+                    >
+                      {t("sidepanelEnableFiltering")}
+                    </Button>
+                  </div>
+                )}
+                <fieldset
+                  className="m-0 min-w-0 space-y-7 border-0 p-0 disabled:opacity-60"
+                  disabled={!filteringIsAvailable || !filteringEnabled}
+                >
+                  <div>
+                    {selectedSettings.kind === "metric" ? (
+                      <>
+                        <ThresholdSetting
+                          enabled={selectedSettings.minCountEnabled}
+                          label={t("optionsMinViews")}
+                          min={0}
+                          onEnabledChange={(value) =>
+                            updateMetricSetting("minCountEnabled", value)
+                          }
+                          onValueChange={(value) =>
+                            updateMetricSetting("minCount", value)
+                          }
+                          suffix={t("optionsUnitViews")}
+                          value={selectedSettings.minCount}
+                        />
+                        <PublicationPeriodSetting
+                          enabled={selectedSettings.publishedWithinEnabled}
+                          unit={selectedSettings.publishedWithinUnit}
+                          value={selectedSettings.publishedWithinValue}
+                          onChange={(
+                            publishedWithinEnabled,
+                            publishedWithinUnit,
+                          ) =>
+                            saveSiteSettings(selectedSite, {
+                              ...selectedSettings,
+                              publishedWithinEnabled,
+                              publishedWithinUnit,
+                            })
+                          }
+                          onValueChange={(value) =>
+                            updateMetricSetting("publishedWithinValue", value)
+                          }
+                        />
+                      </>
+                    ) : (
+                      <ThresholdSetting
+                        enabled={selectedSettings.minReactionsEnabled}
+                        label={t("optionsMinLikes")}
+                        min={0}
+                        onEnabledChange={(value) =>
+                          updateReactionSetting("minReactionsEnabled", value)
+                        }
+                        onValueChange={(value) =>
+                          updateReactionSetting("minReactions", value)
+                        }
+                        value={selectedSettings.minReactions}
+                      />
+                    )}
+                    {selectedSettings.kind === "reactions" && (
+                      <MediaSetting
+                        enabled={selectedSettings.mediaEnabled}
+                        mode={selectedSettings.mediaMode}
+                        onChange={(mediaEnabled, mediaMode) =>
+                          saveSiteSettings(selectedSite, {
+                            ...selectedSettings,
+                            mediaEnabled,
+                            mediaMode,
+                          })
+                        }
+                      />
+                    )}
+                  </div>
+
+                  {selectedSettings.kind === "reactions" && (
+                    <div>
+                      <SettingRow label={t("optionsHideReplies")}>
+                        <Switch
+                          checked={selectedSettings.hideReplies}
+                          onCheckedChange={(value) =>
+                            updateReactionSetting("hideReplies", value)
+                          }
+                        />
+                      </SettingRow>
+                      <SettingRow label={t("optionsHideQuotes")}>
+                        <Switch
+                          checked={selectedSettings.hideQuotes}
+                          onCheckedChange={(value) =>
+                            updateReactionSetting("hideQuotes", value)
+                          }
+                        />
+                      </SettingRow>
+                      <SettingRow label={t("optionsHideReposts")}>
+                        <Switch
+                          checked={selectedSettings.hideReposts}
+                          onCheckedChange={(value) =>
+                            updateReactionSetting("hideReposts", value)
+                          }
+                        />
+                      </SettingRow>
+                    </div>
+                  )}
+                </fieldset>
+              </>
             )}
-            {!manageAll && currentPageIsEditable && !filteringIsAvailable && (
-              <div className="p-5 text-sm leading-6 text-muted-foreground sm:px-6">
-                {t("sidepanelStatusReloadRequired")}
-              </div>
-            )}
-          </SettingsGroup>
+          </div>
         )}
 
         {!manageAll &&
@@ -330,191 +464,23 @@ export function SidepanelApp({
           )}
 
         {manageAll && (
-          <div className="space-y-12">
-            {SITE_KEYS.map((site) => (
-              <SiteSettingsEditor
-                key={site}
-                onSave={(next) => saveSiteSettings(site, next)}
-                settings={settingsFor(settings, site)}
-                site={site}
-              />
-            ))}
+          <div>
+            <div className="space-y-12">
+              {SITE_KEYS.map((site) => (
+                <SiteSettingsEditor
+                  key={site}
+                  onSave={(next) => saveSiteSettings(site, next)}
+                  settings={settingsFor(settings, site)}
+                  site={site}
+                />
+              ))}
+            </div>
+            <div className="mt-12 flex justify-end pt-6">
+              <Button onClick={resetSettings} variant="destructive">
+                {t("optionsResetSettings")}
+              </Button>
+            </div>
           </div>
-        )}
-
-        {!manageAll && (
-          <fieldset
-            className={`m-0 min-w-0 border-0 p-0 disabled:opacity-60 ${
-              manageAll ? "md:col-start-2 md:row-start-1" : ""
-            }`}
-            disabled={!filteringEnabled || !currentPageIsEditable}
-            hidden={!currentPageIsEditable}
-          >
-            <section
-              className={manageAll ? "mt-12" : "mt-7"}
-              aria-label={t("optionsSectionDisplayConditions")}
-            >
-              <div className="space-y-4">
-                <Card>
-                  <CardContent className="divide-y p-0">
-                    <SettingRow
-                      label={
-                        selectedSettings.kind === "metric"
-                          ? t("optionsViewsEnabled")
-                          : t("optionsLikesEnabled")
-                      }
-                    >
-                      <Switch
-                        checked={metricFilterEnabled}
-                        onCheckedChange={(value) =>
-                          selectedSettings.kind === "metric"
-                            ? updateMetricSetting("minCountEnabled", value)
-                            : updateReactionSetting(
-                                "minReactionsEnabled",
-                                value,
-                              )
-                        }
-                      />
-                    </SettingRow>
-                    {metricFilterEnabled && (
-                      <>
-                        <PeriodSetting
-                          mode={selectedSettings.periodMode}
-                          onModeChange={(value) =>
-                            selectedSettings.kind === "metric"
-                              ? updateMetricSetting("periodMode", value)
-                              : updateReactionSetting("periodMode", value)
-                          }
-                          onUnitChange={(value) =>
-                            selectedSettings.kind === "metric"
-                              ? updateMetricSetting("periodUnit", value)
-                              : updateReactionSetting("periodUnit", value)
-                          }
-                          onValueChange={(value) =>
-                            selectedSettings.kind === "metric"
-                              ? updateMetricSetting("periodValue", value)
-                              : updateReactionSetting("periodValue", value)
-                          }
-                          unit={selectedSettings.periodUnit}
-                          value={selectedSettings.periodValue}
-                        />
-                        {selectedSettings.kind === "metric" ? (
-                          <NumberSetting
-                            label={t("optionsMinViews")}
-                            min={0}
-                            onValueChange={(value) =>
-                              updateMetricSetting("minCount", value)
-                            }
-                            suffix={t("optionsUnitViews")}
-                            value={selectedSettings.minCount}
-                          />
-                        ) : (
-                          <NumberSetting
-                            label={t("optionsMinLikes")}
-                            min={0}
-                            onValueChange={(value) =>
-                              updateReactionSetting("minReactions", value)
-                            }
-                            value={selectedSettings.minReactions}
-                          />
-                        )}
-                      </>
-                    )}
-                  </CardContent>
-                </Card>
-                {selectedSettings.kind === "reactions" && (
-                  <Card>
-                    <CardContent className="divide-y p-0">
-                      <SettingRow label={t("optionsMediaEnabled")}>
-                        <Switch
-                          checked={selectedSettings.mediaEnabled}
-                          onCheckedChange={(value) =>
-                            updateReactionSetting("mediaEnabled", value)
-                          }
-                        />
-                      </SettingRow>
-                      {selectedSettings.mediaEnabled && (
-                        <SettingRow label={t("optionsMedia")}>
-                          <Select
-                            value={selectedSettings.mediaMode}
-                            onValueChange={(value) =>
-                              updateReactionSetting(
-                                "mediaMode",
-                                value as ReactionSiteSettings["mediaMode"],
-                              )
-                            }
-                          >
-                            <SelectTrigger className="w-40">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="any">
-                                {t("optionsMediaAny")}
-                              </SelectItem>
-                              <SelectItem value="images">
-                                {t("optionsMediaImages")}
-                              </SelectItem>
-                              <SelectItem value="video">
-                                {t("optionsMediaVideo")}
-                              </SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </SettingRow>
-                      )}
-                    </CardContent>
-                  </Card>
-                )}
-              </div>
-            </section>
-
-            {selectedSettings.kind === "reactions" && (
-              <SettingsGroup
-                title={t("optionsSectionExclude")}
-                collapsible
-                defaultOpen={manageAll}
-                disabled={!filteringEnabled}
-              >
-                <SettingRow label={t("optionsKeywordsEnabled")}>
-                  <Switch
-                    checked={selectedSettings.excludedKeywordsEnabled}
-                    onCheckedChange={(value) =>
-                      updateReactionSetting("excludedKeywordsEnabled", value)
-                    }
-                  />
-                </SettingRow>
-                {selectedSettings.excludedKeywordsEnabled && (
-                  <div className="p-5 sm:px-6">
-                    <label
-                      className="text-sm font-medium"
-                      htmlFor="excluded-keywords"
-                    >
-                      {t("optionsExcludedKeywords")}
-                    </label>
-                    <Textarea
-                      id="excluded-keywords"
-                      className="mt-3"
-                      placeholder={t("optionsExcludedKeywordsPlaceholder")}
-                      value={selectedSettings.excludedKeywords}
-                      onChange={(event) =>
-                        updateReactionSetting(
-                          "excludedKeywords",
-                          event.currentTarget.value,
-                        )
-                      }
-                    />
-                  </div>
-                )}
-                <SettingRow label={t("optionsHideReposts")}>
-                  <Switch
-                    checked={selectedSettings.hideReposts}
-                    onCheckedChange={(value) =>
-                      updateReactionSetting("hideReposts", value)
-                    }
-                  />
-                </SettingRow>
-              </SettingsGroup>
-            )}
-          </fieldset>
         )}
 
         {status && (
@@ -536,10 +502,6 @@ function SiteSettingsEditor({
   settings: ReactionSiteSettings | MetricSiteSettings;
   site: SiteSettingsKey;
 }): React.JSX.Element {
-  const metricFilterEnabled =
-    settings.kind === "metric"
-      ? settings.minCountEnabled
-      : settings.minReactionsEnabled;
   const updateReaction = <Key extends keyof ReactionSiteSettings>(
     key: Key,
     value: ReactionSiteSettings[Key],
@@ -565,227 +527,96 @@ function SiteSettingsEditor({
       >
         {SITE_LABELS[site]}
       </h2>
-      <div className="space-y-4">
-        <Card>
-          <CardContent className="divide-y p-0">
-            <SettingRow
-              label={
-                settings.kind === "metric"
-                  ? t("optionsViewsEnabled")
-                  : t("optionsLikesEnabled")
-              }
-            >
-              <Switch
-                checked={metricFilterEnabled}
-                onCheckedChange={(value) =>
-                  settings.kind === "metric"
-                    ? updateMetric("minCountEnabled", value)
-                    : updateReaction("minReactionsEnabled", value)
-                }
-              />
-            </SettingRow>
-            {metricFilterEnabled && (
+      <Card>
+        <CardContent className="p-0">
+          <div className="divide-y">
+            {settings.kind === "metric" ? (
               <>
-                <PeriodSetting
-                  mode={settings.periodMode}
-                  onModeChange={(value) =>
-                    settings.kind === "metric"
-                      ? updateMetric("periodMode", value)
-                      : updateReaction("periodMode", value)
+                <ThresholdSetting
+                  enabled={settings.minCountEnabled}
+                  label={t("optionsMinViews")}
+                  min={0}
+                  onEnabledChange={(value) =>
+                    updateMetric("minCountEnabled", value)
                   }
-                  onUnitChange={(value) =>
-                    settings.kind === "metric"
-                      ? updateMetric("periodUnit", value)
-                      : updateReaction("periodUnit", value)
+                  onValueChange={(value) => updateMetric("minCount", value)}
+                  suffix={t("optionsUnitViews")}
+                  value={settings.minCount}
+                />
+                <PublicationPeriodSetting
+                  enabled={settings.publishedWithinEnabled}
+                  unit={settings.publishedWithinUnit}
+                  value={settings.publishedWithinValue}
+                  onChange={(publishedWithinEnabled, publishedWithinUnit) =>
+                    onSave({
+                      ...settings,
+                      publishedWithinEnabled,
+                      publishedWithinUnit,
+                    })
                   }
                   onValueChange={(value) =>
-                    settings.kind === "metric"
-                      ? updateMetric("periodValue", value)
-                      : updateReaction("periodValue", value)
+                    updateMetric("publishedWithinValue", value)
                   }
-                  unit={settings.periodUnit}
-                  value={settings.periodValue}
                 />
-                {settings.kind === "metric" ? (
-                  <NumberSetting
-                    label={t("optionsMinViews")}
-                    min={0}
-                    onValueChange={(value) => updateMetric("minCount", value)}
-                    suffix={t("optionsUnitViews")}
-                    value={settings.minCount}
-                  />
-                ) : (
-                  <NumberSetting
-                    label={t("optionsMinLikes")}
-                    min={0}
-                    onValueChange={(value) =>
-                      updateReaction("minReactions", value)
-                    }
-                    value={settings.minReactions}
-                  />
-                )}
               </>
+            ) : (
+              <ThresholdSetting
+                enabled={settings.minReactionsEnabled}
+                label={t("optionsMinLikes")}
+                min={0}
+                onEnabledChange={(value) =>
+                  updateReaction("minReactionsEnabled", value)
+                }
+                onValueChange={(value) => updateReaction("minReactions", value)}
+                value={settings.minReactions}
+              />
             )}
-          </CardContent>
-        </Card>
+            {settings.kind === "reactions" && (
+              <MediaSetting
+                enabled={settings.mediaEnabled}
+                mode={settings.mediaMode}
+                onChange={(mediaEnabled, mediaMode) =>
+                  onSave({
+                    ...settings,
+                    mediaEnabled,
+                    mediaMode,
+                  })
+                }
+              />
+            )}
+          </div>
 
-        {settings.kind === "reactions" && (
-          <>
-            <Card>
-              <CardContent className="divide-y p-0">
-                <SettingRow label={t("optionsMediaEnabled")}>
+          {settings.kind === "reactions" && (
+            <div className="pt-4">
+              <div className="divide-y">
+                <SettingRow label={t("optionsHideReplies")}>
                   <Switch
-                    checked={settings.mediaEnabled}
+                    checked={settings.hideReplies}
                     onCheckedChange={(value) =>
-                      updateReaction("mediaEnabled", value)
+                      updateReaction("hideReplies", value)
                     }
                   />
                 </SettingRow>
-                {settings.mediaEnabled && (
-                  <SettingRow label={t("optionsMedia")}>
-                    <Select
-                      value={settings.mediaMode}
-                      onValueChange={(value) =>
-                        updateReaction(
-                          "mediaMode",
-                          value as ReactionSiteSettings["mediaMode"],
-                        )
-                      }
-                    >
-                      <SelectTrigger className="w-40">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="any">
-                          {t("optionsMediaAny")}
-                        </SelectItem>
-                        <SelectItem value="images">
-                          {t("optionsMediaImages")}
-                        </SelectItem>
-                        <SelectItem value="video">
-                          {t("optionsMediaVideo")}
-                        </SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </SettingRow>
-                )}
-              </CardContent>
-            </Card>
-
-            <SettingsGroup className="mt-0" title={t("optionsSectionExclude")}>
-              <SettingRow label={t("optionsKeywordsEnabled")}>
-                <Switch
-                  checked={settings.excludedKeywordsEnabled}
-                  onCheckedChange={(value) =>
-                    updateReaction("excludedKeywordsEnabled", value)
-                  }
-                />
-              </SettingRow>
-              {settings.excludedKeywordsEnabled && (
-                <div className="p-5 sm:px-6">
-                  <label
-                    className="text-sm font-medium"
-                    htmlFor={`excluded-keywords-${site}`}
-                  >
-                    {t("optionsExcludedKeywords")}
-                  </label>
-                  <Textarea
-                    className="mt-3"
-                    id={`excluded-keywords-${site}`}
-                    onChange={(event) =>
-                      updateReaction(
-                        "excludedKeywords",
-                        event.currentTarget.value,
-                      )
+                <SettingRow label={t("optionsHideQuotes")}>
+                  <Switch
+                    checked={settings.hideQuotes}
+                    onCheckedChange={(value) =>
+                      updateReaction("hideQuotes", value)
                     }
-                    placeholder={t("optionsExcludedKeywordsPlaceholder")}
-                    value={settings.excludedKeywords}
                   />
-                </div>
-              )}
-              <SettingRow label={t("optionsHideReposts")}>
-                <Switch
-                  checked={settings.hideReposts}
-                  onCheckedChange={(value) =>
-                    updateReaction("hideReposts", value)
-                  }
-                />
-              </SettingRow>
-            </SettingsGroup>
-          </>
-        )}
-      </div>
-    </section>
-  );
-}
-
-function SettingsGroup({
-  children,
-  className,
-  collapsible = false,
-  defaultOpen = false,
-  description,
-  disabled = false,
-  title,
-}: {
-  children: React.ReactNode;
-  className?: string;
-  collapsible?: boolean;
-  defaultOpen?: boolean;
-  description?: string;
-  disabled?: boolean;
-  title: string;
-}): React.JSX.Element {
-  const [open, setOpen] = useState(defaultOpen);
-
-  useEffect(() => {
-    if (disabled) {
-      setOpen(false);
-    }
-  }, [disabled]);
-
-  if (collapsible) {
-    return (
-      <details
-        className={`mt-7 ${className ?? ""}`}
-        data-settings-group=""
-        onToggle={(event) =>
-          setOpen(disabled ? false : event.currentTarget.open)
-        }
-        open={open}
-      >
-        <summary
-          aria-disabled={disabled}
-          className={`text-sm font-medium text-muted-foreground ${
-            disabled
-              ? "pointer-events-none cursor-not-allowed"
-              : "cursor-pointer"
-          }`}
-        >
-          {title}
-        </summary>
-        <Card className="mt-3">
-          <CardContent className="divide-y p-0">{children}</CardContent>
-        </Card>
-      </details>
-    );
-  }
-  return (
-    <section
-      className={`mt-7 ${className ?? ""}`}
-      aria-label={title}
-      data-settings-group=""
-    >
-      <h2 className="mb-3 text-sm font-medium text-muted-foreground">
-        {title}
-      </h2>
-      {description && (
-        <p className="mb-3 text-sm leading-6 text-muted-foreground">
-          {description}
-        </p>
-      )}
-      <Card>
-        <CardContent className="divide-y p-0">{children}</CardContent>
+                </SettingRow>
+                <SettingRow label={t("optionsHideReposts")}>
+                  <Switch
+                    checked={settings.hideReposts}
+                    onCheckedChange={(value) =>
+                      updateReaction("hideReposts", value)
+                    }
+                  />
+                </SettingRow>
+              </div>
+            </div>
+          )}
+        </CardContent>
       </Card>
     </section>
   );
@@ -809,127 +640,217 @@ function SettingRow({
   );
 }
 
-function NumberSetting({
+function ThresholdSetting({
+  enabled,
   label,
   min,
+  onEnabledChange,
   onValueChange,
   suffix,
   value,
 }: {
+  enabled: boolean;
   label: string;
   min: number;
+  onEnabledChange: (value: boolean) => void;
   onValueChange: (value: number) => void;
   suffix?: string;
   value: number;
 }): React.JSX.Element {
   return (
     <SettingRow label={label}>
-      <div className="flex items-center gap-2">
-        <Input
-          className="w-24 text-right tabular-nums"
-          type="number"
-          inputMode="numeric"
+      <div className="flex items-center gap-3">
+        <EditableNumberInput
+          disabled={!enabled}
           min={min}
-          step={1}
           value={value}
-          onFocus={(event) => event.currentTarget.select()}
-          onChange={(event) => {
-            const nextValue = event.currentTarget.valueAsNumber;
-            if (Number.isSafeInteger(nextValue)) {
-              onValueChange(Math.max(min, nextValue));
-            }
-          }}
+          onValueChange={onValueChange}
         />
         {suffix && (
           <span className="text-sm text-muted-foreground">{suffix}</span>
         )}
+        <Switch
+          aria-label={label}
+          checked={enabled}
+          onCheckedChange={onEnabledChange}
+        />
       </div>
     </SettingRow>
   );
 }
 
-function PeriodSetting({
-  mode,
-  onModeChange,
-  onUnitChange,
+function EditableNumberInput({
+  ariaLabel,
+  className = "w-24",
+  disabled = false,
+  min,
+  onValueChange,
+  value,
+}: {
+  ariaLabel?: string;
+  className?: string;
+  disabled?: boolean;
+  min: number;
+  onValueChange: (value: number) => void;
+  value: number;
+}): React.JSX.Element {
+  const [draft, setDraft] = useState(String(value));
+  const editing = useRef(false);
+
+  useEffect(() => {
+    if (!editing.current) {
+      setDraft(String(value));
+    }
+  }, [value]);
+
+  const commit = (): void => {
+    editing.current = false;
+    if (draft.trim() === "") {
+      setDraft(String(value));
+      return;
+    }
+    const parsed = Number(draft);
+    if (!Number.isSafeInteger(parsed)) {
+      setDraft(String(value));
+      return;
+    }
+    const nextValue = Math.max(min, parsed);
+    setDraft(String(nextValue));
+    if (nextValue !== value) {
+      onValueChange(nextValue);
+    }
+  };
+
+  return (
+    <Input
+      aria-label={ariaLabel}
+      className={`${className} text-right tabular-nums`}
+      disabled={disabled}
+      type="number"
+      inputMode="numeric"
+      min={min}
+      step={1}
+      value={draft}
+      onFocus={(event) => {
+        editing.current = true;
+        event.currentTarget.select();
+      }}
+      onChange={(event) => {
+        const rawValue = event.currentTarget.value;
+        setDraft(rawValue);
+        const nextValue = event.currentTarget.valueAsNumber;
+        if (Number.isSafeInteger(nextValue) && nextValue >= min) {
+          onValueChange(nextValue);
+        }
+      }}
+      onBlur={commit}
+      onKeyDown={(event) => {
+        if (event.key === "Enter") {
+          event.currentTarget.blur();
+        }
+      }}
+    />
+  );
+}
+
+function PublicationPeriodSetting({
+  enabled,
+  onChange,
   onValueChange,
   unit,
   value,
 }: {
-  mode: PeriodMode;
-  onModeChange: (value: PeriodMode) => void;
-  onUnitChange: (value: PeriodUnit) => void;
+  enabled: boolean;
+  onChange: (enabled: boolean, unit: PublicationPeriodUnit) => void;
   onValueChange: (value: number) => void;
-  unit: PeriodUnit;
+  unit: PublicationPeriodUnit;
   value: number;
 }): React.JSX.Element {
   return (
-    <fieldset className="m-0 border-0 px-5 pb-5 sm:px-6" data-period-setting="">
-      <legend className="mb-3 w-full px-0 pb-0 pt-5 text-sm font-medium">
-        {t("optionsPostTiming")}
-      </legend>
-      <div className="space-y-3">
-        <label className="flex cursor-pointer items-center gap-2.5 text-sm">
-          <input
-            className="size-4 accent-primary"
-            type="radio"
-            name="filter-period"
-            value="all"
-            checked={mode === "all"}
-            onChange={() => onModeChange("all")}
+    <SettingRow label={t("optionsPublicationPeriod")}>
+      <div className="flex items-center gap-2">
+        {enabled && (
+          <EditableNumberInput
+            ariaLabel={t("optionsPublicationPeriodValue")}
+            className="w-16"
+            min={1}
+            onValueChange={onValueChange}
+            value={value}
           />
-          {t("optionsAllPosts")}
-        </label>
-        <label className="flex cursor-pointer items-center gap-2.5 text-sm">
-          <input
-            className="size-4 accent-primary"
-            type="radio"
-            name="filter-period"
-            value="limited"
-            checked={mode === "limited"}
-            onChange={() => onModeChange("limited")}
-          />
-          {t("optionsSpecifyPeriod")}
-        </label>
-        {mode === "limited" && (
-          <div className="ml-6 flex items-center gap-2">
-            <Input
-              className="w-24 text-right tabular-nums"
-              type="number"
-              inputMode="numeric"
-              min={1}
-              step={1}
-              value={value}
-              aria-label={t("optionsPeriodValue")}
-              onFocus={(event) => event.currentTarget.select()}
-              onChange={(event) => {
-                const nextValue = event.currentTarget.valueAsNumber;
-                if (Number.isSafeInteger(nextValue)) {
-                  onValueChange(Math.max(1, nextValue));
-                }
-              }}
-            />
-            <Select
-              value={unit}
-              onValueChange={(nextUnit) => onUnitChange(nextUnit as PeriodUnit)}
-            >
-              <SelectTrigger
-                className="min-w-28 flex-1"
-                aria-label={t("optionsPeriodUnit")}
-              >
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="hour">{t("optionsUnitHours")}</SelectItem>
-                <SelectItem value="day">{t("optionsUnitDays")}</SelectItem>
-                <SelectItem value="week">{t("optionsUnitWeeks")}</SelectItem>
-                <SelectItem value="month">{t("optionsUnitMonths")}</SelectItem>
-                <SelectItem value="year">{t("optionsUnitYears")}</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
         )}
+        <Select
+          value={enabled ? unit : "all"}
+          onValueChange={(nextValue) =>
+            onChange(
+              nextValue !== "all",
+              nextValue === "all" ? unit : (nextValue as PublicationPeriodUnit),
+            )
+          }
+        >
+          <SelectTrigger
+            aria-label={t("optionsPublicationPeriodUnit")}
+            className="w-36"
+          >
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">
+              {t("optionsPublicationPeriodAll")}
+            </SelectItem>
+            <SelectItem value="hour">
+              {t("optionsPublicationPeriodHours")}
+            </SelectItem>
+            <SelectItem value="day">
+              {t("optionsPublicationPeriodDays")}
+            </SelectItem>
+            <SelectItem value="week">
+              {t("optionsPublicationPeriodWeeks")}
+            </SelectItem>
+            <SelectItem value="month">
+              {t("optionsPublicationPeriodMonths")}
+            </SelectItem>
+            <SelectItem value="year">
+              {t("optionsPublicationPeriodYears")}
+            </SelectItem>
+          </SelectContent>
+        </Select>
       </div>
-    </fieldset>
+    </SettingRow>
+  );
+}
+
+function MediaSetting({
+  enabled,
+  mode,
+  onChange,
+}: {
+  enabled: boolean;
+  mode: ReactionSiteSettings["mediaMode"];
+  onChange: (enabled: boolean, mode: ReactionSiteSettings["mediaMode"]) => void;
+}): React.JSX.Element {
+  return (
+    <SettingRow label={t("optionsMedia")}>
+      <Select
+        value={enabled ? mode : "none"}
+        onValueChange={(nextMode) =>
+          onChange(
+            nextMode !== "none",
+            nextMode === "none"
+              ? mode
+              : (nextMode as ReactionSiteSettings["mediaMode"]),
+          )
+        }
+      >
+        <SelectTrigger className="w-40" aria-label={t("optionsMedia")}>
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="none">{t("optionsMediaNone")}</SelectItem>
+          <SelectItem value="any">{t("optionsMediaAny")}</SelectItem>
+          <SelectItem value="images">{t("optionsMediaImages")}</SelectItem>
+          <SelectItem value="video">{t("optionsMediaVideo")}</SelectItem>
+        </SelectContent>
+      </Select>
+    </SettingRow>
   );
 }

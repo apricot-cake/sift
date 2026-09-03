@@ -11,11 +11,13 @@ const X_SELECTORS = Object.freeze({
   postCard: 'article[data-testid="tweet"]',
   postCell: '[data-testid="cellInnerDiv"]',
   reactionButton: 'button[data-testid="like"], button[data-testid="unlike"]',
-  createdAt: "time[datetime]",
+  statusTime: "time[datetime]",
   image: '[data-testid="tweetPhoto"], a[href*="/photo/"]',
   video:
     '[data-testid="videoPlayer"], [data-testid="videoComponent"], video, a[href*="/video/"]',
-  postText: '[data-testid="tweetText"]',
+  replyContent:
+    '[data-testid="tweetText"], [data-testid="tweetPhoto"], [data-testid="videoPlayer"], [data-testid="videoComponent"], [data-testid="card.wrapper"]',
+  userName: '[data-testid="User-Name"]',
   socialContext: '[data-testid="socialContext"]',
   homeTabs: '[data-testid="ScrollSnap-List"][role="tablist"]',
   homeTab: '[role="tab"]',
@@ -27,6 +29,32 @@ function timelinePostCards(root: ParentNode): Element[] {
     (postCard) =>
       postCard.parentElement?.closest(X_SELECTORS.postCard) === null,
   );
+}
+
+function directChildUnder(ancestor: Element, descendant: Element): Element {
+  let child = descendant;
+  while (child.parentElement && child.parentElement !== ancestor) {
+    child = child.parentElement;
+  }
+  return child;
+}
+
+function lowestSharedAncestor(
+  first: Element,
+  second: Element,
+  boundary: Element,
+): Element | null {
+  let ancestor = first.parentElement;
+  while (ancestor && boundary.contains(ancestor)) {
+    if (ancestor.contains(second)) {
+      return ancestor;
+    }
+    if (ancestor === boundary) {
+      break;
+    }
+    ancestor = ancestor.parentElement;
+  }
+  return null;
 }
 
 // Home の先頭はプラットフォームが選ぶ「おすすめ」、2番目は「フォロー中」、
@@ -73,8 +101,8 @@ export const xAdapter = Object.freeze({
   },
 
   readPostId(postCard: Element) {
-    const createdAt = postCard.querySelector(X_SELECTORS.createdAt);
-    const href = createdAt
+    const statusTime = postCard.querySelector(X_SELECTORS.statusTime);
+    const href = statusTime
       ?.closest('a[href*="/status/"]')
       ?.getAttribute("href");
     return X_STATUS_ID.exec(href ?? "")?.[1] ?? null;
@@ -91,14 +119,6 @@ export const xAdapter = Object.freeze({
     return parseMetric(accessibleText || visibleText);
   },
 
-  readCreatedAt(postCard: Element) {
-    const dateTime = postCard
-      .querySelector(X_SELECTORS.createdAt)
-      ?.getAttribute("datetime");
-    const timestamp = dateTime ? Date.parse(dateTime) : Number.NaN;
-    return Number.isFinite(timestamp) ? timestamp : Number.NaN;
-  },
-
   // 画像と動画は別々に返す＝どちらをメディアと数えるかは利用者の設定であって、
   // このサービスの作りの話ではない。
   readMedia(postCard: Element) {
@@ -108,11 +128,46 @@ export const xAdapter = Object.freeze({
     };
   },
 
-  readText(postCard: Element) {
-    return Array.from(postCard.querySelectorAll(X_SELECTORS.postText))
-      .filter((text) => text.closest(X_SELECTORS.postCard) === postCard)
-      .map((text) => text.textContent ?? "")
-      .join(" ");
+  readIsReply(postCard: Element) {
+    const userName = postCard.querySelector(X_SELECTORS.userName);
+    const content = Array.from(
+      postCard.querySelectorAll(X_SELECTORS.replyContent),
+    ).find((item) => item.closest(X_SELECTORS.postCard) === postCard);
+    if (!userName || !content) {
+      return false;
+    }
+
+    // 返信先は、投稿ヘッダーと最初の本文・画像・動画・リンクカードの間にある
+    // 独立した行として描かれる。本文内のメンションは投稿内容側の枝に残るため、
+    // プロフィールリンクの有無だけを見るより誤判定しにくい。
+    const shared = lowestSharedAncestor(userName, content, postCard);
+    if (!shared) {
+      return false;
+    }
+    const headerBranch = directChildUnder(shared, userName);
+    const contentBranch = directChildUnder(shared, content);
+    const children = Array.from(shared.children);
+    const headerIndex = children.indexOf(headerBranch);
+    const contentIndex = children.indexOf(contentBranch);
+    if (headerIndex < 0 || contentIndex <= headerIndex + 1) {
+      return false;
+    }
+    return children
+      .slice(headerIndex + 1, contentIndex)
+      .some((child) => Boolean(child.querySelector('a[href^="/"]')));
+  },
+
+  readIsQuote(postCard: Element) {
+    const ownId = this.readPostId(postCard);
+    if (!ownId) {
+      return false;
+    }
+    return Array.from(postCard.querySelectorAll('a[href*="/status/"]')).some(
+      (link) => {
+        const linkedId = X_STATUS_ID.exec(link.getAttribute("href") ?? "")?.[1];
+        return Boolean(linkedId && linkedId !== ownId);
+      },
+    );
   },
 
   readIsRepost(postCard: Element) {

@@ -1,9 +1,8 @@
 // 設定とは何で、正しい設定とはどういうものか。保管場所は settings-storage.ts。
 import type { ClassifyThresholds } from "./filter-core.ts";
 
-export type MediaMode = "all" | "any" | "images" | "video";
-export type PeriodMode = "all" | "limited";
-export type PeriodUnit = "hour" | "day" | "week" | "month" | "year";
+export type MediaMode = "any" | "images" | "video";
+export type PublicationPeriodUnit = "hour" | "day" | "week" | "month" | "year";
 export type ReactionSiteSettingsKey = "x" | "bluesky";
 export type MetricSiteSettingsKey = "youtube" | "niconico";
 export type SiteSettingsKey = ReactionSiteSettingsKey | MetricSiteSettingsKey;
@@ -14,11 +13,8 @@ export interface ReactionSiteSettings {
   readonly mediaMode: MediaMode;
   readonly minReactionsEnabled: boolean;
   readonly minReactions: number;
-  readonly periodMode: PeriodMode;
-  readonly periodValue: number;
-  readonly periodUnit: PeriodUnit;
-  readonly excludedKeywordsEnabled: boolean;
-  readonly excludedKeywords: string;
+  readonly hideReplies: boolean;
+  readonly hideQuotes: boolean;
   readonly hideReposts: boolean;
 }
 
@@ -26,9 +22,9 @@ export interface MetricSiteSettings {
   readonly kind: "metric";
   readonly minCountEnabled: boolean;
   readonly minCount: number;
-  readonly periodMode: PeriodMode;
-  readonly periodValue: number;
-  readonly periodUnit: PeriodUnit;
+  readonly publishedWithinEnabled: boolean;
+  readonly publishedWithinValue: number;
+  readonly publishedWithinUnit: PublicationPeriodUnit;
 }
 
 export interface SiteSettingsMap {
@@ -50,14 +46,11 @@ function defaultReactionSiteSettings(
   return Object.freeze({
     kind: "reactions",
     mediaEnabled: false,
-    mediaMode: "all",
+    mediaMode: "any",
     minReactionsEnabled: true,
     minReactions,
-    periodMode: "all",
-    periodValue: 6,
-    periodUnit: "hour",
-    excludedKeywordsEnabled: false,
-    excludedKeywords: "",
+    hideReplies: false,
+    hideQuotes: false,
     hideReposts: true,
   });
 }
@@ -69,9 +62,9 @@ function defaultMetricSiteSettings(
     kind: "metric",
     minCountEnabled: true,
     minCount,
-    periodMode: "all",
-    periodValue: 1,
-    periodUnit: "week",
+    publishedWithinEnabled: false,
+    publishedWithinValue: 1,
+    publishedWithinUnit: "week",
   });
 }
 
@@ -97,27 +90,6 @@ function clampInteger(
   return Math.min(maximum, Math.max(minimum, parsed));
 }
 
-export function normalizeExcludedKeywords(value: unknown): string {
-  const seen = new Set<string>();
-  const keywords: string[] = [];
-  for (const line of String(value ?? "").split(/\r?\n/)) {
-    const keyword = line.trim();
-    const normalized = keyword.toLowerCase();
-    if (keyword !== "" && !seen.has(normalized)) {
-      seen.add(normalized);
-      keywords.push(keyword);
-    }
-  }
-  return keywords.join("\n");
-}
-
-export function excludedKeywordsFrom(value: string): readonly string[] {
-  return normalizeExcludedKeywords(value)
-    .split("\n")
-    .filter(Boolean)
-    .map((keyword) => keyword.toLowerCase());
-}
-
 function objectSource(value: unknown): Record<string, unknown> {
   return value && typeof value === "object"
     ? (value as Record<string, unknown>)
@@ -125,22 +97,16 @@ function objectSource(value: unknown): Record<string, unknown> {
 }
 
 function normalizeMediaMode(value: unknown, fallback: MediaMode): MediaMode {
-  if (
-    value === "all" ||
-    value === "any" ||
-    value === "images" ||
-    value === "video"
-  ) {
+  if (value === "any" || value === "images" || value === "video") {
     return value;
   }
   return fallback;
 }
 
-function normalizePeriodMode(value: unknown, fallback: PeriodMode): PeriodMode {
-  return value === "all" || value === "limited" ? value : fallback;
-}
-
-function normalizePeriodUnit(value: unknown, fallback: PeriodUnit): PeriodUnit {
+function normalizePublicationPeriodUnit(
+  value: unknown,
+  fallback: PublicationPeriodUnit,
+): PublicationPeriodUnit {
   if (
     value === "hour" ||
     value === "day" ||
@@ -159,10 +125,6 @@ function normalizeReactionSiteSettings(
 ): ReactionSiteSettings {
   const source = objectSource(value);
   const mediaMode = normalizeMediaMode(source.mediaMode, fallback.mediaMode);
-  const excludedKeywords =
-    source.excludedKeywords === undefined
-      ? fallback.excludedKeywords
-      : normalizeExcludedKeywords(source.excludedKeywords);
   return {
     kind: "reactions",
     mediaEnabled:
@@ -182,19 +144,14 @@ function normalizeReactionSiteSettings(
       0,
       1000000000,
     ),
-    periodMode: normalizePeriodMode(source.periodMode, fallback.periodMode),
-    periodValue: clampInteger(
-      source.periodValue,
-      fallback.periodValue,
-      1,
-      1000,
-    ),
-    periodUnit: normalizePeriodUnit(source.periodUnit, fallback.periodUnit),
-    excludedKeywordsEnabled:
-      typeof source.excludedKeywordsEnabled === "boolean"
-        ? source.excludedKeywordsEnabled
-        : fallback.excludedKeywordsEnabled,
-    excludedKeywords,
+    hideReplies:
+      typeof source.hideReplies === "boolean"
+        ? source.hideReplies
+        : fallback.hideReplies,
+    hideQuotes:
+      typeof source.hideQuotes === "boolean"
+        ? source.hideQuotes
+        : fallback.hideQuotes,
     hideReposts:
       typeof source.hideReposts === "boolean"
         ? source.hideReposts
@@ -216,14 +173,20 @@ function normalizeMetricSiteSettings(
           ? false
           : fallback.minCountEnabled,
     minCount: clampInteger(source.minCount, fallback.minCount, 0, 1000000000),
-    periodMode: normalizePeriodMode(source.periodMode, fallback.periodMode),
-    periodValue: clampInteger(
-      source.periodValue,
-      fallback.periodValue,
+    publishedWithinEnabled:
+      typeof source.publishedWithinEnabled === "boolean"
+        ? source.publishedWithinEnabled
+        : fallback.publishedWithinEnabled,
+    publishedWithinValue: clampInteger(
+      source.publishedWithinValue,
+      fallback.publishedWithinValue,
       1,
       1000,
     ),
-    periodUnit: normalizePeriodUnit(source.periodUnit, fallback.periodUnit),
+    publishedWithinUnit: normalizePublicationPeriodUnit(
+      source.publishedWithinUnit,
+      fallback.publishedWithinUnit,
+    ),
   };
 }
 
@@ -272,48 +235,49 @@ export function withSiteSettings(
   });
 }
 
-const HOURS_PER_PERIOD_UNIT: Readonly<Record<PeriodUnit, number>> =
-  Object.freeze({
-    hour: 1,
-    day: 24,
-    week: 24 * 7,
-    month: 24 * 30,
-    year: 24 * 365,
-  });
+const HOURS_PER_PUBLICATION_PERIOD_UNIT: Readonly<
+  Record<PublicationPeriodUnit, number>
+> = Object.freeze({
+  hour: 1,
+  day: 24,
+  week: 24 * 7,
+  month: 24 * 30,
+  year: 24 * 365,
+});
 
-export function periodInHours(value: number, unit: PeriodUnit): number {
-  return value * HOURS_PER_PERIOD_UNIT[unit];
+export function publicationPeriodInHours(
+  value: number,
+  unit: PublicationPeriodUnit,
+): number {
+  return value * HOURS_PER_PUBLICATION_PERIOD_UNIT[unit];
 }
 
 export function thresholdsFor(settings: SiteSettings): ClassifyThresholds {
   if (settings.kind === "metric") {
     return {
       mediaEnabled: false,
-      excludedKeywords: [],
+      hideReplies: false,
+      hideQuotes: false,
       hideReposts: false,
       inclusion: {
-        enabled: settings.minCountEnabled,
-        minimum: settings.minCount,
-        maximumAgeHours:
-          settings.periodMode === "all"
-            ? null
-            : periodInHours(settings.periodValue, settings.periodUnit),
+        minimum: settings.minCountEnabled ? settings.minCount : null,
+        maximumAgeHours: settings.publishedWithinEnabled
+          ? publicationPeriodInHours(
+              settings.publishedWithinValue,
+              settings.publishedWithinUnit,
+            )
+          : null,
       },
     };
   }
   return {
     mediaEnabled: settings.mediaEnabled,
-    excludedKeywords: settings.excludedKeywordsEnabled
-      ? excludedKeywordsFrom(settings.excludedKeywords)
-      : [],
+    hideReplies: settings.hideReplies,
+    hideQuotes: settings.hideQuotes,
     hideReposts: settings.hideReposts,
     inclusion: {
-      enabled: settings.minReactionsEnabled,
-      minimum: settings.minReactions,
-      maximumAgeHours:
-        settings.periodMode === "all"
-          ? null
-          : periodInHours(settings.periodValue, settings.periodUnit),
+      minimum: settings.minReactionsEnabled ? settings.minReactions : null,
+      maximumAgeHours: null,
     },
   };
 }

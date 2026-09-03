@@ -6,13 +6,12 @@ import {
 } from "./filter-core.ts";
 
 const settings: ClassifyThresholds = {
-  excludedKeywords: [],
   mediaEnabled: false,
-  inclusion: { enabled: true, minimum: 500, maximumAgeHours: null },
+  inclusion: { minimum: 500, maximumAgeHours: null },
+  hideReplies: false,
+  hideQuotes: false,
   hideReposts: true,
 };
-
-const now = Date.parse("2026-08-01T12:00:00Z");
 
 describe("parseMetric", () => {
   it("反応の数が書かれうる形を読む", () => {
@@ -71,89 +70,53 @@ describe("parseMetric", () => {
 });
 
 describe("classifyPost", () => {
-  it("全期間では投稿時期に関係なく最低値で判定する", () => {
-    expect(
-      classifyPost(
-        {
-          mediaMatches: true,
-          metricCount: 500,
-          createdAtMs: now - 5 * 365 * 24 * 3600000,
-          isRepost: false,
-        },
-        settings,
-        now,
-      ),
-    ).toEqual({ state: "matched", reason: "filter-match" });
-  });
-
-  it("期間を指定すると期間と最低値を両方満たす投稿を残す", () => {
-    expect(
-      classifyPost(
-        {
-          mediaMatches: true,
-          metricCount: 500,
-          createdAtMs: now - 2 * 3600000,
-          isRepost: false,
-        },
-        {
-          ...settings,
-          inclusion: { ...settings.inclusion, maximumAgeHours: 6 },
-        },
-        now,
-      ),
-    ).toEqual({ state: "matched", reason: "filter-match" });
-  });
-
-  it("指定した期間を過ぎた投稿は最低値を満たしても隠す", () => {
-    expect(
-      classifyPost(
-        {
-          mediaMatches: true,
-          metricCount: 500,
-          createdAtMs: now - 7 * 3600000,
-          isRepost: false,
-        },
-        {
-          ...settings,
-          inclusion: { ...settings.inclusion, maximumAgeHours: 6 },
-        },
-        now,
-      ),
-    ).toEqual({ state: "hidden", reason: "below-threshold" });
-  });
-
-  it("期間を指定して投稿時期を読めない場合は線を付けずに残す", () => {
+  it("最低値を満たす投稿を残す", () => {
     expect(
       classifyPost(
         {
           mediaMatches: true,
           metricCount: 500,
           createdAtMs: Number.NaN,
+          isReply: false,
+          isQuote: false,
           isRepost: false,
         },
-        {
-          ...settings,
-          inclusion: { ...settings.inclusion, maximumAgeHours: 6 },
-        },
-        now,
+        settings,
       ),
-    ).toEqual({ state: "visible", reason: "indeterminate-age" });
+    ).toEqual({ state: "matched", reason: "filter-match" });
   });
 
-  it("反応数フィルターがオフなら線を付けずに表示する", () => {
+  it("最低値を満たさない投稿を隠す", () => {
+    expect(
+      classifyPost(
+        {
+          mediaMatches: true,
+          metricCount: 499,
+          createdAtMs: Number.NaN,
+          isReply: false,
+          isQuote: false,
+          isRepost: false,
+        },
+        settings,
+      ),
+    ).toEqual({ state: "hidden", reason: "below-threshold" });
+  });
+
+  it("最低値が無効なら線を付けずに表示する", () => {
     expect(
       classifyPost(
         {
           mediaMatches: true,
           metricCount: 0,
           createdAtMs: Number.NaN,
+          isReply: false,
+          isQuote: false,
           isRepost: false,
         },
         {
           ...settings,
-          inclusion: { ...settings.inclusion, enabled: false },
+          inclusion: { minimum: null, maximumAgeHours: null },
         },
-        now,
       ),
     ).toEqual({ state: "visible", reason: "no-inclusion-filter" });
   });
@@ -164,29 +127,14 @@ describe("classifyPost", () => {
         {
           mediaMatches: false,
           metricCount: 1000,
-          createdAtMs: now,
+          createdAtMs: Number.NaN,
+          isReply: false,
+          isQuote: false,
           isRepost: false,
         },
         { ...settings, mediaEnabled: true },
-        now,
       ),
     ).toEqual({ state: "hidden", reason: "no-media" });
-  });
-
-  it("除外キーワードを含む投稿を隠す", () => {
-    expect(
-      classifyPost(
-        {
-          mediaMatches: true,
-          metricCount: 1000,
-          createdAtMs: now,
-          isRepost: false,
-          text: "New trailer #Spoiler",
-        },
-        { ...settings, excludedKeywords: ["spoiler"] },
-        now,
-      ),
-    ).toEqual({ state: "hidden", reason: "excluded-keyword" });
   });
 
   it("設定が入っている間、リポストは隠す", () => {
@@ -195,13 +143,46 @@ describe("classifyPost", () => {
         {
           mediaMatches: true,
           metricCount: 1000,
-          createdAtMs: now,
+          createdAtMs: Number.NaN,
+          isReply: false,
+          isQuote: false,
           isRepost: true,
         },
         settings,
-        now,
       ),
     ).toEqual({ state: "hidden", reason: "repost" });
+  });
+
+  it("設定が入っている間、返信を隠す", () => {
+    expect(
+      classifyPost(
+        {
+          mediaMatches: true,
+          metricCount: 1000,
+          createdAtMs: Number.NaN,
+          isReply: true,
+          isQuote: false,
+          isRepost: false,
+        },
+        { ...settings, hideReplies: true },
+      ),
+    ).toEqual({ state: "hidden", reason: "reply" });
+  });
+
+  it("設定が入っている間、引用投稿を隠す", () => {
+    expect(
+      classifyPost(
+        {
+          mediaMatches: true,
+          metricCount: 1000,
+          createdAtMs: Number.NaN,
+          isReply: false,
+          isQuote: true,
+          isRepost: false,
+        },
+        { ...settings, hideQuotes: true },
+      ),
+    ).toEqual({ state: "hidden", reason: "quote" });
   });
 
   it("指標が判定不能な投稿は線を付けずに残す", () => {
@@ -210,12 +191,74 @@ describe("classifyPost", () => {
         {
           mediaMatches: true,
           metricCount: Number.NaN,
-          createdAtMs: now,
+          createdAtMs: Number.NaN,
+          isReply: false,
+          isQuote: false,
           isRepost: false,
         },
         settings,
-        now,
       ),
     ).toEqual({ state: "visible", reason: "indeterminate-metric" });
+  });
+
+  it("公開時期だけを指定して期間内の動画を残す", () => {
+    const now = Date.parse("2026-09-02T12:00:00Z");
+    expect(
+      classifyPost(
+        {
+          mediaMatches: true,
+          metricCount: 0,
+          createdAtMs: now - 23 * 3600000,
+          isReply: false,
+          isQuote: false,
+          isRepost: false,
+        },
+        {
+          ...settings,
+          inclusion: { minimum: null, maximumAgeHours: 24 },
+        },
+        now,
+      ),
+    ).toEqual({ state: "matched", reason: "filter-match" });
+  });
+
+  it("指定した公開時期より古い動画を隠す", () => {
+    const now = Date.parse("2026-09-02T12:00:00Z");
+    expect(
+      classifyPost(
+        {
+          mediaMatches: true,
+          metricCount: 500,
+          createdAtMs: now - 25 * 3600000,
+          isReply: false,
+          isQuote: false,
+          isRepost: false,
+        },
+        {
+          ...settings,
+          inclusion: { minimum: 500, maximumAgeHours: 24 },
+        },
+        now,
+      ),
+    ).toEqual({ state: "hidden", reason: "outside-period" });
+  });
+
+  it("公開時期を読めない動画は隠さない", () => {
+    expect(
+      classifyPost(
+        {
+          mediaMatches: true,
+          metricCount: 500,
+          createdAtMs: Number.NaN,
+          isReply: false,
+          isQuote: false,
+          isRepost: false,
+        },
+        {
+          ...settings,
+          inclusion: { minimum: 500, maximumAgeHours: 24 },
+        },
+      ),
+    ).toEqual({ state: "visible", reason: "indeterminate-age" });
   });
 });

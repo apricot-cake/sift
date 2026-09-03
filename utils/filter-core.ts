@@ -113,18 +113,19 @@ export interface Post {
   mediaMatches: boolean;
   metricCount: number;
   createdAtMs: number;
+  isReply: boolean;
+  isQuote: boolean;
   isRepost: boolean;
-  text?: string;
 }
 
 export interface InclusionThreshold {
-  enabled: boolean;
-  minimum: number;
+  minimum: number | null;
   maximumAgeHours: number | null;
 }
 
 export interface ClassifyThresholds {
-  excludedKeywords: readonly string[];
+  hideReplies: boolean;
+  hideQuotes: boolean;
   hideReposts: boolean;
   inclusion: InclusionThreshold;
   mediaEnabled: boolean;
@@ -133,10 +134,12 @@ export interface ClassifyThresholds {
 export type ClassifyState = "visible" | "matched" | "hidden";
 export type ClassifyReason =
   | "no-media"
-  | "excluded-keyword"
+  | "reply"
+  | "quote"
   | "repost"
   | "indeterminate-metric"
   | "indeterminate-age"
+  | "outside-period"
   | "no-inclusion-filter"
   | "filter-match"
   | "below-threshold";
@@ -155,46 +158,47 @@ export function classifyPost(
     return { state: "hidden", reason: "no-media" };
   }
 
-  const normalizedText = (post.text ?? "").toLowerCase();
-  if (
-    settings.excludedKeywords.some((keyword) =>
-      normalizedText.includes(keyword),
-    )
-  ) {
-    return { state: "hidden", reason: "excluded-keyword" };
-  }
-
   if (settings.hideReposts && post.isRepost) {
     return { state: "hidden", reason: "repost" };
   }
 
-  if (!settings.inclusion.enabled) {
+  if (settings.hideReplies && post.isReply) {
+    return { state: "hidden", reason: "reply" };
+  }
+
+  if (settings.hideQuotes && post.isQuote) {
+    return { state: "hidden", reason: "quote" };
+  }
+
+  if (
+    settings.inclusion.minimum === null &&
+    settings.inclusion.maximumAgeHours === null
+  ) {
     return { state: "visible", reason: "no-inclusion-filter" };
   }
 
-  // `parseMetric` が判定不能（`Number.NaN`）を返した投稿。誤って隠すと
-  // 利用者からは見えず回復できないが、誤って残すのは目に入るだけなので、
-  // ここでは線を付けずに残す（#82）。
-  if (!Number.isFinite(post.metricCount)) {
-    return { state: "visible", reason: "indeterminate-metric" };
+  if (settings.inclusion.minimum !== null) {
+    // `parseMetric` が判定不能（`Number.NaN`）を返した投稿。誤って隠すと
+    // 利用者からは見えず回復できないが、誤って残すのは目に入るだけなので、
+    // ここでは線を付けずに残す（#82）。
+    if (!Number.isFinite(post.metricCount)) {
+      return { state: "visible", reason: "indeterminate-metric" };
+    }
+
+    if (post.metricCount < settings.inclusion.minimum) {
+      return { state: "hidden", reason: "below-threshold" };
+    }
   }
 
-  if (post.metricCount < settings.inclusion.minimum) {
-    return { state: "hidden", reason: "below-threshold" };
+  if (settings.inclusion.maximumAgeHours !== null) {
+    if (!Number.isFinite(post.createdAtMs)) {
+      return { state: "visible", reason: "indeterminate-age" };
+    }
+    const ageHours = (nowMs - post.createdAtMs) / 3600000;
+    if (ageHours < -0.1 || ageHours > settings.inclusion.maximumAgeHours) {
+      return { state: "hidden", reason: "outside-period" };
+    }
   }
 
-  if (settings.inclusion.maximumAgeHours === null) {
-    return { state: "matched", reason: "filter-match" };
-  }
-
-  if (!Number.isFinite(post.createdAtMs)) {
-    return { state: "visible", reason: "indeterminate-age" };
-  }
-
-  const ageHours = (nowMs - post.createdAtMs) / 3600000;
-  if (ageHours >= -0.1 && ageHours <= settings.inclusion.maximumAgeHours) {
-    return { state: "matched", reason: "filter-match" };
-  }
-
-  return { state: "hidden", reason: "below-threshold" };
+  return { state: "matched", reason: "filter-match" };
 }

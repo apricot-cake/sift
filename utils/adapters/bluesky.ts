@@ -23,67 +23,21 @@ const BLUESKY_SELECTORS = Object.freeze({
   video: '[style*="video.bsky.app"]',
   // GIF は Bluesky のメディアではなく外部埋め込みとして届く。
   animatedImage: 'video[src*="t.gifs.bsky.app"]',
-  postText: '[data-testid="postText"]',
+  contentHider: '[data-testid="contentHider-post"]',
+  userAvatar: '[data-testid="userAvatarImage"]',
   profileLink: 'a[href^="/profile/"]',
   homeTab: '[data-testid^="homeScreenFeedTabs-selector-"]',
   selectedTabMark: '[style*="background-color"]',
+  postsFeed: '[data-testid="postsFeed-flatlist"]',
 });
 
 const BLUESKY_POST_ID = /\/profile\/([^/]+)\/post\/([^/?#]+)/;
+const BLUESKY_FEED_END_TEXT = /^(?:End of feed|フィードの終わり)$/;
 
 export function isBlueskySupportedHomeTimeline(root: ParentNode): boolean {
   return Array.from(root.querySelectorAll(BLUESKY_SELECTORS.homeTab)).some(
     (tab) => Boolean(tab.querySelector(BLUESKY_SELECTORS.selectedTabMark)),
   );
-}
-
-// AT Protocol の record key は TID＝base32-sortable 13文字で 64bit の値を持ち、
-// 上位53bit がマイクロ秒のタイムスタンプ、下位10bit が clock id。
-const TID_ALPHABET = "234567abcdefghijklmnopqrstuvwxyz";
-const TID_LENGTH = 13;
-const TID_CLOCK_ID_BITS = 10n;
-// record key は /post/ の次の区間であって末尾の区間ではない＝投稿詳細の画面で
-// それを持つリンクは、その投稿自身の下位ページ（"/reposted-by"・"/quotes"・
-// "/liked-by"）へのものだけになる。
-const RECORD_KEY_IN_PATH = /\/post\/([^/?#]+)/;
-// Bluesky にネットワーク自体より古い投稿は無いし、今より後の投稿も無い。TID
-// ではないのにたまたまこの文字だけで綴られた record key は、この窓の外の値へ
-// 復号される＝それが唯一の見分け方になる。下限だけでは捕まらない
-// （"aaaaaaaaaaaaa" は西暦2190年へ復号される）。
-const EARLIEST_PLAUSIBLE_MS = Date.parse("2022-01-01T00:00:00.000Z");
-// サーバーと食い違う時計のための余裕で、それ以上ではない。少し未来に見える
-// 投稿に対して classifyPost が置いているのと同じ許容。
-const FUTURE_TOLERANCE_MS = 6 * 60 * 1000;
-
-// 画面に出ている時刻が読めない投稿のための代替経路。復号だけを単体で試験できる
-// ようにエクスポートしてある（偽の投稿を通してしか試せない状態にしない）。
-//
-// TID であることは公式クライアントの慣習であってプロトコルの保証ではないので、
-// これは常に代替であって主たる読み方にはしない。
-export function timestampFromRecordKey(
-  href: unknown,
-  nowMs = Date.now(),
-): number {
-  const recordKey = RECORD_KEY_IN_PATH.exec(String(href ?? ""))?.[1] ?? "";
-
-  if (recordKey.length !== TID_LENGTH) {
-    return Number.NaN;
-  }
-
-  let bits = 0n;
-  for (const character of recordKey) {
-    const value = TID_ALPHABET.indexOf(character);
-    if (value < 0) {
-      return Number.NaN;
-    }
-    bits = (bits << 5n) | BigInt(value);
-  }
-
-  const milliseconds = Number((bits >> TID_CLOCK_ID_BITS) / 1000n);
-  const plausible =
-    milliseconds >= EARLIEST_PLAUSIBLE_MS &&
-    milliseconds <= nowMs + FUTURE_TOLERANCE_MS;
-  return plausible ? milliseconds : Number.NaN;
 }
 
 // 通知画面は、投稿ではない行（いいね・フォロー）にも投稿カードの testid を
@@ -100,6 +54,18 @@ export const blueskyAdapter = Object.freeze({
   id: "bluesky",
   matches: Object.freeze(["https://bsky.app/*"]),
   settingsKey: "bluesky",
+  needsLayoutProbeForPagination: true,
+
+  hasReachedTimelineEnd(root: ParentNode) {
+    const feed = root.querySelector(BLUESKY_SELECTORS.postsFeed);
+    if (!feed) {
+      return false;
+    }
+
+    return Array.from(feed.querySelectorAll('div[dir="auto"]')).some((item) =>
+      BLUESKY_FEED_END_TEXT.test(item.textContent?.trim() ?? ""),
+    );
+  },
 
   getPostCards(root: ParentNode) {
     return readablePostCards(root);
@@ -142,31 +108,6 @@ export const blueskyAdapter = Object.freeze({
     return parseMetric(button.getAttribute("aria-label") || "");
   },
 
-  // Bluesky は <time datetime> を書き出さない。あるのは、パーマリンクに付いた
-  // ローカライズ済みの絶対時刻（Date.parse が受け付けるロケールとそうでない
-  // ロケールがある）と、機械可読ではあるが慣習でしかない record key の2つ。
-  //
-  // 最初のリンクではなく、最初に読めたリンクを採る＝フィードの投稿は自分の
-  // パーマリンクから始まるが、詳細画面が*対象にしている*投稿はパーマリンクを
-  // 持たない（リンクの行き先がその投稿自身だから）ので、代わりに自分の下位
-  // ページへのリンクから始まる。
-  readCreatedAt(postCard: Element) {
-    for (const link of postCard.querySelectorAll(BLUESKY_SELECTORS.postLink)) {
-      const label = link.getAttribute("aria-label");
-      const displayed = label ? Date.parse(label) : Number.NaN;
-      if (Number.isFinite(displayed)) {
-        return displayed;
-      }
-
-      const decoded = timestampFromRecordKey(link.getAttribute("href"));
-      if (Number.isFinite(decoded)) {
-        return decoded;
-      }
-    }
-
-    return Number.NaN;
-  },
-
   // 画像と動画は別々に返す＝どちらをメディアと数えるかは利用者の設定であって、
   // このサービスの作りの話ではない。
   readMedia(postCard: Element) {
@@ -179,11 +120,32 @@ export const blueskyAdapter = Object.freeze({
     };
   },
 
-  readText(postCard: Element) {
-    return Array.from(postCard.querySelectorAll(BLUESKY_SELECTORS.postText))
-      .filter((text) => text.closest(BLUESKY_SELECTORS.postCard) === postCard)
-      .map((text) => text.textContent ?? "")
-      .join(" ");
+  readIsReply(postCard: Element) {
+    // フィード内の返信は親投稿からつながる縦線を左端の42px幅の列に持つ。
+    // 文言は出ないため、現行Web版が描くこの構造で区別する。
+    return Array.from(
+      postCard.querySelectorAll('div[style*="width: 42px"]'),
+    ).some((column) =>
+      Array.from(column.children).some((child) => {
+        const style = child.getAttribute("style") ?? "";
+        return (
+          style.includes("background-color") && style.includes("margin-bottom")
+        );
+      }),
+    );
+  },
+
+  readIsQuote(postCard: Element) {
+    const content = postCard.querySelector(BLUESKY_SELECTORS.contentHider);
+    if (!content) {
+      return false;
+    }
+
+    // 引用カードはリンクの役割を持つ div で、引用元のアバターを内包する。
+    // 外部リンクカードは a 要素なので、サムネイル付きリンクとは混同しない。
+    return Array.from(content.querySelectorAll('div[role="link"]')).some(
+      (link) => Boolean(link.querySelector(BLUESKY_SELECTORS.userAvatar)),
+    );
   },
 
   // リポストには testid も安定した文言も付かない＝ヘッダは読者の言語で

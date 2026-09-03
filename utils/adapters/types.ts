@@ -14,6 +14,10 @@ export interface ServiceAdapter {
   readonly matches: readonly string[];
   // このサービスが読むサイト別設定。
   readonly settingsKey: SiteSettingsKey;
+  // 全件をレイアウトから外すと、ページ末尾の次ページ判定が止まるサービス。
+  readonly needsLayoutProbeForPagination?: boolean;
+  // サービス自身が、これ以上読み込む投稿が無いと画面に示しているか。
+  hasReachedTimelineEnd?(root: ParentNode): boolean;
 
   getPostCards(root: ParentNode): Element[];
   hasPostCards(root: ParentNode): boolean;
@@ -30,10 +34,11 @@ export interface ServiceAdapter {
   // サービスが一覧で公開している主指標。X / Bluesky は反応数、動画サービスは
   // 再生回数を返す。
   readMetricCount(postCard: Element): number;
-  // 投稿時刻が読めないときは NaN。
-  readCreatedAt(postCard: Element): number;
+  // 公開時刻を一覧から読めるサービスだけが実装する。読めない場合は NaN。
+  readCreatedAt?(postCard: Element): number;
   readMedia(postCard: Element): PostMedia;
-  // 投稿本文とハッシュタグ。カードの操作やプロフィール名は含めない。
-  readText(postCard: Element): string;
+  // 返信・引用の区別を画面に持つサービスだけが実装する。
+  readIsReply?(postCard: Element): boolean;
+  readIsQuote?(postCard: Element): boolean;
   readIsRepost(postCard: Element): boolean;
 }

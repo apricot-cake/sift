@@ -170,29 +170,6 @@ describe("いいね数を読む", () => {
   });
 });
 
-describe("投稿時刻を読む", () => {
-  it("X が書き出す機械可読な時刻を読む", () => {
-    const card = renderPost(
-      '<a href="/example/status/1"><time datetime="2026-08-01T12:00:00.000Z">8月1日</time></a>',
-    );
-
-    expect(xAdapter.readCreatedAt(card)).toBe(
-      Date.parse("2026-08-01T12:00:00.000Z"),
-    );
-  });
-
-  // どちらの読み方もできない場合も、全期間の判定は動く。
-  it("時刻が無ければ NaN を返す", () => {
-    expect(xAdapter.readCreatedAt(renderPost())).toBeNaN();
-  });
-
-  it("解釈できない時刻には NaN を返す", () => {
-    const card = renderPost('<time datetime="not a date">8月1日</time>');
-
-    expect(xAdapter.readCreatedAt(card)).toBeNaN();
-  });
-});
-
 describe("投稿IDを読む", () => {
   it("時刻のリンクから固定の投稿IDを読む", () => {
     const card = renderPost(
@@ -255,13 +232,60 @@ describe("メディアを読む", () => {
   });
 });
 
-describe("投稿本文を読む", () => {
-  it("投稿本文とハッシュタグだけを読む", () => {
-    const card = renderPost(
-      '<div data-testid="tweetText">New trailer <a>#Spoiler</a></div><button>Like</button>',
-    );
+describe("返信を読む", () => {
+  it("投稿ヘッダーと本文の間にある返信先の行を読む", () => {
+    const card = renderPost(`
+      <div>
+        <div data-testid="User-Name">投稿者</div>
+        <div><a href="/reply-target">返信先</a></div>
+        <div><div data-testid="tweetText">本文</div></div>
+      </div>
+    `);
 
-    expect(xAdapter.readText(card)).toBe("New trailer #Spoiler");
+    expect(xAdapter.readIsReply?.(card)).toBe(true);
+  });
+
+  it("本文内のメンションを返信先として読まない", () => {
+    const card = renderPost(`
+      <div>
+        <div data-testid="User-Name">投稿者</div>
+        <div data-testid="tweetText"><a href="/mentioned">@mentioned</a></div>
+      </div>
+    `);
+
+    expect(xAdapter.readIsReply?.(card)).toBe(false);
+  });
+
+  it("本文が無い画像だけの返信も読む", () => {
+    const card = renderPost(`
+      <div>
+        <div data-testid="User-Name">投稿者</div>
+        <div><a href="/reply-target">返信先</a></div>
+        <div><div data-testid="tweetPhoto"><img src="/photo.jpg"></div></div>
+      </div>
+    `);
+
+    expect(xAdapter.readIsReply?.(card)).toBe(true);
+  });
+});
+
+describe("引用投稿を読む", () => {
+  it("外側と異なる投稿IDへのリンクを引用として読む", () => {
+    const card = renderPost(`
+      <a href="/author/status/100"><time datetime="2026-08-01"></time></a>
+      <a href="/quoted/status/200">引用元</a>
+    `);
+
+    expect(xAdapter.readIsQuote?.(card)).toBe(true);
+  });
+
+  it("外側の投稿自身に属する画像リンクは引用として読まない", () => {
+    const card = renderPost(`
+      <a href="/author/status/100"><time datetime="2026-08-01"></time></a>
+      <a href="/author/status/100/photo/1">画像</a>
+    `);
+
+    expect(xAdapter.readIsQuote?.(card)).toBe(false);
   });
 });
 

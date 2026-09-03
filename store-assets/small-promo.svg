@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="440" height="280" viewBox="0 0 440 280">
+  <title>Sift</title>
+  <rect width="440" height="280" fill="#0877d8"/>
+
+  <g fill="none" stroke="#ffffff" stroke-width="2" opacity="0.10">
+    <circle cx="380" cy="28" r="82"/>
+    <circle cx="380" cy="28" r="112"/>
+    <circle cx="36" cy="264" r="72"/>
+  </g>
+
+  <text
+    x="54"
+    y="172"
+    fill="#ffffff"
+    font-family="Consolas, 'Courier New', monospace"
+    font-size="92"
+    font-weight="700"
+    letter-spacing="-7"
+  >Si</text>
+
+  <g transform="translate(246 38)">
+    <g fill="#ffffff">
+      <circle cx="20" cy="18" r="7" opacity="0.48"/>
+      <circle cx="53" cy="18" r="7" opacity="0.72"/>
+      <circle cx="86" cy="18" r="7" opacity="0.48"/>
+      <circle cx="119" cy="18" r="7" opacity="0.72"/>
+      <circle cx="36" cy="47" r="7" opacity="0.72"/>
+      <circle cx="70" cy="47" r="7" opacity="0.48"/>
+      <circle cx="103" cy="47" r="7" opacity="0.72"/>
+    </g>
+
+    <path
+      d="M8 76H132L86 124V158L54 176V124L8 76Z"
+      fill="#ffffff"
+      fill-opacity="0.14"
+      stroke="#ffffff"
+      stroke-width="7"
+      stroke-linejoin="round"
+    />
+
+    <circle cx="70" cy="207" r="10" fill="#ffffff"/>
+  </g>
+</svg>

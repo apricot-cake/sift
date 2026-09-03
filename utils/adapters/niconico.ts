@@ -6,7 +6,6 @@ const CARD_CANDIDATES =
   "[data-decoration-video-id], [data-video-id], article, li, [class*='VideoItem']";
 const VIEW_TEXT = /(?:再生|視聴|views?)/i;
 const DATE_TEXT = /\d{4}[/.年-]\d{1,2}[/.月-]\d{1,2}/;
-const DURATION_TEXT = /^\d+:\d{2}(?::\d{2})?$/;
 
 function cards(root: ParentNode): Element[] {
   const result = new Set<Element>();
@@ -85,20 +84,6 @@ export const niconicoAdapter = Object.freeze({
   },
   readMedia() {
     return { hasImage: false, hasVideo: true };
-  },
-  readText(card: Element) {
-    const links = Array.from(card.querySelectorAll(WATCH_LINK));
-    for (const link of links) {
-      const text = (
-        link.getAttribute("title") ||
-        link.textContent ||
-        ""
-      ).trim();
-      if (text && !DURATION_TEXT.test(text)) {
-        return text;
-      }
-    }
-    return "";
   },
   readIsRepost() {
     return false;
