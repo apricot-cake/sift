@@ -33,12 +33,14 @@ export default defineConfig({
     disabled: true,
   },
   manifest: {
-    // 固定の署名鍵＝したがって固定の拡張機能 id
-    // （bohbpocokkfioejlabmeaimpkpmablkm）。これが無いと id は置き場の経路から
-    // 導かれるので、日常のビルドを別の置き場へ移すと黙って新しい拡張機能が
-    // できる＝そして新しい browser.storage.sync も一緒に。2つのプロファイルは
-    // 同じ出力を読むが、別々の Chrome プロファイルなので互いにはぶつからない。
-    key: "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA7HRMGxpsFxVmyHkVNzHAtaSVuu6vJVFCC0gSSYBT9t31XfT68U7NYyn15N3rLuvZRhRAXYBgZiouzH619jVc2lbHGRzRUPYjm8o0XW70TW6NB+g7P510902pHXw1TmcrN9wqFfFsFhV50DObPKfY+GYfgNzWo+A4raQ4+sCQaCv9TNR78CU2HAi81oGJthhxPYRfdZdqLiZ7FWSnz+Nv9Ie0Q0RAn6W21ekSRpN6wfJf4AjgBe5sj3zRRTGH6CcUSvfUehjKjSbsS5KX5OhL4KWsio4GYRmUZa3SJxWexZN3kLSo4ugA+0AaT0rFjLTZhxOl/ULBeMvBvnnZ+xEqyQIDAQAB",
+    // ローカル配備だけ固定の署名鍵を持たせ、拡張機能 id を
+    // bohbpocokkfioejlabmeaimpkpmablkm に保つ。Chrome ウェブストアは新規アイテムの
+    // manifest に key があるパッケージを受け付けないため、ストア提出物には含めない。
+    ...(localDeploy
+      ? {
+          key: "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA7HRMGxpsFxVmyHkVNzHAtaSVuu6vJVFCC0gSSYBT9t31XfT68U7NYyn15N3rLuvZRhRAXYBgZiouzH619jVc2lbHGRzRUPYjm8o0XW70TW6NB+g7P510902pHXw1TmcrN9wqFfFsFhV50DObPKfY+GYfgNzWo+A4raQ4+sCQaCv9TNR78CU2HAi81oGJthhxPYRfdZdqLiZ7FWSnz+Nv9Ie0Q0RAn6W21ekSRpN6wfJf4AjgBe5sj3zRRTGH6CcUSvfUehjKjSbsS5KX5OhL4KWsio4GYRmUZa3SJxWexZN3kLSo4ugA+0AaT0rFjLTZhxOl/ULBeMvBvnnZ+xEqyQIDAQAB",
+        }
+      : {}),
     // ブラウザがここに自分のロケールを持たないとき、どのメッセージファイルへ
     // 落ちるか。`en`。@wxt-dev/i18n が locales/en.yml から生成する。
     default_locale: "en",

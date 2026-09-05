@@ -77,6 +77,30 @@ export const xAdapter = Object.freeze({
   matches: Object.freeze(["https://x.com/*", "https://twitter.com/*"]),
   settingsKey: "x",
 
+  readTimelineKey(
+    root: ParentNode,
+    page: Pick<Location, "pathname" | "search">,
+  ) {
+    // 狭い画面ではリスト選択などがタイムラインを置き換える。
+    if (
+      page.pathname.startsWith("/i/") &&
+      !/^\/i\/lists\/\d+$/.test(page.pathname)
+    ) {
+      return null;
+    }
+    if (page.pathname === "/home" && !isXSupportedHomeTimeline(root)) {
+      return null;
+    }
+    if (page.pathname !== "/home" && !this.hasPostCards(root)) {
+      return null;
+    }
+    const tabs = Array.from(root.querySelectorAll('[role="tab"]'));
+    const selected = tabs.findIndex(
+      (tab) => tab.getAttribute("aria-selected") === "true",
+    );
+    return `${page.pathname}${page.search}:${selected}:${tabs[selected]?.textContent ?? ""}`;
+  },
+
   getPostCards(root: ParentNode) {
     return timelinePostCards(root);
   },

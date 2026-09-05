@@ -24,6 +24,29 @@ function renderPost(inner = ""): Element {
 }
 
 describe("投稿を見つける", () => {
+  it("ホーム内の別のタブには同じ位置を復元しない", () => {
+    const page = render(`<div data-testid="ScrollSnap-List" role="tablist">
+      <div role="tab" aria-selected="false">おすすめ</div>
+      <div role="tab" aria-selected="true">フォロー中</div>
+      <div role="tab" aria-selected="false">リスト</div>
+    </div>`);
+    const location = { pathname: "/home", search: "" };
+    const first = xAdapter.readTimelineKey(page, location);
+    page
+      .querySelectorAll('[role="tab"]')[1]
+      ?.setAttribute("aria-selected", "false");
+    page
+      .querySelectorAll('[role="tab"]')[2]
+      ?.setAttribute("aria-selected", "true");
+    expect(xAdapter.readTimelineKey(page, location)).not.toBe(first);
+    expect(
+      xAdapter.readTimelineKey(page, {
+        pathname: "/i/lists/add_member",
+        search: "",
+      }),
+    ).toBeNull();
+  });
+
   it("画面にある投稿を全部見つける", () => {
     const timeline = renderTimeline(
       "<span>first</span>",

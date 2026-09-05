@@ -17,9 +17,7 @@ const contentStyles = readFromRoot("entrypoints/content/style.css");
 const contentScript = readFromRoot("entrypoints/content/index.ts");
 
 describe("content のスタイルシート", () => {
-  // そうしないと、強調は CSS がたまたま名指ししたサービスにだけ出るし
-  // （かつては X の投稿カードを名指ししていて、線が引かれるのは X だけだった）、
-  // アダプターが増えるたびにここへ規則を足すことになる。
+  // サービスごとの画面構造はアダプターだけで扱い、表示制御の CSS へ戻さない。
   it("どのサービスの画面の作りも名指ししない", () => {
     for (const serviceSpecific of [
       "data-testid",
@@ -33,14 +31,6 @@ describe("content のスタイルシート", () => {
         `entrypoints/content/style.css が ${serviceSpecific} を名指ししている＝これは1つのサービスの画面の作り`,
       ).toBe(false);
     }
-  });
-
-  // 強調は状態の属性だけを手掛かりにしているので、どのアダプターが印を付けた
-  // セルにも当たる。
-  it("条件に合うセル自身へ強調を描く", () => {
-    expect(
-      contentStyles.includes('[data-sift-filter-state="matched"]::before'),
-    ).toBe(true);
   });
 });
 

@@ -28,6 +28,7 @@ import {
   isTimelineControlRequest,
   TIMELINE_CONTROL,
 } from "../../utils/timeline-controls.ts";
+import { TimelineViewport } from "../../utils/timeline-viewport.ts";
 import "./style.css";
 
 export function startContentRuntime(
@@ -43,6 +44,9 @@ export function startContentRuntime(
   // null でないという絞り込みを保てるように＝TS は引数の絞り込みを、巻き上げ
   // られた関数宣言の中まで自分では運ばない。
   const adapter = maybeAdapter;
+  const timelineViewport = adapter.readTimelineKey
+    ? new TimelineViewport(adapter)
+    : null;
 
   let settings = normalizeSettings(defaults);
   let observer: MutationObserver | null = null;
@@ -188,6 +192,7 @@ export function startContentRuntime(
   function startLayoutProbe(): void {
     if (
       disposed ||
+      timelineViewport?.isRestoring() ||
       !adapter.needsLayoutProbeForPagination ||
       adapter.hasReachedTimelineEnd?.(document) ||
       layoutProbePausedByUser ||
@@ -236,8 +241,12 @@ export function startContentRuntime(
       return;
     }
 
+    // 次ページ確認中も画面遷移は追跡する。一時スクロールの座標は保存しない。
+    if (filteringEnabled()) timelineViewport?.syncRoute();
+
     const timelineAvailable = adapter.isTimelineAvailable(document, location);
     if (!timelineAvailable) {
+      if (filteringEnabled()) timelineViewport?.update();
       clearTimelineState();
       return;
     }
@@ -322,6 +331,8 @@ export function startContentRuntime(
       stopLayoutProbe();
     }
     restoreViewportAnchor(viewportAnchor);
+    if (filteringEnabled() && scrollTopBeforeLayoutProbe === null)
+      timelineViewport?.update();
   }
 
   function scheduleFilter(): void {
@@ -348,6 +359,7 @@ export function startContentRuntime(
   function handleRoute(): void {
     const nextPageKey = pageKey();
     if (nextPageKey !== observedPageKey) {
+      stopLayoutProbe(false);
       observedPageKey = nextPageKey;
       layoutProbePausedByUser = false;
       loadWarningTracker?.reset(readCurrentPostIds());
@@ -368,6 +380,7 @@ export function startContentRuntime(
       layoutProbePausedByUser = false;
     } else {
       stopLayoutProbe();
+      timelineViewport?.reset();
     }
     loadWarningTracker?.reset(readCurrentPostIds());
     keepViewportOnNextFilter = true;
@@ -411,6 +424,7 @@ export function startContentRuntime(
     }
 
     settings = normalizeSettings(storedSettings);
+    timelineViewport?.reset();
     loadWarningTracker?.reset(readCurrentPostIds());
     scheduleFilter();
   }
@@ -421,6 +435,7 @@ export function startContentRuntime(
     }
 
     disposed = true;
+    timelineViewport?.reset();
     observer?.disconnect();
     observer = null;
     if (routeTimer !== null) {
@@ -440,6 +455,7 @@ export function startContentRuntime(
     window.removeEventListener("pointerdown", handleUserNavigation, true);
     window.removeEventListener("keydown", handleUserNavigation, true);
     window.removeEventListener("scroll", handleScroll);
+    window.removeEventListener("resize", handleResize);
     loadWarningTracker?.dispose();
     try {
       unwatchSettings();
@@ -485,6 +501,7 @@ export function startContentRuntime(
       return;
     }
     if (filteringEnabled()) {
+      timelineViewport?.cancel();
       loadWarningTracker?.reset(readCurrentPostIds());
       if (!adapter.needsLayoutProbeForPagination) {
         return;
@@ -546,6 +563,8 @@ export function startContentRuntime(
   }
 
   function handleScroll(): void {
+    if (filteringEnabled() && scrollTopBeforeLayoutProbe === null)
+      timelineViewport?.update();
     if (
       filteringEnabled() &&
       adapter.needsLayoutProbeForPagination &&
@@ -553,6 +572,13 @@ export function startContentRuntime(
     ) {
       scheduleFilter();
     }
+  }
+
+  function handleResize(): void {
+    // 次ページ判定用の一時スクロールと読んでいた位置の復元を競合させない。
+    stopLayoutProbe(false);
+    if (filteringEnabled()) timelineViewport?.resize();
+    scheduleFilter();
   }
 
   void settingsItem
@@ -591,6 +617,7 @@ export function startContentRuntime(
   window.addEventListener("pointerdown", handleUserNavigation, true);
   window.addEventListener("keydown", handleUserNavigation, true);
   window.addEventListener("scroll", handleScroll, { passive: true });
+  window.addEventListener("resize", handleResize);
 
   return { dispose };
 }

@@ -9,23 +9,3 @@
   visibility: hidden !important;
   pointer-events: none !important;
 }
-
-/* 線を引く相手は状態を持つ要素＝アダプターの findPostCell() が返すセルであって、
-   その中の投稿カードではない。ここでどれかのサービスの投稿カードを名指しすると、
-   線はそのサービスにだけ引かれることになるし、画面の作りを抱えさせるために
-   アダプターを切り出したのに、それを CSS へ戻すことになる。 */
-[data-sift-filter-state="matched"] {
-  position: relative;
-}
-
-[data-sift-filter-state="matched"]::before {
-  position: absolute;
-  z-index: 1;
-  top: 0;
-  bottom: 0;
-  left: -6px;
-  width: 3px;
-  pointer-events: none;
-  content: "";
-  background: rgb(37, 99, 235);
-}

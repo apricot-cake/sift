@@ -216,6 +216,15 @@ export const youtubeAdapter = Object.freeze({
   matches: Object.freeze(["https://www.youtube.com/*"]),
   settingsKey: "youtube",
 
+  readTimelineKey(
+    root: ParentNode,
+    page: Pick<Location, "pathname" | "search">,
+  ) {
+    return this.isTimelineAvailable(root, page)
+      ? `${page.pathname}${page.search}`
+      : null;
+  },
+
   getPostCards(root: ParentNode) {
     const cells = new Set<Element>();
     return Array.from(

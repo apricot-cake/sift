@@ -44,9 +44,16 @@ if (
 assert.equal(generatedManifest.manifest_version, 3);
 assert.equal(generatedManifest.name, declaredManifest.name);
 assert.equal(generatedManifest.description, declaredManifest.description);
-// 固定の署名鍵＝それに伴い、どのプロファイルも既に入れてある拡張機能の id。
-// これを失ったビルドは、別の拡張機能として入ることになる。
-assert.equal(generatedManifest.key, declaredManifest.key);
+if (kind === "local") {
+  // ローカル配備は、既に読み込んである拡張機能と同じ id を保つ。
+  assert.equal(typeof declaredManifest.key, "string");
+  assert.equal(generatedManifest.key, declaredManifest.key);
+} else {
+  // Chrome ウェブストアは、新規アイテムの manifest に key があるパッケージを
+  // 受け付けない。
+  assert.equal(declaredManifest.key, undefined);
+  assert.equal(generatedManifest.key, undefined);
+}
 const declaredPermissions = declaredManifest.permissions ?? [];
 const expectedPermissions = [...declaredPermissions, "sidePanel"];
 assert.deepEqual(generatedManifest.permissions, expectedPermissions);

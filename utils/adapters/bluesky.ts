@@ -56,6 +56,20 @@ export const blueskyAdapter = Object.freeze({
   settingsKey: "bluesky",
   needsLayoutProbeForPagination: true,
 
+  readTimelineKey(
+    root: ParentNode,
+    page: Pick<Location, "pathname" | "search">,
+  ) {
+    // 投稿詳細では、戻り先の一覧の位置を保持する。
+    if (/^\/profile\/[^/]+\/post\/[^/]+\/?$/.test(page.pathname)) return null;
+    if (!this.isTimelineAvailable(root, page)) return null;
+    if (page.pathname !== "/") return `${page.pathname}${page.search}`;
+    const tab = Array.from(
+      root.querySelectorAll(BLUESKY_SELECTORS.homeTab),
+    ).find((item) => item.querySelector(BLUESKY_SELECTORS.selectedTabMark));
+    return `${page.pathname}${page.search}:${tab?.getAttribute("data-testid") ?? ""}:${tab?.textContent ?? ""}`;
+  },
+
   hasReachedTimelineEnd(root: ParentNode) {
     const feed = root.querySelector(BLUESKY_SELECTORS.postsFeed);
     if (!feed) {

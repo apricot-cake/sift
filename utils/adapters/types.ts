@@ -31,6 +31,11 @@ export interface ServiceAdapter {
   // 仮想リストが同じ投稿を描き直しても、新しい取得として数え直さないための
   // 識別子。連続読み込みを観測するサービスだけが実装する。
   readPostId?(postCard: Element): string | null;
+  // 幅変更や別画面から戻る際に位置を復元する一覧。モーダルなどは null。
+  readTimelineKey?(
+    root: ParentNode,
+    page: Pick<Location, "pathname" | "search">,
+  ): string | null;
   // サービスが一覧で公開している主指標。X / Bluesky は反応数、動画サービスは
   // 再生回数を返す。
   readMetricCount(postCard: Element): number;
