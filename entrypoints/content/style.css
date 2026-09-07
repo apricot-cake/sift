@@ -2,6 +2,10 @@
   display: none !important;
 }
 
+[data-sift-thread-connector-hidden] {
+  display: none !important;
+}
+
 /* Bluesky は投稿の配置を使って次ページを判定する。次の一致結果が表示範囲の先に
    ない間だけ、除外した投稿を見せずに配置を一時復元して判定を進める。 */
 :root[data-sift-layout-probe] [data-sift-filter-state="hidden"] {

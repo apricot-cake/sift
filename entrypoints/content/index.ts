@@ -31,6 +31,8 @@ import {
 import { TimelineViewport } from "../../utils/timeline-viewport.ts";
 import "./style.css";
 
+const HIDDEN_THREAD_CONNECTOR = "data-sift-thread-connector-hidden";
+
 export function startContentRuntime(
   _ctx: ContentScriptContext,
   maybeAdapter: ServiceAdapter | null,
@@ -108,6 +110,12 @@ export function startContentRuntime(
   function clearCellState(cell: HTMLElement): void {
     delete cell.dataset.siftFilterState;
     delete cell.dataset.siftFilterReason;
+  }
+
+  function setThreadConnectorsHidden(postCard: Element, hidden: boolean): void {
+    for (const connector of adapter.findThreadConnectors?.(postCard) ?? []) {
+      connector.toggleAttribute(HIDDEN_THREAD_CONNECTOR, hidden);
+    }
   }
 
   function readCurrentPostIds(): string[] {
@@ -269,6 +277,7 @@ export function startContentRuntime(
       // 生きたページ上の投稿は必ず HTMLElement。アダプターの約束が Element
       // までなのは、そこまでしか読まないから。
       const cell = adapter.findPostCell(postCard) as HTMLElement;
+      setThreadConnectorsHidden(postCard, filteringEnabled());
       if (!filteringEnabled()) {
         updates.push({
           cell,
@@ -347,6 +356,11 @@ export function startContentRuntime(
       "[data-sift-filter-state]",
     )) {
       clearCellState(cell);
+    }
+    for (const connector of document.querySelectorAll(
+      `[${HIDDEN_THREAD_CONNECTOR}]`,
+    )) {
+      connector.removeAttribute(HIDDEN_THREAD_CONNECTOR);
     }
   }
 

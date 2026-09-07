@@ -21,10 +21,15 @@ const timelineMarkup = `
   </div>
 `;
 
-function xPostMarkup(id: string, likes = 0): string {
+function xPostMarkup(
+  id: string,
+  likes = 0,
+  hasThreadConnector = false,
+): string {
   return `
     <div data-testid="cellInnerDiv">
       <article data-testid="tweet">
+        ${hasThreadConnector ? '<div><div data-testid="Tweet-User-Avatar"></div><div data-thread-connector></div></div>' : ""}
         <a href="/example/status/${id}">
           <time datetime="2026-08-01T12:00:00.000Z"></time>
         </a>
@@ -73,6 +78,34 @@ function dispatchTrustedWheel(deltaY: number): void {
 }
 
 describe("タイムラインのフィルター", () => {
+  it("絞り込み中はセルフリプの接続線を隠す", async () => {
+    document.body.innerHTML = xPostMarkup("100", 1_100, true);
+    const runtime = startContentRuntime(
+      new ContentScriptContext("sift-test"),
+      xAdapter,
+    );
+    const connector = document.querySelector<HTMLElement>(
+      "[data-thread-connector]",
+    );
+    try {
+      await setFiltering(true);
+      await vi.waitFor(() => {
+        expect(
+          connector?.hasAttribute("data-sift-thread-connector-hidden"),
+        ).toBe(true);
+      });
+
+      await setFiltering(false);
+      await vi.waitFor(() => {
+        expect(
+          connector?.hasAttribute("data-sift-thread-connector-hidden"),
+        ).toBe(false);
+      });
+    } finally {
+      runtime.dispose();
+    }
+  });
+
   it("投稿を絞り込み、ページ上の操作UIは作らない", async () => {
     document.body.innerHTML = timelineMarkup;
     const runtime = startContentRuntime(

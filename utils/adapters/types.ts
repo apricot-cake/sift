@@ -28,6 +28,8 @@ export interface ServiceAdapter {
   ): boolean;
   // 隠される単位＝投稿カードそのものとは限らない。
   findPostCell(postCard: Element): Element;
+  // 絞り込み後の投稿間では関係を保てない、サービス側の接続線。
+  findThreadConnectors?(postCard: Element): Element[];
   // 仮想リストが同じ投稿を描き直しても、新しい取得として数え直さないための
   // 識別子。連続読み込みを観測するサービスだけが実装する。
   readPostId?(postCard: Element): string | null;

@@ -17,6 +17,7 @@ const X_SELECTORS = Object.freeze({
     '[data-testid="videoPlayer"], [data-testid="videoComponent"], video, a[href*="/video/"]',
   replyContent:
     '[data-testid="tweetText"], [data-testid="tweetPhoto"], [data-testid="videoPlayer"], [data-testid="videoComponent"], [data-testid="card.wrapper"]',
+  avatar: '[data-testid="Tweet-User-Avatar"]',
   userName: '[data-testid="User-Name"]',
   socialContext: '[data-testid="socialContext"]',
   homeTabs: '[data-testid="ScrollSnap-List"][role="tablist"]',
@@ -122,6 +123,12 @@ export const xAdapter = Object.freeze({
   // カードだけを隠すと隙間が残る。
   findPostCell(postCard: Element) {
     return postCard.closest(X_SELECTORS.postCell) || postCard;
+  },
+
+  findThreadConnectors(postCard: Element) {
+    const avatar = postCard.querySelector(X_SELECTORS.avatar);
+    const connector = avatar?.nextElementSibling;
+    return connector && connector.childElementCount === 0 ? [connector] : [];
   },
 
   readPostId(postCard: Element) {

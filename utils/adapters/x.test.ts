@@ -160,6 +160,29 @@ describe("隠される単位", () => {
 
     expect(xAdapter.findPostCell(card)).toBe(card);
   });
+
+  it("アバター直下のセルフリプ接続線を見つける", () => {
+    const card = renderPost(`
+      <div>
+        <div data-testid="Tweet-User-Avatar"></div>
+        <div data-thread-connector></div>
+      </div>
+    `);
+    const connector = card.querySelector("[data-thread-connector]");
+
+    expect(xAdapter.findThreadConnectors(card)).toEqual([connector]);
+  });
+
+  it("アバター後ろの投稿内容は接続線と扱わない", () => {
+    const card = renderPost(`
+      <div>
+        <div data-testid="Tweet-User-Avatar"></div>
+        <div><span>投稿内容</span></div>
+      </div>
+    `);
+
+    expect(xAdapter.findThreadConnectors(card)).toEqual([]);
+  });
 });
 
 describe("いいね数を読む", () => {
