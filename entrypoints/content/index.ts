@@ -278,7 +278,7 @@ export function startContentRuntime(
       // までなのは、そこまでしか読まないから。
       const cell = adapter.findPostCell(postCard) as HTMLElement;
       setThreadConnectorsHidden(postCard, filteringEnabled());
-      if (!filteringEnabled()) {
+      if (!filteringEnabled() || adapter.isDetailPost?.(postCard, location)) {
         updates.push({
           cell,
           state: null,

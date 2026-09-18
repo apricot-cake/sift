@@ -7,6 +7,10 @@ import { homedir } from "node:os";
 import path from "node:path";
 import { selectAdapter } from "../utils/adapters/index.ts";
 import { findChromePath } from "./chrome-path.ts";
+import {
+  type DevBrowserEndpoint,
+  readDevBrowserEndpoint,
+} from "./dev-browser-endpoint.ts";
 
 const ROOT = path.resolve(import.meta.dirname, "..");
 const PROFILE =
@@ -14,16 +18,6 @@ const PROFILE =
 const OUTPUT = path.join(ROOT, ".output", "chrome-mv3");
 const EXTENSION_ID = "bohbpocokkfioejlabmeaimpkpmablkm";
 const CDP_HOST = "127.0.0.1";
-const CDP_PORT = Number.parseInt(process.env.SIFT_DEV_CDP_PORT || "9222", 10);
-const CDP_URL = `http://${CDP_HOST}:${CDP_PORT}`;
-
-if (!Number.isInteger(CDP_PORT) || CDP_PORT < 1024 || CDP_PORT > 65535) {
-  throw new Error("SIFT_DEV_CDP_PORT は 1024〜65535 のポート番号にすること。");
-}
-
-interface CdpVersion {
-  webSocketDebuggerUrl: string;
-}
 
 interface ExtensionInfo {
   id: string;
@@ -44,38 +38,19 @@ interface CdpTargetInfo {
   url: string;
 }
 
-async function readCdpVersion(): Promise<CdpVersion | null> {
-  try {
-    const response = await fetch(`${CDP_URL}/json/version`, {
-      signal: AbortSignal.timeout(500),
-    });
-    const value: unknown = await response.json();
-    if (
-      !response.ok ||
-      typeof value !== "object" ||
-      value === null ||
-      !("webSocketDebuggerUrl" in value) ||
-      typeof value.webSocketDebuggerUrl !== "string"
-    ) {
-      return null;
-    }
-    return { webSocketDebuggerUrl: value.webSocketDebuggerUrl };
-  } catch {
-    return null;
-  }
-}
-
-async function waitForCdp(): Promise<CdpVersion | null> {
+async function waitForCdp(): Promise<DevBrowserEndpoint | null> {
   for (let attempt = 0; attempt < 20; attempt += 1) {
-    const version = await readCdpVersion();
+    const version = await readDevBrowserEndpoint(PROFILE);
     if (version) return version;
     await new Promise((resolve) => setTimeout(resolve, 150));
   }
   return null;
 }
 
-async function readCdpTargets(): Promise<CdpTarget[]> {
-  const response = await fetch(`${CDP_URL}/json/list`);
+async function readCdpTargets(
+  version: DevBrowserEndpoint,
+): Promise<CdpTarget[]> {
+  const response = await fetch(`${version.url}/json/list`);
   if (!response.ok) {
     throw new Error("[sift] CDP からタブ一覧を読めなかった。");
   }
@@ -118,7 +93,7 @@ async function cdpCall<T>(
   });
 }
 
-async function loadSharedExtension(version: CdpVersion): Promise<void> {
+async function loadSharedExtension(version: DevBrowserEndpoint): Promise<void> {
   const loaded = await cdpCall<{ id: string }>(
     version.webSocketDebuggerUrl,
     "Extensions.loadUnpacked",
@@ -140,8 +115,8 @@ async function loadSharedExtension(version: CdpVersion): Promise<void> {
   }
 }
 
-async function verifySupportedPage(version: CdpVersion): Promise<void> {
-  const target = (await readCdpTargets()).find((candidate) => {
+async function verifySupportedPage(version: DevBrowserEndpoint): Promise<void> {
+  const target = (await readCdpTargets(version)).find((candidate) => {
     if (candidate.type !== "page") return false;
     try {
       return selectAdapter(new URL(candidate.url).hostname) !== null;
@@ -186,7 +161,10 @@ const chrome = process.env.SIFT_CHROME || findChromePath();
 if (process.argv.includes("--print")) {
   console.log(`chrome:      ${chrome}`);
   console.log(`プロファイル: ${PROFILE}`);
-  console.log(`CDP:         ${CDP_URL}`);
+  const endpoint = await readDevBrowserEndpoint(PROFILE);
+  console.log(
+    `CDP:         ${endpoint?.url ?? "未起動（起動時に空きポートを自動取得）"}`,
+  );
   console.log(
     `ビルド:      ${OUTPUT}${fs.existsSync(path.join(OUTPUT, "manifest.json")) ? "" : "  (まだ配備されていない)"}`,
   );
@@ -201,14 +179,14 @@ if (!fs.existsSync(path.join(OUTPUT, "manifest.json"))) {
 
 fs.mkdirSync(PROFILE, { recursive: true });
 
-let version = await readCdpVersion();
+let version = await readDevBrowserEndpoint(PROFILE);
 if (!version) {
   const child = spawn(
     chrome,
     [
       `--user-data-dir=${PROFILE}`,
       `--remote-debugging-address=${CDP_HOST}`,
-      `--remote-debugging-port=${CDP_PORT}`,
+      "--remote-debugging-port=0",
       "--disable-backgrounding-occluded-windows",
       "--disable-background-timer-throttling",
       "--disable-renderer-backgrounding",
@@ -219,11 +197,14 @@ if (!version) {
       windowsHide: true,
     },
   );
+  const launchFailed = new Promise<never>((_, reject) => {
+    child.once("error", reject);
+  });
   child.unref();
-  version = await waitForCdp();
+  version = await Promise.race([waitForCdp(), launchFailed]);
   if (!version) {
     throw new Error(
-      `[sift] ${CDP_URL} へ接続できない。開発用 Chrome が既に開いているなら閉じてから、もう一度 npm run dev:browser を実行すること。`,
+      `[sift] 専用プロファイルの CDP 接続先を確認できない: ${PROFILE}。旧方式で起動した開発用 Chrome が残っている場合は、その開発用 Chrome を閉じて npm run dev:browser を再実行すること。`,
     );
   }
   console.log(`[sift] CDP を有効にした開発用プロファイルを開いた: ${PROFILE}`);
@@ -231,7 +212,7 @@ if (!version) {
 
 await loadSharedExtension(version);
 console.log(`[sift] 開発用プロファイルで共有ビルドを読み込んだ: ${OUTPUT}`);
-console.log(`[sift] CDP 接続先: ${CDP_URL}`);
+console.log(`[sift] CDP 接続先: ${version.url}`);
 
 if (process.argv.includes("--verify")) {
   await verifySupportedPage(version);

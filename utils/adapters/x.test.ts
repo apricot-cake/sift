@@ -24,6 +24,28 @@ function renderPost(inner = ""): Element {
 }
 
 describe("投稿を見つける", () => {
+  it.each([
+    "/author/status/100",
+    "/author/status/100/photo/1",
+    "/author/status/100/video/1",
+    "/i/web/status/100",
+  ])("%s ではURLが指す当該投稿だけを表示対象として保護する", (pathname) => {
+    const post = renderPost(`
+      <a href="/author/status/100"><time datetime="2026-09-06"></time></a>
+      <a href="/quoted/status/200">引用元</a>
+    `);
+    const reply = renderPost(
+      '<a href="/reply/status/101"><time datetime="2026-09-06"></time></a>',
+    );
+    expect(xAdapter.isDetailPost(post, { pathname })).toBe(true);
+    expect(xAdapter.isDetailPost(reply, { pathname })).toBe(false);
+    expect(
+      xAdapter.isDetailPost(post, { pathname: "/quoted/status/200" }),
+    ).toBe(false);
+    expect(xAdapter.isDetailPost(post, { pathname: "/home" })).toBe(false);
+    expect(xAdapter.isDetailPost(renderPost(), { pathname })).toBe(false);
+  });
+
   it("ホーム内の別のタブには同じ位置を復元しない", () => {
     const page = render(`<div data-testid="ScrollSnap-List" role="tablist">
       <div role="tab" aria-selected="false">おすすめ</div>

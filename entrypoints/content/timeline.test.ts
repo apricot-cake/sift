@@ -106,6 +106,62 @@ describe("タイムラインのフィルター", () => {
     }
   });
 
+  it("ピン留めリストから開いた投稿は表示し、戻ると再び絞り込む", async () => {
+    history.replaceState({}, "", "/home");
+    document.body.innerHTML = `
+      <div data-testid="ScrollSnap-List" role="tablist">
+        <div role="tab" aria-selected="false">おすすめ</div>
+        <div role="tab" aria-selected="false">フォロー中</div>
+        <div role="tab" aria-selected="true">リスト</div>
+      </div>
+      ${xPostMarkup("100")}${xPostMarkup("200")}
+    `;
+    const runtime = startContentRuntime(
+      new ContentScriptContext("sift-test"),
+      xAdapter,
+    );
+    const cells = document.querySelectorAll<HTMLElement>(
+      '[data-testid="cellInnerDiv"]',
+    );
+    try {
+      await setFiltering(true);
+      await vi.waitFor(() => {
+        expect(cells[0]?.dataset.siftFilterState).toBe("hidden");
+        expect(cells[1]?.dataset.siftFilterState).toBe("hidden");
+      });
+
+      history.pushState({}, "", "/example/status/100");
+      await vi.waitFor(
+        () => {
+          expect(cells[0]?.dataset.siftFilterState).toBeUndefined();
+          expect(cells[1]?.dataset.siftFilterState).toBe("hidden");
+        },
+        { timeout: 2_000 },
+      );
+
+      history.pushState({}, "", "/quoted/status/200");
+      await vi.waitFor(
+        () => {
+          expect(cells[0]?.dataset.siftFilterState).toBe("hidden");
+          expect(cells[1]?.dataset.siftFilterState).toBeUndefined();
+        },
+        { timeout: 2_000 },
+      );
+
+      history.pushState({}, "", "/home");
+      await vi.waitFor(
+        () => {
+          expect(cells[0]?.dataset.siftFilterState).toBe("hidden");
+          expect(cells[1]?.dataset.siftFilterState).toBe("hidden");
+        },
+        { timeout: 2_000 },
+      );
+      expect((await getFilterContext()).filteringEnabled).toBe(true);
+    } finally {
+      runtime.dispose();
+    }
+  });
+
   it("投稿を絞り込み、ページ上の操作UIは作らない", async () => {
     document.body.innerHTML = timelineMarkup;
     const runtime = startContentRuntime(

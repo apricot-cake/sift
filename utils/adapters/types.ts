@@ -33,6 +33,8 @@ export interface ServiceAdapter {
   // 仮想リストが同じ投稿を描き直しても、新しい取得として数え直さないための
   // 識別子。連続読み込みを観測するサービスだけが実装する。
   readPostId?(postCard: Element): string | null;
+  // 詳細画面で開いた当該投稿は、絞り込み条件に関係なく表示する。
+  isDetailPost?(postCard: Element, page: Pick<Location, "pathname">): boolean;
   // 幅変更や別画面から戻る際に位置を復元する一覧。モーダルなどは null。
   readTimelineKey?(
     root: ParentNode,

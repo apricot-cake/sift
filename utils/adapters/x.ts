@@ -139,6 +139,11 @@ export const xAdapter = Object.freeze({
     return X_STATUS_ID.exec(href ?? "")?.[1] ?? null;
   },
 
+  isDetailPost(postCard: Element, page: Pick<Location, "pathname">) {
+    const detailId = X_STATUS_ID.exec(page.pathname)?.[1];
+    return detailId !== undefined && this.readPostId(postCard) === detailId;
+  },
+
   readMetricCount(postCard: Element) {
     const button = postCard.querySelector(X_SELECTORS.reactionButton);
     if (!button) {
