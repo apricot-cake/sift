@@ -1,30 +1,6 @@
-# Sift
+## 開発ガイド
 
-SNSや動画サイトの投稿を反応数などで絞り込むChrome拡張機能です。
-
-![Siftのフィルター設定。YouTubeでは最低再生回数と公開から指定期間以内の動画の除外、Xでは最低いいね数、コンテンツタイプ、返信・引用投稿・リポストの除外を設定できる。](docs/filter-settings.png)
-
-## 対応サイト
-
-- X
-- Bluesky
-- YouTube
-- ニコニコ動画
-
-## 対象項目
-
-- いいね数・再生数
-- 投稿日時
-- 画像・動画のみ
-- 返信・引用・リポストの除外
-
-## インストール
-
-[Chrome ウェブストア](https://chromewebstore.google.com/detail/sift/jglehalaegleehefcefnfmmbblgkomeh)
-
-## 開発を始める
-
-[開発ガイド.md](docs/開発ガイド.md) を参照してください。
+[CONTRIBUTING.md](docs/CONTRIBUTING.md) を参照してください。
 
 ## セキュリティ
 
