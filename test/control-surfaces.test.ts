@@ -7,10 +7,30 @@ function readEntrypoint(path: string): string {
 }
 
 describe("抽出の操作入口", () => {
-  it("アイコンのクリックでサイドパネルを開く", () => {
+  it("対応サイトのタブでだけアイコンからサイドパネルを開く", () => {
     const background = readEntrypoint("entrypoints/background.ts");
+    const content = readEntrypoint("entrypoints/content/index.ts");
 
     expect(background).toContain("openPanelOnActionClick: true");
+    expect(background).toContain("browser.action.onClicked.addListener");
+    expect(background).toContain("await sidePanel?.open({ tabId })");
+    expect(background).toContain("sidePanel?.setOptions({ enabled: false })");
+    expect(background).toContain(
+      "await sidePanel?.setOptions({ enabled: false })",
+    );
+    expect(background).toContain("const tabs = await browser.tabs.query({})");
+    expect(background).toContain(
+      "sidePanelReady.then(() => configureSidePanel",
+    );
+    expect(background).toContain("isSidePanelConfigureRequest(message)");
+    expect(background).toContain("const url = sender.url");
+    expect(background).toContain(
+      "configureSidePanel(tab, message.available && isSupportedSiteUrl(url))",
+    );
+    expect(background).toContain("sidePanel?.onOpened.addListener");
+    expect(background).toContain("SIDE_PANEL_CONTROL.setPanelTab");
+    expect(background).toContain('path: "sidepanel.html"');
+    expect(content).toContain("SIDE_PANEL_CONTROL.configureForTab");
     expect(background).not.toContain("openOptionsPage");
   });
 
@@ -74,17 +94,20 @@ describe("抽出の操作入口", () => {
     expect(mediaSetting).not.toContain("<Switch");
   });
 
-  it("動画の公開時期は期間指定なしと各単位を一つのプルダウンで選ぶ", () => {
+  it("動画の公開時期は指定期間以内を非表示にする", () => {
     const sidepanel = readEntrypoint("entrypoints/sidepanel/sidepanel-app.tsx");
-    const start = sidepanel.indexOf("function PublicationPeriodSetting");
+    const start = sidepanel.indexOf("function NewerVideosSetting");
     const end = sidepanel.indexOf("function MediaSetting", start);
     const periodSetting = sidepanel.slice(start, end);
 
     expect(start).toBeGreaterThan(-1);
-    expect(periodSetting).toContain('<SelectItem value="all">');
-    expect(periodSetting).toContain('nextValue !== "all"');
-    expect(periodSetting).toContain('className="w-16"');
-    expect(periodSetting).not.toContain("<Switch");
+    expect(periodSetting).toContain('t("optionsHidePublishedWithin")');
+    expect(periodSetting).toContain('className="w-14 px-2"');
+    expect(periodSetting).toContain('className="w-12"');
+    expect(periodSetting).toContain('className="flex min-h-16 items-center');
+    expect(periodSetting).toContain("disabled={!enabled}");
+    expect(periodSetting).toContain("<Switch");
+    expect(periodSetting).not.toContain('<SelectItem value="all">');
   });
 
   it("サイドパネルは現在タブへ追従し、他の設定は設定ページで管理する", () => {
@@ -105,6 +128,8 @@ describe("抽出の操作入口", () => {
     expect(sidepanel).toContain('manageAll ? "max-w-lg" : "max-w-xl"');
     expect(sidepanel).toContain("browser.tabs.onActivated.addListener");
     expect(sidepanel).toContain("shouldEnableFiltering");
+    expect(sidepanel).toContain("isSidePanelTabRequest(message)");
+    expect(sidepanel).toContain("panelTabId.current = message.tabId");
     expect(sidepanel).toContain("pageFilteringExpected.current");
     expect(sidepanel).toContain("browser.runtime.openOptionsPage");
     expect(sidepanel).toContain('size="icon"');

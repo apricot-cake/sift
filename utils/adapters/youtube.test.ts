@@ -84,10 +84,18 @@ describe("YouTube の対象ページを選ぶ", () => {
     "/feed/subscriptions",
     "/@sift/videos",
     "/@sift/shorts",
+    "/@sift/streams",
+    "/@sift/live",
     "/channel/UC123/videos",
     "/channel/UC123/shorts/",
+    "/channel/UC123/streams",
+    "/channel/UC123/live",
     "/c/sift/videos",
+    "/c/sift/live",
+    "/c/sift/streams",
     "/user/sift/shorts",
+    "/user/sift/live/",
+    "/user/sift/streams",
   ])("%s を対象にする", (pathname) => {
     expect(isYouTubeFilterPage(pathname)).toBe(true);
   });

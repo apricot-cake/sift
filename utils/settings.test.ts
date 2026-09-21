@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   defaults,
   normalizeSettings,
-  publicationPeriodInHours,
+  publicationAgeInHours,
   settingsFor,
   thresholdsFor,
   withSiteSettings,
@@ -25,9 +25,9 @@ describe("normalizeSettings", () => {
     expect(defaults.siteSettings.bluesky.minReactions).toBe(1000);
     expect(defaults.siteSettings.youtube).toMatchObject({
       minCount: 10000,
-      publishedWithinEnabled: false,
-      publishedWithinValue: 1,
-      publishedWithinUnit: "week",
+      hidePublishedWithinEnabled: false,
+      hidePublishedWithinValue: 1,
+      hidePublishedWithinUnit: "year",
     });
     expect(defaults.siteSettings.niconico.minCount).toBe(1000);
   });
@@ -122,7 +122,7 @@ describe("normalizeSettings", () => {
     expect(settings).toEqual({ siteSettings: defaults.siteSettings });
   });
 
-  it("廃止した投稿時期設定を公開時期設定として読み込まない", () => {
+  it("旧形式の期間内だけ表示を新しい動画の除外として読み込まない", () => {
     const settings = normalizeSettings({
       siteSettings: {
         x: {
@@ -136,17 +136,40 @@ describe("normalizeSettings", () => {
     expect("periodMode" in settings.siteSettings.x).toBe(false);
     expect("periodValue" in settings.siteSettings.x).toBe(false);
     expect("periodUnit" in settings.siteSettings.x).toBe(false);
-    expect(settings.siteSettings.youtube.publishedWithinEnabled).toBe(false);
+    expect(settings.siteSettings.youtube.hidePublishedWithinEnabled).toBe(
+      false,
+    );
+  });
+
+  it("旧形式の公開時期設定を有効な新しい動画の除外へ移行しない", () => {
+    const settings = normalizeSettings({
+      siteSettings: {
+        youtube: {
+          publishedWithinEnabled: true,
+          publishedWithinValue: 2,
+          publishedWithinUnit: "week",
+        },
+      },
+    });
+
+    expect(settings.siteSettings.youtube).toMatchObject({
+      hidePublishedWithinEnabled: false,
+      hidePublishedWithinValue: 1,
+      hidePublishedWithinUnit: "year",
+    });
+    expect("publishedWithinEnabled" in settings.siteSettings.youtube).toBe(
+      false,
+    );
   });
 });
 
-describe("publicationPeriodInHours", () => {
+describe("publicationAgeInHours", () => {
   it("各単位を時間へ換算する", () => {
-    expect(publicationPeriodInHours(2, "hour")).toBe(2);
-    expect(publicationPeriodInHours(2, "day")).toBe(48);
-    expect(publicationPeriodInHours(2, "week")).toBe(336);
-    expect(publicationPeriodInHours(2, "month")).toBe(1440);
-    expect(publicationPeriodInHours(2, "year")).toBe(17520);
+    expect(publicationAgeInHours(2, "hour")).toBe(2);
+    expect(publicationAgeInHours(2, "day")).toBe(48);
+    expect(publicationAgeInHours(2, "week")).toBe(336);
+    expect(publicationAgeInHours(2, "month")).toBe(1440);
+    expect(publicationAgeInHours(2, "year")).toBe(17520);
   });
 });
 
@@ -169,7 +192,7 @@ describe("thresholdsFor", () => {
       mediaEnabled: false,
       inclusion: {
         minimum: 25,
-        maximumAgeHours: null,
+        minimumAgeHours: null,
       },
     });
   });
@@ -180,9 +203,9 @@ describe("thresholdsFor", () => {
         youtube: {
           minCount: 20000,
           minCountEnabled: true,
-          publishedWithinEnabled: true,
-          publishedWithinValue: 2,
-          publishedWithinUnit: "week",
+          hidePublishedWithinEnabled: true,
+          hidePublishedWithinValue: 2,
+          hidePublishedWithinUnit: "week",
         },
       },
     });
@@ -194,7 +217,7 @@ describe("thresholdsFor", () => {
       mediaEnabled: false,
       inclusion: {
         minimum: 20000,
-        maximumAgeHours: 336,
+        minimumAgeHours: 336,
       },
     });
   });
@@ -210,7 +233,7 @@ describe("thresholdsFor", () => {
 
     expect(thresholdsFor(stored.siteSettings.x).inclusion).toEqual({
       minimum: null,
-      maximumAgeHours: null,
+      minimumAgeHours: null,
     });
   });
 });

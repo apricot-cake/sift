@@ -15,7 +15,7 @@ import {
   defaults,
   type MetricSiteSettings,
   normalizeSettings,
-  type PublicationPeriodUnit,
+  type PublicationAgeUnit,
   type ReactionSiteSettings,
   type Settings,
   type SiteSettingsKey,
@@ -23,6 +23,7 @@ import {
   withSiteSettings,
 } from "../../utils/settings.ts";
 import { settingsItem } from "../../utils/settings-storage.ts";
+import { isSidePanelTabRequest } from "../../utils/sidepanel-controls.ts";
 import { TIMELINE_CONTROL } from "../../utils/timeline-controls.ts";
 import { Button } from "../options/components/ui/button.tsx";
 import { Card, CardContent } from "../options/components/ui/card.tsx";
@@ -60,6 +61,7 @@ export function SidepanelApp({
   const followActiveContext = useRef(true);
   const settingsRef = useRef(settings);
   const activePageRef = useRef<{ tabId: number; pageKey: string } | null>(null);
+  const panelTabId = useRef<number | null>(null);
   const panelInitialized = useRef(false);
   const [pageFilteringEnabled, setPageFilteringEnabled] = useState(false);
   const pageFilteringExpected = useRef(false);
@@ -122,6 +124,27 @@ export function SidepanelApp({
         currentWindow: true,
       });
       try {
+        if (panelTabId.current === null && tab?.id !== undefined) {
+          panelTabId.current = tab.id;
+        }
+        const panelTabMatches = panelTabId.current === tab?.id;
+        if (!panelTabMatches) {
+          const previousPage = activePageRef.current;
+          if (previousPage !== null) {
+            void browser.tabs
+              .sendMessage(previousPage.tabId, {
+                type: TIMELINE_CONTROL.setFiltering,
+                enabled: false,
+              })
+              .catch(() => {});
+          }
+          activePageRef.current = null;
+          pageFilteringExpected.current = false;
+          setPageFilteringEnabled(false);
+          setActiveContext(null);
+          setActiveSite(null);
+          return;
+        }
         let context: FilterContextResponse | null = null;
         if (tab?.id !== undefined) {
           context = await browser.tabs
@@ -132,7 +155,7 @@ export function SidepanelApp({
             .catch(() => null);
         }
         const nextPage =
-          tab?.id !== undefined && context !== null
+          tab?.id !== undefined && context?.timelineAvailable
             ? { tabId: tab.id, pageKey: context.pageKey }
             : null;
         const previousPage = activePageRef.current;
@@ -161,6 +184,7 @@ export function SidepanelApp({
           hasNextPage: nextPage !== null,
           hasPreviousPage: previousPage !== null,
           pageChanged,
+          panelTabMatches,
           panelExpectedFiltering: pageFilteringExpected.current,
           panelInitialized: panelInitialized.current,
         });
@@ -207,15 +231,36 @@ export function SidepanelApp({
           });
       }
     };
+    const handlePanelTab = (message: unknown): void => {
+      if (!isSidePanelTabRequest(message)) {
+        return;
+      }
+      const previousPage = activePageRef.current;
+      if (previousPage !== null && previousPage.tabId !== message.tabId) {
+        void browser.tabs
+          .sendMessage(previousPage.tabId, {
+            type: TIMELINE_CONTROL.setFiltering,
+            enabled: false,
+          })
+          .catch(() => {});
+      }
+      panelTabId.current = message.tabId;
+      activePageRef.current = null;
+      pageFilteringExpected.current = false;
+      panelInitialized.current = false;
+      void refreshActiveHost(true);
+    };
     void refreshActiveHost(true);
     const contextTimer = window.setInterval(() => {
       void refreshActiveHost();
     }, 750);
     browser.tabs.onActivated.addListener(handleTabActivated);
     browser.tabs.onUpdated.addListener(handleTabUpdated);
+    browser.runtime.onMessage.addListener(handlePanelTab);
     return () => {
       browser.tabs.onActivated.removeListener(handleTabActivated);
       browser.tabs.onUpdated.removeListener(handleTabUpdated);
+      browser.runtime.onMessage.removeListener(handlePanelTab);
       window.clearInterval(contextTimer);
     };
   }, [manageAll]);
@@ -268,7 +313,8 @@ export function SidepanelApp({
 
   const currentPageIsEditable = manageAll || activeSite === selectedSite;
   const filteringIsAvailable =
-    activeContext !== null && activeContext.site === selectedSite;
+    activeContext?.timelineAvailable === true &&
+    activeContext.site === selectedSite;
 
   return (
     <main
@@ -358,22 +404,25 @@ export function SidepanelApp({
                           suffix={t("optionsUnitViews")}
                           value={selectedSettings.minCount}
                         />
-                        <PublicationPeriodSetting
-                          enabled={selectedSettings.publishedWithinEnabled}
-                          unit={selectedSettings.publishedWithinUnit}
-                          value={selectedSettings.publishedWithinValue}
+                        <NewerVideosSetting
+                          enabled={selectedSettings.hidePublishedWithinEnabled}
+                          unit={selectedSettings.hidePublishedWithinUnit}
+                          value={selectedSettings.hidePublishedWithinValue}
                           onChange={(
-                            publishedWithinEnabled,
-                            publishedWithinUnit,
+                            hidePublishedWithinEnabled,
+                            hidePublishedWithinUnit,
                           ) =>
                             saveSiteSettings(selectedSite, {
                               ...selectedSettings,
-                              publishedWithinEnabled,
-                              publishedWithinUnit,
+                              hidePublishedWithinEnabled,
+                              hidePublishedWithinUnit,
                             })
                           }
                           onValueChange={(value) =>
-                            updateMetricSetting("publishedWithinValue", value)
+                            updateMetricSetting(
+                              "hidePublishedWithinValue",
+                              value,
+                            )
                           }
                         />
                       </>
@@ -543,19 +592,22 @@ function SiteSettingsEditor({
                   suffix={t("optionsUnitViews")}
                   value={settings.minCount}
                 />
-                <PublicationPeriodSetting
-                  enabled={settings.publishedWithinEnabled}
-                  unit={settings.publishedWithinUnit}
-                  value={settings.publishedWithinValue}
-                  onChange={(publishedWithinEnabled, publishedWithinUnit) =>
+                <NewerVideosSetting
+                  enabled={settings.hidePublishedWithinEnabled}
+                  unit={settings.hidePublishedWithinUnit}
+                  value={settings.hidePublishedWithinValue}
+                  onChange={(
+                    hidePublishedWithinEnabled,
+                    hidePublishedWithinUnit,
+                  ) =>
                     onSave({
                       ...settings,
-                      publishedWithinEnabled,
-                      publishedWithinUnit,
+                      hidePublishedWithinEnabled,
+                      hidePublishedWithinUnit,
                     })
                   }
                   onValueChange={(value) =>
-                    updateMetric("publishedWithinValue", value)
+                    updateMetric("hidePublishedWithinValue", value)
                   }
                 />
               </>
@@ -753,7 +805,7 @@ function EditableNumberInput({
   );
 }
 
-function PublicationPeriodSetting({
+function NewerVideosSetting({
   enabled,
   onChange,
   onValueChange,
@@ -761,61 +813,62 @@ function PublicationPeriodSetting({
   value,
 }: {
   enabled: boolean;
-  onChange: (enabled: boolean, unit: PublicationPeriodUnit) => void;
+  onChange: (enabled: boolean, unit: PublicationAgeUnit) => void;
   onValueChange: (value: number) => void;
-  unit: PublicationPeriodUnit;
+  unit: PublicationAgeUnit;
   value: number;
 }): React.JSX.Element {
   return (
-    <SettingRow label={t("optionsPublicationPeriod")}>
-      <div className="flex items-center gap-2">
-        {enabled && (
-          <EditableNumberInput
-            ariaLabel={t("optionsPublicationPeriodValue")}
-            className="w-16"
-            min={1}
-            onValueChange={onValueChange}
-            value={value}
-          />
-        )}
-        <Select
-          value={enabled ? unit : "all"}
-          onValueChange={(nextValue) =>
-            onChange(
-              nextValue !== "all",
-              nextValue === "all" ? unit : (nextValue as PublicationPeriodUnit),
-            )
-          }
+    <div className="flex min-h-16 items-center gap-1 p-5" data-setting-row="">
+      <span className="shrink-0 text-sm font-medium">
+        {t("optionsPublicationAgePrefix")}
+      </span>
+      <EditableNumberInput
+        ariaLabel={t("optionsPublicationAgeValue")}
+        className="w-14 px-2"
+        disabled={!enabled}
+        min={1}
+        onValueChange={onValueChange}
+        value={value}
+      />
+      <Select
+        disabled={!enabled}
+        value={unit}
+        onValueChange={(nextValue) =>
+          onChange(enabled, nextValue as PublicationAgeUnit)
+        }
+      >
+        <SelectTrigger
+          aria-label={t("optionsPublicationAgeUnit")}
+          className="w-12"
         >
-          <SelectTrigger
-            aria-label={t("optionsPublicationPeriodUnit")}
-            className="w-36"
-          >
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">
-              {t("optionsPublicationPeriodAll")}
-            </SelectItem>
-            <SelectItem value="hour">
-              {t("optionsPublicationPeriodHours")}
-            </SelectItem>
-            <SelectItem value="day">
-              {t("optionsPublicationPeriodDays")}
-            </SelectItem>
-            <SelectItem value="week">
-              {t("optionsPublicationPeriodWeeks")}
-            </SelectItem>
-            <SelectItem value="month">
-              {t("optionsPublicationPeriodMonths")}
-            </SelectItem>
-            <SelectItem value="year">
-              {t("optionsPublicationPeriodYears")}
-            </SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
-    </SettingRow>
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="hour">
+            {t("optionsPublicationAgeHours")}
+          </SelectItem>
+          <SelectItem value="day">{t("optionsPublicationAgeDays")}</SelectItem>
+          <SelectItem value="week">
+            {t("optionsPublicationAgeWeeks")}
+          </SelectItem>
+          <SelectItem value="month">
+            {t("optionsPublicationAgeMonths")}
+          </SelectItem>
+          <SelectItem value="year">
+            {t("optionsPublicationAgeYears")}
+          </SelectItem>
+        </SelectContent>
+      </Select>
+      <span className="shrink-0 text-xs text-muted-foreground">
+        {t("optionsHidePublishedWithinSuffix")}
+      </span>
+      <Switch
+        aria-label={t("optionsHidePublishedWithin")}
+        checked={enabled}
+        onCheckedChange={(nextEnabled) => onChange(nextEnabled, unit)}
+      />
+    </div>
   );
 }
 

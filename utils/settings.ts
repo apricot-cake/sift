@@ -2,7 +2,7 @@
 import type { ClassifyThresholds } from "./filter-core.ts";
 
 export type MediaMode = "any" | "images" | "video";
-export type PublicationPeriodUnit = "hour" | "day" | "week" | "month" | "year";
+export type PublicationAgeUnit = "hour" | "day" | "week" | "month" | "year";
 export type ReactionSiteSettingsKey = "x" | "bluesky";
 export type MetricSiteSettingsKey = "youtube" | "niconico";
 export type SiteSettingsKey = ReactionSiteSettingsKey | MetricSiteSettingsKey;
@@ -22,9 +22,9 @@ export interface MetricSiteSettings {
   readonly kind: "metric";
   readonly minCountEnabled: boolean;
   readonly minCount: number;
-  readonly publishedWithinEnabled: boolean;
-  readonly publishedWithinValue: number;
-  readonly publishedWithinUnit: PublicationPeriodUnit;
+  readonly hidePublishedWithinEnabled: boolean;
+  readonly hidePublishedWithinValue: number;
+  readonly hidePublishedWithinUnit: PublicationAgeUnit;
 }
 
 export interface SiteSettingsMap {
@@ -62,9 +62,9 @@ function defaultMetricSiteSettings(
     kind: "metric",
     minCountEnabled: true,
     minCount,
-    publishedWithinEnabled: false,
-    publishedWithinValue: 1,
-    publishedWithinUnit: "week",
+    hidePublishedWithinEnabled: false,
+    hidePublishedWithinValue: 1,
+    hidePublishedWithinUnit: "year",
   });
 }
 
@@ -103,10 +103,10 @@ function normalizeMediaMode(value: unknown, fallback: MediaMode): MediaMode {
   return fallback;
 }
 
-function normalizePublicationPeriodUnit(
+function normalizePublicationAgeUnit(
   value: unknown,
-  fallback: PublicationPeriodUnit,
-): PublicationPeriodUnit {
+  fallback: PublicationAgeUnit,
+): PublicationAgeUnit {
   if (
     value === "hour" ||
     value === "day" ||
@@ -173,19 +173,19 @@ function normalizeMetricSiteSettings(
           ? false
           : fallback.minCountEnabled,
     minCount: clampInteger(source.minCount, fallback.minCount, 0, 1000000000),
-    publishedWithinEnabled:
-      typeof source.publishedWithinEnabled === "boolean"
-        ? source.publishedWithinEnabled
-        : fallback.publishedWithinEnabled,
-    publishedWithinValue: clampInteger(
-      source.publishedWithinValue,
-      fallback.publishedWithinValue,
+    hidePublishedWithinEnabled:
+      typeof source.hidePublishedWithinEnabled === "boolean"
+        ? source.hidePublishedWithinEnabled
+        : fallback.hidePublishedWithinEnabled,
+    hidePublishedWithinValue: clampInteger(
+      source.hidePublishedWithinValue,
+      fallback.hidePublishedWithinValue,
       1,
       1000,
     ),
-    publishedWithinUnit: normalizePublicationPeriodUnit(
-      source.publishedWithinUnit,
-      fallback.publishedWithinUnit,
+    hidePublishedWithinUnit: normalizePublicationAgeUnit(
+      source.hidePublishedWithinUnit,
+      fallback.hidePublishedWithinUnit,
     ),
   };
 }
@@ -235,8 +235,8 @@ export function withSiteSettings(
   });
 }
 
-const HOURS_PER_PUBLICATION_PERIOD_UNIT: Readonly<
-  Record<PublicationPeriodUnit, number>
+const HOURS_PER_PUBLICATION_AGE_UNIT: Readonly<
+  Record<PublicationAgeUnit, number>
 > = Object.freeze({
   hour: 1,
   day: 24,
@@ -245,11 +245,11 @@ const HOURS_PER_PUBLICATION_PERIOD_UNIT: Readonly<
   year: 24 * 365,
 });
 
-export function publicationPeriodInHours(
+export function publicationAgeInHours(
   value: number,
-  unit: PublicationPeriodUnit,
+  unit: PublicationAgeUnit,
 ): number {
-  return value * HOURS_PER_PUBLICATION_PERIOD_UNIT[unit];
+  return value * HOURS_PER_PUBLICATION_AGE_UNIT[unit];
 }
 
 export function thresholdsFor(settings: SiteSettings): ClassifyThresholds {
@@ -261,10 +261,10 @@ export function thresholdsFor(settings: SiteSettings): ClassifyThresholds {
       hideReposts: false,
       inclusion: {
         minimum: settings.minCountEnabled ? settings.minCount : null,
-        maximumAgeHours: settings.publishedWithinEnabled
-          ? publicationPeriodInHours(
-              settings.publishedWithinValue,
-              settings.publishedWithinUnit,
+        minimumAgeHours: settings.hidePublishedWithinEnabled
+          ? publicationAgeInHours(
+              settings.hidePublishedWithinValue,
+              settings.hidePublishedWithinUnit,
             )
           : null,
       },
@@ -277,7 +277,7 @@ export function thresholdsFor(settings: SiteSettings): ClassifyThresholds {
     hideReposts: settings.hideReposts,
     inclusion: {
       minimum: settings.minReactionsEnabled ? settings.minReactions : null,
-      maximumAgeHours: null,
+      minimumAgeHours: null,
     },
   };
 }

@@ -9,6 +9,7 @@ const samePage = {
   hasPreviousPage: true,
   pageChanged: false,
   panelInitialized: true,
+  panelTabMatches: true,
 };
 
 describe("shouldEnableFiltering", () => {
@@ -38,6 +39,17 @@ describe("shouldEnableFiltering", () => {
         ...samePage,
         contentFilteringEnabled: true,
         panelExpectedFiltering: true,
+      }),
+    ).toBe(false);
+  });
+
+  it("パネルを開いたタブ以外では有効化しない", () => {
+    expect(
+      shouldEnableFiltering({
+        ...samePage,
+        contentFilteringEnabled: false,
+        panelExpectedFiltering: true,
+        panelTabMatches: false,
       }),
     ).toBe(false);
   });

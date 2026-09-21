@@ -10,8 +10,8 @@ describe("localizeDocument()", () => {
     const root = render(`
       <p data-i18n="optionsMinLikes"></p>
       <input
-        data-i18n-placeholder="optionsPublicationPeriodValue"
-        data-i18n-aria-label="optionsPublicationPeriodUnit"
+        data-i18n-placeholder="optionsPublicationAgeValue"
+        data-i18n-aria-label="optionsPublicationAgeUnit"
       >
     `);
 
@@ -21,10 +21,10 @@ describe("localizeDocument()", () => {
     const input = root.querySelector("input");
     expect(paragraph?.textContent).toBe(english.optionsMinLikes?.message);
     expect(input?.getAttribute("placeholder")).toBe(
-      english.optionsPublicationPeriodValue?.message,
+      english.optionsPublicationAgeValue?.message,
     );
     expect(input?.getAttribute("aria-label")).toBe(
-      english.optionsPublicationPeriodUnit?.message,
+      english.optionsPublicationAgeUnit?.message,
     );
   });
 
@@ -32,7 +32,7 @@ describe("localizeDocument()", () => {
   // し、両方を受けるボタンは自分のラベルを失う。
   it("属性だけを求められた所では文字に触れない", () => {
     const root = render(
-      '<input data-i18n-placeholder="optionsPublicationPeriodValue" value="kept">',
+      '<input data-i18n-placeholder="optionsPublicationAgeValue" value="kept">',
     );
 
     localizeDocument(root);

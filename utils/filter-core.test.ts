@@ -7,7 +7,7 @@ import {
 
 const settings: ClassifyThresholds = {
   mediaEnabled: false,
-  inclusion: { minimum: 500, maximumAgeHours: null },
+  inclusion: { minimum: 500, minimumAgeHours: null },
   hideReplies: false,
   hideQuotes: false,
   hideReposts: true,
@@ -115,7 +115,7 @@ describe("classifyPost", () => {
         },
         {
           ...settings,
-          inclusion: { minimum: null, maximumAgeHours: null },
+          inclusion: { minimum: null, minimumAgeHours: null },
         },
       ),
     ).toEqual({ state: "visible", reason: "no-inclusion-filter" });
@@ -201,7 +201,7 @@ describe("classifyPost", () => {
     ).toEqual({ state: "visible", reason: "indeterminate-metric" });
   });
 
-  it("公開時期だけを指定して期間内の動画を残す", () => {
+  it("公開から指定期間以内の動画を隠す", () => {
     const now = Date.parse("2026-09-02T12:00:00Z");
     expect(
       classifyPost(
@@ -215,14 +215,14 @@ describe("classifyPost", () => {
         },
         {
           ...settings,
-          inclusion: { minimum: null, maximumAgeHours: 24 },
+          inclusion: { minimum: null, minimumAgeHours: 24 },
         },
         now,
       ),
-    ).toEqual({ state: "matched", reason: "filter-match" });
+    ).toEqual({ state: "hidden", reason: "newer-than-period" });
   });
 
-  it("指定した公開時期より古い動画を隠す", () => {
+  it("指定した公開時期より古い動画を残す", () => {
     const now = Date.parse("2026-09-02T12:00:00Z");
     expect(
       classifyPost(
@@ -236,11 +236,11 @@ describe("classifyPost", () => {
         },
         {
           ...settings,
-          inclusion: { minimum: 500, maximumAgeHours: 24 },
+          inclusion: { minimum: 500, minimumAgeHours: 24 },
         },
         now,
       ),
-    ).toEqual({ state: "hidden", reason: "outside-period" });
+    ).toEqual({ state: "matched", reason: "filter-match" });
   });
 
   it("公開時期を読めない動画は隠さない", () => {
@@ -256,7 +256,7 @@ describe("classifyPost", () => {
         },
         {
           ...settings,
-          inclusion: { minimum: 500, maximumAgeHours: 24 },
+          inclusion: { minimum: 500, minimumAgeHours: 24 },
         },
       ),
     ).toEqual({ state: "visible", reason: "indeterminate-age" });

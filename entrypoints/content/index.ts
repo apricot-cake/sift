@@ -23,6 +23,7 @@ import {
   thresholdsFor,
 } from "../../utils/settings.ts";
 import { settingsItem } from "../../utils/settings-storage.ts";
+import { SIDE_PANEL_CONTROL } from "../../utils/sidepanel-controls.ts";
 import { SITE_MATCHES } from "../../utils/site-matches.ts";
 import {
   isTimelineControlRequest,
@@ -61,6 +62,7 @@ export function startContentRuntime(
   let keepViewportOnNextFilter = false;
   let disposed = false;
   let pageFilteringEnabled = false;
+  let reportedTimelineAvailable: boolean | null = null;
   const loadWarningTracker = adapter.readPostId
     ? new ContinuousLoadWarningTracker()
     : null;
@@ -68,6 +70,20 @@ export function startContentRuntime(
 
   function filteringEnabled(): boolean {
     return pageFilteringEnabled;
+  }
+
+  function timelineAvailable(): boolean {
+    const available = adapter.isTimelineAvailable(document, location);
+    if (available !== reportedTimelineAvailable) {
+      reportedTimelineAvailable = available;
+      void browser.runtime
+        .sendMessage({
+          type: SIDE_PANEL_CONTROL.configureForTab,
+          available,
+        })
+        .catch(() => {});
+    }
+    return available;
   }
 
   function pageKey(): string {
@@ -252,8 +268,7 @@ export function startContentRuntime(
     // 次ページ確認中も画面遷移は追跡する。一時スクロールの座標は保存しない。
     if (filteringEnabled()) timelineViewport?.syncRoute();
 
-    const timelineAvailable = adapter.isTimelineAvailable(document, location);
-    if (!timelineAvailable) {
+    if (!timelineAvailable()) {
       if (filteringEnabled()) timelineViewport?.update();
       clearTimelineState();
       return;
@@ -378,7 +393,7 @@ export function startContentRuntime(
       layoutProbePausedByUser = false;
       loadWarningTracker?.reset(readCurrentPostIds());
     }
-    if (adapter.isTimelineAvailable(document, location)) {
+    if (timelineAvailable()) {
       scheduleFilter();
     } else {
       clearTimelineState();
@@ -398,7 +413,7 @@ export function startContentRuntime(
     }
     loadWarningTracker?.reset(readCurrentPostIds());
     keepViewportOnNextFilter = true;
-    if (adapter.isTimelineAvailable(document, location)) {
+    if (timelineAvailable()) {
       scheduleFilter();
     } else {
       clearTimelineState();
@@ -413,6 +428,7 @@ export function startContentRuntime(
         site: adapter.settingsKey,
         pageTitle: document.title,
         pageKey: pageKey(),
+        timelineAvailable: timelineAvailable(),
         filteringEnabled: filteringEnabled(),
         continuousLoadingWarning:
           filteringEnabled() && (loadWarningTracker?.warning ?? false),

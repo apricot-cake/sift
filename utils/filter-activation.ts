@@ -3,6 +3,7 @@ export function shouldEnableFiltering({
   hasNextPage,
   hasPreviousPage,
   pageChanged,
+  panelTabMatches,
   panelExpectedFiltering,
   panelInitialized,
 }: {
@@ -10,10 +11,11 @@ export function shouldEnableFiltering({
   hasNextPage: boolean;
   hasPreviousPage: boolean;
   pageChanged: boolean;
+  panelTabMatches: boolean;
   panelExpectedFiltering: boolean;
   panelInitialized: boolean;
 }): boolean {
-  if (!hasNextPage) {
+  if (!hasNextPage || !panelTabMatches) {
     return false;
   }
 
