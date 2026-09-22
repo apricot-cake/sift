@@ -14,6 +14,7 @@ describe("抽出の操作入口", () => {
     expect(background).toContain("browser.action.onClicked.addListener");
     expect(background).toContain("await sidePanel?.open({ tabId: tab.id })");
     expect(background).toContain("sidePanel?.setOptions({ enabled: false })");
+    expect(background).toContain("browser.runtime.onInstalled.addListener");
     expect(background).toContain("isSupportedSiteUrl(tab.url)");
     expect(background).toContain("browser.scripting.executeScript");
     expect(background).toContain("FILTER_CONTEXT_REQUEST");
@@ -100,6 +101,15 @@ describe("抽出の操作入口", () => {
     expect(periodSetting).toContain("disabled={!enabled}");
     expect(periodSetting).toContain("<Switch");
     expect(periodSetting).not.toContain('<SelectItem value="all">');
+  });
+
+  it("YouTubeだけでメンバー限定動画を除外できる", () => {
+    const sidepanel = readEntrypoint("entrypoints/sidepanel/sidepanel-app.tsx");
+
+    expect(sidepanel).toContain('t("optionsHideMembersOnly")');
+    expect(sidepanel).toContain('selectedSite === "youtube"');
+    expect(sidepanel).toContain('site === "youtube"');
+    expect(sidepanel).toContain("hideMembersOnly");
   });
 
   it("サイドパネルは現在タブへ追従し、他の設定は設定ページで管理する", () => {

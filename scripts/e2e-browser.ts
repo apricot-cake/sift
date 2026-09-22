@@ -404,6 +404,19 @@ async function settingsCombinations(
           ),
         ];
 
+  if (site === "youtube") {
+    cases.push({
+      ...base,
+      siteSettings: {
+        ...base.siteSettings,
+        youtube: {
+          ...base.siteSettings.youtube,
+          hideMembersOnly: true,
+        },
+      },
+    });
+  }
+
   for (const candidate of cases) {
     const saved = await setSettings(version, candidate);
     if (!sameJson(saved.siteSettings[site], candidate.siteSettings[site])) {
@@ -412,21 +425,38 @@ async function settingsCombinations(
   }
 }
 
-async function visibleFilterState(target: CdpTarget): Promise<number> {
+interface FilterStateInspection {
+  readonly cards: number;
+  readonly filterStates: number;
+  readonly visibility: string;
+}
+
+async function visibleFilterState(
+  target: CdpTarget,
+): Promise<FilterStateInspection> {
+  let latest: FilterStateInspection = {
+    cards: 0,
+    filterStates: 0,
+    visibility: "unknown",
+  };
   for (let attempt = 0; attempt < 30; attempt += 1) {
     const result = await cdpCall<{
-      result: { value?: number };
+      result: { value?: FilterStateInspection };
     }>(target.webSocketDebuggerUrl, "Runtime.evaluate", {
-      expression:
-        'document.querySelectorAll("[data-sift-filter-state]").length',
+      expression: `({
+        cards: document.querySelectorAll(${JSON.stringify("ytd-video-renderer, ytd-rich-item-renderer")}).length,
+        filterStates: document.querySelectorAll(${JSON.stringify("[data-sift-filter-state]")}).length,
+        visibility: document.visibilityState,
+      })`,
       returnByValue: true,
     });
-    if ((result.result.value ?? 0) > 0) {
-      return result.result.value ?? 0;
+    latest = result.result.value ?? latest;
+    if (latest.filterStates > 0) {
+      return latest;
     }
     await delay(500);
   }
-  return 0;
+  return latest;
 }
 
 async function verifyCase(
@@ -468,9 +498,11 @@ async function verifyCase(
   if (!filtering?.filteringEnabled) {
     throw new Error(`${page.label} でフィルタを有効にできなかった。`);
   }
-  if ((await visibleFilterState(target)) === 0) {
+  const filterState = await visibleFilterState(target);
+  if (filterState.filterStates === 0) {
     throw new Error(
-      `${page.label} の実在投稿へフィルタ状態を適用できなかった。`,
+      `${page.label} の実在投稿へフィルタ状態を適用できなかった。` +
+        ` 投稿カード: ${filterState.cards}件、可視状態: ${filterState.visibility}`,
     );
   }
   console.log(`PASS 対象ページ・設定反映: ${page.label}`);

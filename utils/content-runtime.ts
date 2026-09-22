@@ -300,6 +300,7 @@ export function startContentRuntime(
           isReply: adapter.readIsReply?.(postCard) ?? false,
           isQuote: adapter.readIsQuote?.(postCard) ?? false,
           isRepost: adapter.readIsRepost(postCard),
+          isMembersOnly: adapter.readIsMembersOnly?.(postCard) ?? false,
         },
         thresholdsFor(siteSettings),
       );

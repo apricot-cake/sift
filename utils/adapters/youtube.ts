@@ -17,10 +17,13 @@ const YOUTUBE_SELECTORS = Object.freeze({
     "a#video-title, a#video-title-link, a.shortsLockupViewModelHostEndpoint, h3 a[href]",
   metadata:
     "#metadata-line span, .inline-metadata-item, .ytContentMetadataViewModelMetadataText, [class*='MetadataSubhead'], [class*='metadata-subhead']",
+  memberBadge:
+    "ytd-badge-supported-renderer, yt-badge-shape, [class*='members-only']",
 });
 
 const VIEW_LABEL =
   /(?:views?|回視聴|回再生|조회수|次觀看|次观看|visualizaciones?|visualiza(?:ç|c)[õo]es?)/i;
+const MEMBERS_ONLY_LABEL = /(?:members?\s+only|メンバー限定)/i;
 
 const AGE_IN_MILLISECONDS: Readonly<Record<string, number>> = Object.freeze({
   second: 1000,
@@ -289,6 +292,19 @@ export const youtubeAdapter = Object.freeze({
 
   readMedia(_postCard: Element) {
     return { hasImage: false, hasVideo: true };
+  },
+
+  readIsMembersOnly(postCard: Element) {
+    return Array.from(
+      postCard.querySelectorAll(YOUTUBE_SELECTORS.memberBadge),
+    ).some((badge) => {
+      if (badge.matches("[class*='members-only']")) {
+        return true;
+      }
+      return MEMBERS_ONLY_LABEL.test(
+        `${badge.getAttribute("aria-label") ?? ""} ${badge.textContent ?? ""}`,
+      );
+    });
   },
 
   readIsRepost(_postCard: Element) {

@@ -28,6 +28,7 @@ describe("normalizeSettings", () => {
       hidePublishedWithinEnabled: false,
       hidePublishedWithinValue: 1,
       hidePublishedWithinUnit: "year",
+      hideMembersOnly: false,
     });
     expect(defaults.siteSettings.niconico.minCount).toBe(1000);
   });
@@ -156,6 +157,7 @@ describe("normalizeSettings", () => {
       hidePublishedWithinEnabled: false,
       hidePublishedWithinValue: 1,
       hidePublishedWithinUnit: "year",
+      hideMembersOnly: false,
     });
     expect("publishedWithinEnabled" in settings.siteSettings.youtube).toBe(
       false,
@@ -219,6 +221,7 @@ describe("thresholdsFor", () => {
         minimum: 20000,
         minimumAgeHours: 336,
       },
+      hideMembersOnly: false,
     });
   });
 

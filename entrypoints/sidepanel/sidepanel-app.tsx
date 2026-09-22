@@ -21,6 +21,7 @@ import {
   type SiteSettingsKey,
   settingsFor,
   withSiteSettings,
+  type YouTubeSiteSettings,
 } from "../../utils/settings.ts";
 import { settingsItem } from "../../utils/settings-storage.ts";
 import {
@@ -301,7 +302,10 @@ export function SidepanelApp({
 
   const saveSiteSettings = (
     site: SiteSettingsKey,
-    nextSiteSettings: ReactionSiteSettings | MetricSiteSettings,
+    nextSiteSettings:
+      | ReactionSiteSettings
+      | MetricSiteSettings
+      | YouTubeSiteSettings,
   ): void => {
     saveSettings(withSiteSettings(settings, site, nextSiteSettings));
   };
@@ -438,6 +442,18 @@ export function SidepanelApp({
                             )
                           }
                         />
+                        {selectedSite === "youtube" &&
+                          isYouTubeSiteSettings(selectedSettings) && (
+                            <MembersOnlySetting
+                              enabled={selectedSettings.hideMembersOnly}
+                              onEnabledChange={(value) =>
+                                saveSiteSettings(selectedSite, {
+                                  ...selectedSettings,
+                                  hideMembersOnly: value,
+                                })
+                              }
+                            />
+                          )}
                       </>
                     ) : (
                       <ThresholdSetting
@@ -555,13 +571,21 @@ export function SidepanelApp({
   );
 }
 
+function isYouTubeSiteSettings(
+  settings: ReactionSiteSettings | MetricSiteSettings | YouTubeSiteSettings,
+): settings is YouTubeSiteSettings {
+  return "hideMembersOnly" in settings;
+}
+
 function SiteSettingsEditor({
   onSave,
   settings,
   site,
 }: {
-  onSave: (settings: ReactionSiteSettings | MetricSiteSettings) => void;
-  settings: ReactionSiteSettings | MetricSiteSettings;
+  onSave: (
+    settings: ReactionSiteSettings | MetricSiteSettings | YouTubeSiteSettings,
+  ) => void;
+  settings: ReactionSiteSettings | MetricSiteSettings | YouTubeSiteSettings;
   site: SiteSettingsKey;
 }): React.JSX.Element {
   const updateReaction = <Key extends keyof ReactionSiteSettings>(
@@ -623,6 +647,14 @@ function SiteSettingsEditor({
                     updateMetric("hidePublishedWithinValue", value)
                   }
                 />
+                {site === "youtube" && isYouTubeSiteSettings(settings) && (
+                  <MembersOnlySetting
+                    enabled={settings.hideMembersOnly}
+                    onEnabledChange={(value) =>
+                      onSave({ ...settings, hideMembersOnly: value })
+                    }
+                  />
+                )}
               </>
             ) : (
               <ThresholdSetting
@@ -815,6 +847,25 @@ function EditableNumberInput({
         }
       }}
     />
+  );
+}
+
+function MembersOnlySetting({
+  enabled,
+  onEnabledChange,
+}: {
+  enabled: boolean;
+  onEnabledChange: (value: boolean) => void;
+}): React.JSX.Element {
+  const label = t("optionsHideMembersOnly");
+  return (
+    <SettingRow label={label}>
+      <Switch
+        aria-label={label}
+        checked={enabled}
+        onCheckedChange={onEnabledChange}
+      />
+    </SettingRow>
   );
 }
 

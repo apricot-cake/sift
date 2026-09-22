@@ -245,4 +245,26 @@ describe("YouTube の動画情報を読む", () => {
     });
     expect(youtubeAdapter.readIsRepost(video)).toBe(false);
   });
+
+  it("画面上のメンバー限定バッジを読む", () => {
+    const video = renderVideo(`
+      <ytd-badge-supported-renderer>メンバー限定</ytd-badge-supported-renderer>
+    `);
+
+    expect(youtubeAdapter.readIsMembersOnly?.(video)).toBe(true);
+  });
+
+  it("アクセシブルな英語のメンバー限定バッジを読む", () => {
+    const video = renderVideo(
+      '<yt-badge-shape aria-label="Members only"></yt-badge-shape>',
+    );
+
+    expect(youtubeAdapter.readIsMembersOnly?.(video)).toBe(true);
+  });
+
+  it("バッジ以外の動画タイトルはメンバー限定として扱わない", () => {
+    const video = renderVideo('<a id="video-title">Members only Q&A</a>');
+
+    expect(youtubeAdapter.readIsMembersOnly?.(video)).toBe(false);
+  });
 });

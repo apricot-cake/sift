@@ -27,10 +27,14 @@ export interface MetricSiteSettings {
   readonly hidePublishedWithinUnit: PublicationAgeUnit;
 }
 
+export interface YouTubeSiteSettings extends MetricSiteSettings {
+  readonly hideMembersOnly: boolean;
+}
+
 export interface SiteSettingsMap {
   readonly x: ReactionSiteSettings;
   readonly bluesky: ReactionSiteSettings;
-  readonly youtube: MetricSiteSettings;
+  readonly youtube: YouTubeSiteSettings;
   readonly niconico: MetricSiteSettings;
 }
 
@@ -68,11 +72,20 @@ function defaultMetricSiteSettings(
   });
 }
 
+function defaultYouTubeSiteSettings(
+  minCount: number,
+): Readonly<YouTubeSiteSettings> {
+  return Object.freeze({
+    ...defaultMetricSiteSettings(minCount),
+    hideMembersOnly: false,
+  });
+}
+
 export const defaults: Readonly<Settings> = Object.freeze({
   siteSettings: Object.freeze({
     x: defaultReactionSiteSettings(1000),
     bluesky: defaultReactionSiteSettings(1000),
-    youtube: defaultMetricSiteSettings(10000),
+    youtube: defaultYouTubeSiteSettings(10000),
     niconico: defaultMetricSiteSettings(1000),
   }),
 });
@@ -190,6 +203,20 @@ function normalizeMetricSiteSettings(
   };
 }
 
+function normalizeYouTubeSiteSettings(
+  value: unknown,
+  fallback: YouTubeSiteSettings,
+): YouTubeSiteSettings {
+  const source = objectSource(value);
+  return {
+    ...normalizeMetricSiteSettings(value, fallback),
+    hideMembersOnly:
+      typeof source.hideMembersOnly === "boolean"
+        ? source.hideMembersOnly
+        : fallback.hideMembersOnly,
+  };
+}
+
 export function normalizeSettings(value: unknown): Settings {
   const source = objectSource(value);
   const storedSiteSettings = objectSource(source.siteSettings);
@@ -204,7 +231,7 @@ export function normalizeSettings(value: unknown): Settings {
   const siteSettings: SiteSettingsMap = {
     x: normalizeReactionFor("x"),
     bluesky: normalizeReactionFor("bluesky"),
-    youtube: normalizeMetricSiteSettings(
+    youtube: normalizeYouTubeSiteSettings(
       storedSiteSettings.youtube,
       defaults.siteSettings.youtube,
     ),
@@ -268,6 +295,8 @@ export function thresholdsFor(settings: SiteSettings): ClassifyThresholds {
             )
           : null,
       },
+      hideMembersOnly:
+        "hideMembersOnly" in settings && settings.hideMembersOnly,
     };
   }
   return {

@@ -47,8 +47,12 @@ export default defineBackground(() => {
     .sidePanel;
 
   // default_path は WXT が manifest に生成する。パネルはユーザーが action を
-  // 実行し、現在のタブが対応タイムラインだと確認できた場合だけ開く。
-  void sidePanel?.setOptions({ enabled: false });
+  // 実行し、現在のタブが対応タイムラインだと確認できた場合だけ開く。worker の
+  // 起動ごとに無効化すると、action 後に worker が再起動しただけで開いたパネルが
+  // 無効になるため、初回インストールまたは更新時だけ既定値を設定する。
+  browser.runtime.onInstalled.addListener(() => {
+    void sidePanel?.setOptions({ enabled: false });
+  });
 
   async function openPanelForActiveTab(tab: Browser.tabs.Tab): Promise<void> {
     if (tab.id === undefined || !isSupportedSiteUrl(tab.url)) {

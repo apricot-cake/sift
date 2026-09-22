@@ -116,6 +116,7 @@ export interface Post {
   isReply: boolean;
   isQuote: boolean;
   isRepost: boolean;
+  isMembersOnly?: boolean;
 }
 
 export interface InclusionThreshold {
@@ -129,6 +130,7 @@ export interface ClassifyThresholds {
   hideReposts: boolean;
   inclusion: InclusionThreshold;
   mediaEnabled: boolean;
+  hideMembersOnly?: boolean;
 }
 
 export type ClassifyState = "visible" | "matched" | "hidden";
@@ -137,6 +139,7 @@ export type ClassifyReason =
   | "reply"
   | "quote"
   | "repost"
+  | "members-only"
   | "indeterminate-metric"
   | "indeterminate-age"
   | "newer-than-period"
@@ -168,6 +171,10 @@ export function classifyPost(
 
   if (settings.hideQuotes && post.isQuote) {
     return { state: "hidden", reason: "quote" };
+  }
+
+  if (settings.hideMembersOnly && post.isMembersOnly) {
+    return { state: "hidden", reason: "members-only" };
   }
 
   if (

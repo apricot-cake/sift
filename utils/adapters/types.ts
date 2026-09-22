@@ -46,6 +46,8 @@ export interface ServiceAdapter {
   // 公開時刻を一覧から読めるサービスだけが実装する。読めない場合は NaN。
   readCreatedAt?(postCard: Element): number;
   readMedia(postCard: Element): PostMedia;
+  // 画面上のメンバー限定バッジを読めるサービスだけが実装する。
+  readIsMembersOnly?(postCard: Element): boolean;
   // 返信・引用の区別を画面に持つサービスだけが実装する。
   readIsReply?(postCard: Element): boolean;
   readIsQuote?(postCard: Element): boolean;

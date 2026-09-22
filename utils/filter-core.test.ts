@@ -153,6 +153,23 @@ describe("classifyPost", () => {
     ).toEqual({ state: "hidden", reason: "repost" });
   });
 
+  it("メンバー限定の除外を有効にしたときだけ対象動画を隠す", () => {
+    expect(
+      classifyPost(
+        {
+          mediaMatches: true,
+          metricCount: 1000,
+          createdAtMs: Number.NaN,
+          isReply: false,
+          isQuote: false,
+          isRepost: false,
+          isMembersOnly: true,
+        },
+        { ...settings, hideMembersOnly: true },
+      ),
+    ).toEqual({ state: "hidden", reason: "members-only" });
+  });
+
   it("設定が入っている間、返信を隠す", () => {
     expect(
       classifyPost(
