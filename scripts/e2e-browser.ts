@@ -249,6 +249,23 @@ async function wakeExtension(version: DevBrowserEndpoint): Promise<void> {
   });
 }
 
+async function waitForPanelDefaultSetup(
+  version: DevBrowserEndpoint,
+): Promise<void> {
+  // Extensions.loadUnpacked の直後は onInstalled による既定値設定が非同期で
+  // 走る。実際の利用ではインストール完了後に操作するため、CI も同じ状態から
+  // action を実行する。
+  for (let attempt = 0; attempt < 40; attempt += 1) {
+    const options = await evaluateExtension<{ enabled?: boolean }>(
+      version,
+      "chrome.sidePanel.getOptions({})",
+    );
+    if (options.enabled === false) return;
+    await delay(250);
+  }
+  throw new Error("サイドパネルの初期設定が完了しなかった。");
+}
+
 async function tabIdForTarget(
   version: DevBrowserEndpoint,
   target: CdpTarget,
@@ -516,6 +533,9 @@ if (!version) {
 }
 
 await wakeExtension(version);
+if (process.env.SIFT_E2E_MODE === "ci") {
+  await waitForPanelDefaultSetup(version);
+}
 await verifySessionStorage(version);
 const savedSettings = await currentSettings(version);
 try {
