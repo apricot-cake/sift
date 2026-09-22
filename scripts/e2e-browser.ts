@@ -73,6 +73,12 @@ const PAGE_CASES: readonly PageCase[] = [
     site: "youtube",
   },
   {
+    label: "YouTube チャンネルの動画",
+    url: "https://www.youtube.com/@GoogleJapan/videos",
+    available: true,
+    site: "youtube",
+  },
+  {
     label: "YouTube の視聴ページ",
     url: "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
     available: false,
