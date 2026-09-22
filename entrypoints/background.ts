@@ -1,75 +1,88 @@
 import { browser } from "wxt/browser";
+import { contentStyle } from "../utils/content-style.ts";
 import {
-  isSidePanelConfigureRequest,
+  FILTER_CONTEXT_REQUEST,
+  type FilterContextResponse,
+  isFilterContextResponse,
+} from "../utils/filter-context.ts";
+import {
   SIDE_PANEL_CONTROL,
+  SIDE_PANEL_TAB_STORAGE_KEY,
 } from "../utils/sidepanel-controls.ts";
 import { isSupportedSiteUrl } from "../utils/site-matches.ts";
 import { TIMELINE_CONTROL } from "../utils/timeline-controls.ts";
+
+const FILTER_CONTEXT_RETRY_COUNT = 8;
+const FILTER_CONTEXT_RETRY_DELAY_MS = 25;
+
+function waitForContentRuntime(): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, FILTER_CONTEXT_RETRY_DELAY_MS);
+  });
+}
+
+async function readFilterContext(
+  tabId: number,
+): Promise<FilterContextResponse | null> {
+  // 動的に注入する sift.js は executeScript が完了した直後でも、メッセージの
+  // 受信準備を終えていないことがある。最初のクリックを捨てないよう、短時間だけ
+  // 受信側の起動を待つ。
+  for (let attempt = 0; attempt < FILTER_CONTEXT_RETRY_COUNT; attempt += 1) {
+    const context = await browser.tabs
+      .sendMessage(tabId, { type: FILTER_CONTEXT_REQUEST })
+      .then((response) => (isFilterContextResponse(response) ? response : null))
+      .catch(() => null);
+    if (context !== null) {
+      return context;
+    }
+    if (attempt + 1 < FILTER_CONTEXT_RETRY_COUNT) {
+      await waitForContentRuntime();
+    }
+  }
+  return null;
+}
 
 export default defineBackground(() => {
   const sidePanel = (browser as { sidePanel?: typeof browser.sidePanel })
     .sidePanel;
 
-  const configureSidePanel = (
-    tab: Browser.tabs.Tab,
-    enabled: boolean,
-  ): void => {
-    if (tab.id === undefined) {
-      return;
-    }
-    void sidePanel
-      ?.setOptions({
-        tabId: tab.id,
-        path: "sidepanel.html",
-        enabled,
-      })
-      .catch(() => {});
-  };
+  // default_path は WXT が manifest に生成する。パネルはユーザーが action を
+  // 実行し、現在のタブが対応タイムラインだと確認できた場合だけ開く。
+  void sidePanel?.setOptions({ enabled: false });
 
-  // default_path は WXT が manifest に生成する。グローバルな既定値を無効にして、
-  // 対応サイトごとに作るタブ固有パネルだけを開けるようにする。
-  const sidePanelReady = (async () => {
-    await sidePanel?.setOptions({ enabled: false });
-    await sidePanel?.setPanelBehavior({ openPanelOnActionClick: true });
-    const tabs = await browser.tabs.query({});
-    tabs.forEach((tab) => {
-      configureSidePanel(tab, false);
-    });
-  })();
-  // setPanelBehavior だけに任せると、CDP 経由の action 実行でパネルが開かない
-  // Chrome があるため、クリック時にもタブ固有の有効状態を確認して明示的に開く。
-  browser.action.onClicked.addListener((tab) => {
-    const tabId = tab.id;
-    if (tabId === undefined) {
+  async function openPanelForActiveTab(tab: Browser.tabs.Tab): Promise<void> {
+    if (tab.id === undefined || !isSupportedSiteUrl(tab.url)) {
       return;
     }
-    void sidePanelReady.then(async () => {
-      const options = await sidePanel?.getOptions({ tabId });
-      if (options?.enabled) {
-        await sidePanel?.open({ tabId });
-      }
+
+    const target = { tabId: tab.id };
+    await browser.scripting.insertCSS({ target, css: contentStyle });
+    await browser.scripting.executeScript({ target, files: ["/sift.js"] });
+    const context = await readFilterContext(tab.id);
+    if (context === null || !context.timelineAvailable) {
+      return;
+    }
+
+    await browser.storage.session.set({
+      [SIDE_PANEL_TAB_STORAGE_KEY]: tab.id,
     });
+    await sidePanel?.setOptions({
+      tabId: tab.id,
+      path: "sidepanel.html",
+      enabled: true,
+    });
+    await sidePanel?.open({ tabId: tab.id });
+  }
+
+  browser.action.onClicked.addListener((tab) => {
+    void openPanelForActiveTab(tab).catch(() => {});
   });
-  browser.tabs.onUpdated.addListener((_tabId, changeInfo, tab) => {
-    if (changeInfo.url !== undefined) {
-      void sidePanelReady.then(() => configureSidePanel(tab, false));
-    }
-  });
-  browser.runtime.onMessage.addListener((message, sender) => {
-    const tab = sender.tab;
-    const url = sender.url;
-    if (
-      isSidePanelConfigureRequest(message) &&
-      tab !== undefined &&
-      url !== undefined
-    ) {
-      void sidePanelReady.then(() =>
-        configureSidePanel(tab, message.available && isSupportedSiteUrl(url)),
-      );
-    }
-  });
+
   sidePanel?.onOpened.addListener((panel) => {
     if (panel.path === "sidepanel.html" && panel.tabId !== undefined) {
+      void browser.storage.session.set({
+        [SIDE_PANEL_TAB_STORAGE_KEY]: panel.tabId,
+      });
       void browser.runtime
         .sendMessage({
           type: SIDE_PANEL_CONTROL.setPanelTab,

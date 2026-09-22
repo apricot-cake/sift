@@ -9,33 +9,25 @@ function readEntrypoint(path: string): string {
 describe("抽出の操作入口", () => {
   it("対応サイトのタブでだけアイコンからサイドパネルを開く", () => {
     const background = readEntrypoint("entrypoints/background.ts");
-    const content = readEntrypoint("entrypoints/content/index.ts");
+    const content = readEntrypoint("entrypoints/sift.ts");
 
-    expect(background).toContain("openPanelOnActionClick: true");
     expect(background).toContain("browser.action.onClicked.addListener");
-    expect(background).toContain("await sidePanel?.open({ tabId })");
+    expect(background).toContain("await sidePanel?.open({ tabId: tab.id })");
     expect(background).toContain("sidePanel?.setOptions({ enabled: false })");
-    expect(background).toContain(
-      "await sidePanel?.setOptions({ enabled: false })",
-    );
-    expect(background).toContain("const tabs = await browser.tabs.query({})");
-    expect(background).toContain(
-      "sidePanelReady.then(() => configureSidePanel",
-    );
-    expect(background).toContain("isSidePanelConfigureRequest(message)");
-    expect(background).toContain("const url = sender.url");
-    expect(background).toContain(
-      "configureSidePanel(tab, message.available && isSupportedSiteUrl(url))",
-    );
+    expect(background).toContain("isSupportedSiteUrl(tab.url)");
+    expect(background).toContain("browser.scripting.executeScript");
+    expect(background).toContain("FILTER_CONTEXT_REQUEST");
+    expect(background).toContain("readFilterContext(tab.id)");
+    expect(background).toContain("FILTER_CONTEXT_RETRY_COUNT");
     expect(background).toContain("sidePanel?.onOpened.addListener");
     expect(background).toContain("SIDE_PANEL_CONTROL.setPanelTab");
     expect(background).toContain('path: "sidepanel.html"');
-    expect(content).toContain("SIDE_PANEL_CONTROL.configureForTab");
+    expect(content).toContain("defineUnlistedScript");
     expect(background).not.toContain("openOptionsPage");
   });
 
   it("ページ上に操作UIを追加しない", () => {
-    const content = readEntrypoint("entrypoints/content/index.ts");
+    const content = readEntrypoint("utils/content-runtime.ts");
     const sidepanel = readEntrypoint("entrypoints/sidepanel/sidepanel-app.tsx");
 
     expect(content).not.toContain("siftEmptyState");
@@ -45,7 +37,7 @@ describe("抽出の操作入口", () => {
   });
 
   it("連続読み込みは停止せずサイドパネルから解除できる", () => {
-    const content = readEntrypoint("entrypoints/content/index.ts");
+    const content = readEntrypoint("utils/content-runtime.ts");
     const sidepanel = readEntrypoint("entrypoints/sidepanel/sidepanel-app.tsx");
 
     expect(content).toContain("continuousLoadingWarning");
@@ -111,6 +103,7 @@ describe("抽出の操作入口", () => {
   });
 
   it("サイドパネルは現在タブへ追従し、他の設定は設定ページで管理する", () => {
+    const background = readEntrypoint("entrypoints/background.ts");
     const sidepanel = readEntrypoint("entrypoints/sidepanel/sidepanel-app.tsx");
     const options = readEntrypoint("entrypoints/options/main.tsx");
 
@@ -129,6 +122,13 @@ describe("抽出の操作入口", () => {
     expect(sidepanel).toContain("browser.tabs.onActivated.addListener");
     expect(sidepanel).toContain("shouldEnableFiltering");
     expect(sidepanel).toContain("isSidePanelTabRequest(message)");
+    expect(sidepanel).toContain("SIDE_PANEL_TAB_STORAGE_KEY");
+    expect(sidepanel).toContain("browser.storage.session");
+    expect(sidepanel).toContain(".finally(() => refreshActiveHost(true))");
+    expect(background).toContain("await browser.storage.session.set");
+    expect(
+      background.indexOf("await browser.storage.session.set"),
+    ).toBeLessThan(background.indexOf("await sidePanel?.open"));
     expect(sidepanel).toContain("panelTabId.current = message.tabId");
     expect(sidepanel).toContain("pageFilteringExpected.current");
     expect(sidepanel).toContain("browser.runtime.openOptionsPage");
@@ -205,7 +205,7 @@ describe("抽出の操作入口", () => {
     const config = readEntrypoint("wxt.config.ts");
     const sidepanel = readEntrypoint("entrypoints/sidepanel/sidepanel-app.tsx");
 
-    expect(config).not.toContain('"activeTab"');
+    expect(config).toContain('"activeTab"');
     expect(sidepanel).toContain("context?.site ?? null");
   });
 

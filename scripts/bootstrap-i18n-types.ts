@@ -5,7 +5,7 @@
 // Vite の SSR で実際に実行される
 // （node_modules/wxt/dist/core/utils/building/find-entrypoints.mjs の
 // importEntrypoints() → wxt/dist/core/builders/vite/index.mjs の
-// importEntrypoints()）。entrypoints/content/index.ts は utils/i18n.ts を経て
+// importEntrypoints()）。utils/content-runtime.ts は utils/i18n.ts を経て
 // `#i18n` を静的 import しているが、`#i18n`（.wxt/i18n/index.ts）を書き出すのは
 // @wxt-dev/i18n の prepare:types フックで、それが走るのは
 // generateWxtDir()＝findEntrypoints() の後（wxt/dist/core/prepare.mjs）。

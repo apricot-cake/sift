@@ -4,12 +4,12 @@ import { ContentScriptContext } from "wxt/utils/content-script-context";
 import { blueskyAdapter } from "../../utils/adapters/bluesky.ts";
 import { xAdapter } from "../../utils/adapters/x.ts";
 import { youtubeAdapter } from "../../utils/adapters/youtube.ts";
+import { startContentRuntime } from "../../utils/content-runtime.ts";
 import {
   FILTER_CONTEXT_REQUEST,
   type FilterContextResponse,
 } from "../../utils/filter-context.ts";
 import { TIMELINE_CONTROL } from "../../utils/timeline-controls.ts";
-import { startContentRuntime } from "./index.ts";
 
 const timelineMarkup = `
   <div data-testid="cellInnerDiv">

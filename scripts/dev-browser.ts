@@ -15,7 +15,9 @@ import {
 const ROOT = path.resolve(import.meta.dirname, "..");
 const PROFILE =
   process.env.SIFT_DEV_PROFILE || path.join(homedir(), ".sift-ext-profile");
-const OUTPUT = path.join(ROOT, ".output", "chrome-mv3");
+const OUTPUT = process.env.SIFT_EXTENSION_OUTPUT
+  ? path.resolve(process.env.SIFT_EXTENSION_OUTPUT)
+  : path.join(ROOT, ".output", "chrome-mv3");
 const EXTENSION_ID = "bohbpocokkfioejlabmeaimpkpmablkm";
 const CDP_HOST = "127.0.0.1";
 

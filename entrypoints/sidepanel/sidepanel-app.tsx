@@ -23,7 +23,11 @@ import {
   withSiteSettings,
 } from "../../utils/settings.ts";
 import { settingsItem } from "../../utils/settings-storage.ts";
-import { isSidePanelTabRequest } from "../../utils/sidepanel-controls.ts";
+import {
+  isSidePanelTabId,
+  isSidePanelTabRequest,
+  SIDE_PANEL_TAB_STORAGE_KEY,
+} from "../../utils/sidepanel-controls.ts";
 import { TIMELINE_CONTROL } from "../../utils/timeline-controls.ts";
 import { Button } from "../options/components/ui/button.tsx";
 import { Card, CardContent } from "../options/components/ui/card.tsx";
@@ -250,7 +254,16 @@ export function SidepanelApp({
       panelInitialized.current = false;
       void refreshActiveHost(true);
     };
-    void refreshActiveHost(true);
+    void browser.storage.session
+      .get(SIDE_PANEL_TAB_STORAGE_KEY)
+      .then((stored) => {
+        const tabId = stored[SIDE_PANEL_TAB_STORAGE_KEY];
+        if (isSidePanelTabId(tabId)) {
+          panelTabId.current = tabId;
+        }
+      })
+      .catch(() => {})
+      .finally(() => refreshActiveHost(true));
     const contextTimer = window.setInterval(() => {
       void refreshActiveHost();
     }, 750);

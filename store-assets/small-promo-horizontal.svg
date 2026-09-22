@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="440" height="280" viewBox="0 0 440 280">
+  <title>Sift</title>
+  <image href="icon.png" x="64" y="76" width="128" height="128"/>
+  <text
+    x="222"
+    y="164"
+    fill="#000000"
+    font-family="Consolas, 'Courier New', monospace"
+    font-size="72"
+    font-weight="700"
+    letter-spacing="-5"
+  >Sift</text>
+</svg>

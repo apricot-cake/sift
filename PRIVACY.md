@@ -2,7 +2,7 @@
 
 最終更新日: 2026年9月2日
 
-Sift は、対応サイトの画面に表示された投稿や動画を、ユーザーが指定した条件で絞り込む Chrome 拡張機能です。
+Sift は、ユーザーがツールバーのアイコンを押した対応サイトで、画面に表示された投稿や動画を指定した条件で絞り込む Chrome 拡張機能です。
 
 ## 扱うデータ
 
@@ -34,7 +34,7 @@ Sift is a Chrome extension that filters posts and videos displayed on supported 
 
 ## Data handled by Sift
 
-Sift reads only the information needed for filtering from the supported website currently displayed in the browser. This includes reaction counts, view counts, publication time, content type, and whether an item is a reply, quote post, or repost. Processing occurs entirely within the browser. Sift does not store viewed post or video content, account information, or browsing history.
+When the user opens Sift from the toolbar on a supported website, Sift reads only the information needed for filtering from the page currently displayed in the browser. This includes reaction counts, view counts, publication time, content type, and whether an item is a reply, quote post, or repost. Processing occurs entirely within the browser. Sift does not store viewed post or video content, account information, or browsing history.
 
 Filtering preferences for each website are stored in Chrome sync storage. If Chrome sync is enabled, Chrome may synchronize these preferences between browsers signed in to the same account. The developer does not receive these preferences.
 

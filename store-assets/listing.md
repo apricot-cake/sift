@@ -77,7 +77,7 @@ Productivity
 
 - ホームページ: https://github.com/apricot-cake/sift
 - サポート: https://github.com/apricot-cake/sift/issues
-- プライバシーポリシー: https://github.com/apricot-cake/sift/blob/main/PRIVACY.md
+- プライバシーポリシー: https://raw.githubusercontent.com/apricot-cake/sift/main/PRIVACY.md
 
 ## 提出前にダッシュボードで決める項目
 

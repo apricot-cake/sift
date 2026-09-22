@@ -1,41 +1,37 @@
 import { browser } from "wxt/browser";
 import type { ContentScriptContext } from "wxt/utils/content-script-context";
-import { selectAdapter } from "../../utils/adapters/index.ts";
-import type { ServiceAdapter } from "../../utils/adapters/types.ts";
+import type { ServiceAdapter } from "./adapters/types.ts";
 import {
   type ContinuousLoadObservation,
   ContinuousLoadWarningTracker,
-} from "../../utils/continuous-load-warning.ts";
+} from "./continuous-load-warning.ts";
 import {
   type FilterContextResponse,
   isFilterContextRequest,
-} from "../../utils/filter-context.ts";
+} from "./filter-context.ts";
 import {
   type ClassifyReason,
   type ClassifyState,
   classifyPost,
-} from "../../utils/filter-core.ts";
+} from "./filter-core.ts";
 import {
   defaults,
   normalizeSettings,
   type Settings,
   settingsFor,
   thresholdsFor,
-} from "../../utils/settings.ts";
-import { settingsItem } from "../../utils/settings-storage.ts";
-import { SIDE_PANEL_CONTROL } from "../../utils/sidepanel-controls.ts";
-import { SITE_MATCHES } from "../../utils/site-matches.ts";
+} from "./settings.ts";
+import { settingsItem } from "./settings-storage.ts";
 import {
   isTimelineControlRequest,
   TIMELINE_CONTROL,
-} from "../../utils/timeline-controls.ts";
-import { TimelineViewport } from "../../utils/timeline-viewport.ts";
-import "./style.css";
+} from "./timeline-controls.ts";
+import { TimelineViewport } from "./timeline-viewport.ts";
 
 const HIDDEN_THREAD_CONNECTOR = "data-sift-thread-connector-hidden";
 
 export function startContentRuntime(
-  _ctx: ContentScriptContext,
+  _ctx: ContentScriptContext | undefined,
   maybeAdapter: ServiceAdapter | null,
 ) {
   // ここには読むものが無い。それでも実行環境が dispose() に答えるのは、呼び出し
@@ -76,12 +72,6 @@ export function startContentRuntime(
     const available = adapter.isTimelineAvailable(document, location);
     if (available !== reportedTimelineAvailable) {
       reportedTimelineAvailable = available;
-      void browser.runtime
-        .sendMessage({
-          type: SIDE_PANEL_CONTROL.configureForTab,
-          available,
-        })
-        .catch(() => {});
     }
     return available;
   }
@@ -651,11 +641,3 @@ export function startContentRuntime(
 
   return { dispose };
 }
-
-export default defineContentScript({
-  matches: SITE_MATCHES,
-  runAt: "document_idle",
-  main(ctx) {
-    startContentRuntime(ctx, selectAdapter(location.hostname));
-  },
-});

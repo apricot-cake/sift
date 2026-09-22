@@ -3,6 +3,26 @@ import fs from "node:fs";
 import path from "node:path";
 
 export function findChromePath(): string {
+  if (process.platform !== "win32") {
+    for (const command of [
+      "google-chrome",
+      "google-chrome-stable",
+      "chromium",
+      "chromium-browser",
+    ]) {
+      try {
+        const found = execFileSync("which", [command], {
+          encoding: "utf8",
+        }).trim();
+        if (found && fs.existsSync(found)) return found;
+      } catch {
+        // 次の候補を探す。
+      }
+    }
+    throw new Error(
+      "Chrome が見つからない。SIFT_CHROME にその完全な経路を設定してください。",
+    );
+  }
   const candidates = [
     path.join(
       process.env.PROGRAMFILES || "C:\\Program Files",

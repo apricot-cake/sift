@@ -62,3 +62,33 @@ jobs:
       # `wxt build` のあとに verify:manifest＝生成された release の manifest
       # が、ソースの宣言どおりのものを持っているか（content script を含む）。
       - run: npm run build
+
+  browser-e2e:
+    name: ブラウザ E2E
+    # 認証不要の実在ページを使うため、PR の合否判定には含めず main への push 後に
+    # 独立して実行する。外部サイト側の一時障害も、artifact とログで切り分ける。
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .node-version
+          cache: npm
+
+      - run: npm ci
+
+      # headed Chrome を仮想ディスプレイで撮影する。CDP は Sift の action を
+      # 非干渉で起動し、ImageMagick は Chrome 本体を含む実画面を保存する。
+      - run: sudo apt-get update && sudo apt-get install --yes --no-install-recommends imagemagick
+      - run: npm run build:e2e
+      - run: xvfb-run --auto-servernum --server-args="-screen 0 1440x1000x24" npm run test:e2e:visual
+
+      - if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: sift-browser-e2e-${{ github.sha }}
+          path: test-results/browser-e2e
+          if-no-files-found: warn
+          retention-days: 14

@@ -14,7 +14,7 @@ function readFromRoot(path: string): string {
 }
 
 const contentStyles = readFromRoot("entrypoints/content/style.css");
-const contentScript = readFromRoot("entrypoints/content/index.ts");
+const contentScript = readFromRoot("entrypoints/sift.ts");
 
 describe("content のスタイルシート", () => {
   // サービスごとの画面構造はアダプターだけで扱い、表示制御の CSS へ戻さない。

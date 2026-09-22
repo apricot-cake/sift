@@ -1,6 +1,6 @@
 {
   "name": "sift",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "private": true,
   "type": "module",
   "engines": {
@@ -9,7 +9,10 @@
   "scripts": {
     "dev:browser": "node scripts/dev-browser.ts",
     "verify:browser": "node scripts/dev-browser.ts --verify",
+    "test:e2e:browser": "node scripts/e2e-browser.ts",
+    "test:e2e:visual": "node scripts/e2e-browser-visual.ts",
     "build": "node scripts/build-extension.ts store",
+    "build:e2e": "node scripts/build-extension.ts e2e",
     "zip:store": "node scripts/build-extension.ts store zip",
     "deploy": "node scripts/deploy-extension.ts",
     "lint": "biome ci .",

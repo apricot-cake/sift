@@ -2,7 +2,10 @@ import { resolve } from "node:path";
 import tailwindcss from "@tailwindcss/vite";
 import { defineConfig } from "wxt";
 
-const localDeploy = process.env.SIFT_BUILD_KIND === "local";
+const buildKind = process.env.SIFT_BUILD_KIND;
+const localDeploy = buildKind === "local";
+const e2eBuild = buildKind === "e2e";
+const signedBuild = localDeploy || e2eBuild;
 const buildId = localDeploy ? (process.env.SIFT_BUILD_ID ?? "") : "";
 
 if (localDeploy && buildId === "") {
@@ -19,7 +22,9 @@ export default defineConfig({
   // 提出物は誰も読み込まない別の場所で作り、ローカル専用機能を含まない。
   outDir: localDeploy
     ? resolve(import.meta.dirname, ".output")
-    : resolve(import.meta.dirname, ".output", "store"),
+    : e2eBuild
+      ? resolve(import.meta.dirname, ".output", "e2e")
+      : resolve(import.meta.dirname, ".output", "store"),
   outDirTemplate: "{{browser}}-mv{{manifestVersion}}",
   // WXT にブラウザを起動させてはならない。理由は独立に2つある。
   //   - 自動化の仕組みを通して開いたものは自動化フラグの指紋を持ち、X はそれを
@@ -33,10 +38,10 @@ export default defineConfig({
     disabled: true,
   },
   manifest: {
-    // ローカル配備だけ固定の署名鍵を持たせ、拡張機能 id を
+    // ローカル配備と E2E は固定の署名鍵を持たせ、拡張機能 id を
     // bohbpocokkfioejlabmeaimpkpmablkm に保つ。Chrome ウェブストアは新規アイテムの
     // manifest に key があるパッケージを受け付けないため、ストア提出物には含めない。
-    ...(localDeploy
+    ...(signedBuild
       ? {
           key: "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA7HRMGxpsFxVmyHkVNzHAtaSVuu6vJVFCC0gSSYBT9t31XfT68U7NYyn15N3rLuvZRhRAXYBgZiouzH619jVc2lbHGRzRUPYjm8o0XW70TW6NB+g7P510902pHXw1TmcrN9wqFfFsFhV50DObPKfY+GYfgNzWo+A4raQ4+sCQaCv9TNR78CU2HAi81oGJthhxPYRfdZdqLiZ7FWSnz+Nv9Ie0Q0RAn6W21ekSRpN6wfJf4AjgBe5sj3zRRTGH6CcUSvfUehjKjSbsS5KX5OhL4KWsio4GYRmUZa3SJxWexZN3kLSo4ugA+0AaT0rFjLTZhxOl/ULBeMvBvnnZ+xEqyQIDAQAB",
         }
@@ -50,6 +55,8 @@ export default defineConfig({
     description: "__MSG_extensionDescription__",
     permissions: [
       "storage",
+      "activeTab",
+      "scripting",
       ...(localDeploy ? (["nativeMessaging"] as const) : []),
     ],
     action: {

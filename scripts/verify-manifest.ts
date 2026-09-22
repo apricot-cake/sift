@@ -11,18 +11,21 @@ import assert from "node:assert/strict";
 import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import { HOST_NAME } from "../native-host/install.ts";
-import { SITE_MATCHES } from "../utils/site-matches.ts";
 import config from "../wxt.config.ts";
 
 const kind = process.argv[2];
-if (kind !== "local" && kind !== "store") {
+if (kind !== "e2e" && kind !== "local" && kind !== "store") {
   throw new Error(
-    "manifest の検査には local または store を指定してください。",
+    "manifest の検査には e2e、local または store を指定してください。",
   );
 }
 const packageJson = JSON.parse(await readFile("package.json", "utf8"));
 const output =
-  kind === "local" ? ".output/chrome-mv3" : ".output/store/chrome-mv3";
+  kind === "local"
+    ? ".output/chrome-mv3"
+    : kind === "e2e"
+      ? ".output/e2e/chrome-mv3"
+      : ".output/store/chrome-mv3";
 const generatedManifest = JSON.parse(
   await readFile(`${output}/manifest.json`, "utf8"),
 );
@@ -44,8 +47,8 @@ if (
 assert.equal(generatedManifest.manifest_version, 3);
 assert.equal(generatedManifest.name, declaredManifest.name);
 assert.equal(generatedManifest.description, declaredManifest.description);
-if (kind === "local") {
-  // ローカル配備は、既に読み込んである拡張機能と同じ id を保つ。
+if (kind === "local" || kind === "e2e") {
+  // ローカル配備と E2E は、同じ安定した拡張機能 ID を保つ。
   assert.equal(typeof declaredManifest.key, "string");
   assert.equal(generatedManifest.key, declaredManifest.key);
 } else {
@@ -116,17 +119,12 @@ assert.equal(generatedManifest.options_ui.open_in_tab, true);
 assert.equal(generatedManifest.background.service_worker, "background.js");
 
 // content script。wxt.config.ts のどの宣言もこれを生まない＝ここにあるのは
-// entrypoints/content/index.ts がそこへビルドされたからでしかない。
-assert.equal(generatedManifest.content_scripts.length, 1);
-const [generatedContentScript] = generatedManifest.content_scripts;
-assert.deepEqual(
-  [...generatedContentScript.matches].sort(),
-  [...SITE_MATCHES].sort(),
+// entrypoints/sift.ts が unlisted script としてビルドされたからでしかない。
+assert.equal(generatedManifest.content_scripts, undefined);
+assert.ok(
+  (await readdir(output)).some((entry) => entry === "sift.js"),
+  "activeTab で注入する unlisted script がビルドされていない",
 );
-// バンドル1つとスタイルシート1つ＝スクリプトの import も、その
-// `import "./style.css"` も、どちらも通ってきている。
-assert.equal(generatedContentScript.js.length, 1);
-assert.equal(generatedContentScript.css.length, 1);
 
 async function listFiles(directory: string): Promise<string[]> {
   const result: string[] = [];
