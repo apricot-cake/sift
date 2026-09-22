@@ -223,7 +223,7 @@ async function pageTarget(
 async function wakeExtension(version: DevBrowserEndpoint): Promise<void> {
   const target = await pageTarget(
     version,
-    "https://www.youtube.com/results?search_query=Chrome",
+    "https://example.com/",
   );
   await delay(1_000);
   const listed = await cdpCall<{ targetInfos: CdpTargetInfo[] }>(
