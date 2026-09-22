@@ -221,10 +221,7 @@ async function pageTarget(
 }
 
 async function wakeExtension(version: DevBrowserEndpoint): Promise<void> {
-  const target = await pageTarget(
-    version,
-    "https://example.com/",
-  );
+  const target = await pageTarget(version, "https://example.com/");
   await delay(1_000);
   const listed = await cdpCall<{ targetInfos: CdpTargetInfo[] }>(
     version.webSocketDebuggerUrl,
