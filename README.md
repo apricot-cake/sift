@@ -1,14 +1,10 @@
-## 開発ガイド
+## 環境構築からストア提出まで
 
 [CONTRIBUTING.md](docs/CONTRIBUTING.md) を参照してください。
 
-## セキュリティ
+## 脆弱性報告
 
-脆弱性は[非公開の報告フォーム](https://github.com/apricot-cake/sift/security/advisories/new)から報告してください。
-
-## プライバシー
-
-データの扱いは [プライバシーポリシー](PRIVACY.md) を参照してください。
+[非公開の報告フォーム](https://github.com/apricot-cake/sift/security/advisories/new)から報告してください。
 
 ## ライセンス
 
