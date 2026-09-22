@@ -41,10 +41,13 @@ interface CdpTargetInfo {
 }
 
 async function waitForCdp(): Promise<DevBrowserEndpoint | null> {
-  for (let attempt = 0; attempt < 20; attempt += 1) {
+  // Linux の仮想ディスプレイで初回起動すると、DevToolsActivePort が使える
+  // ようになるまで数秒かかることがある。起動済みかどうかは固定時間ではなく
+  // 実際の CDP endpoint で判定する。
+  for (let attempt = 0; attempt < 80; attempt += 1) {
     const version = await readDevBrowserEndpoint(PROFILE);
     if (version) return version;
-    await new Promise((resolve) => setTimeout(resolve, 150));
+    await new Promise((resolve) => setTimeout(resolve, 250));
   }
   return null;
 }
