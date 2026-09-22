@@ -162,6 +162,7 @@ async function verifySupportedPage(version: DevBrowserEndpoint): Promise<void> {
 }
 
 const chrome = process.env.SIFT_CHROME || findChromePath();
+const chromeLogPath = path.join(PROFILE, "chrome-stderr.log");
 
 if (process.argv.includes("--print")) {
   console.log(`chrome:      ${chrome}`);
@@ -186,30 +187,44 @@ fs.mkdirSync(PROFILE, { recursive: true });
 
 let version = await readDevBrowserEndpoint(PROFILE);
 if (!version) {
+  const chromeLog = fs.openSync(chromeLogPath, "w");
   const child = spawn(
     chrome,
     [
       `--user-data-dir=${PROFILE}`,
       `--remote-debugging-address=${CDP_HOST}`,
       "--remote-debugging-port=0",
+      "--no-first-run",
+      "--no-default-browser-check",
       "--disable-backgrounding-occluded-windows",
       "--disable-background-timer-throttling",
       "--disable-renderer-backgrounding",
+      // GitHub Actions の仮想ディスプレイでは共有メモリと GPU を使わない。
+      ...(process.env.CI === "true"
+        ? ["--disable-dev-shm-usage", "--disable-gpu"]
+        : []),
     ],
     {
       detached: true,
-      stdio: "ignore",
+      stdio: ["ignore", chromeLog, chromeLog],
       windowsHide: true,
     },
   );
+  fs.closeSync(chromeLog);
   const launchFailed = new Promise<never>((_, reject) => {
     child.once("error", reject);
   });
   child.unref();
   version = await Promise.race([waitForCdp(), launchFailed]);
   if (!version) {
+    const chromeLogOutput = fs.existsSync(chromeLogPath)
+      ? fs.readFileSync(chromeLogPath, "utf8").trim().slice(-4_000)
+      : "";
     throw new Error(
-      `[sift] 専用プロファイルの CDP 接続先を確認できない: ${PROFILE}。旧方式で起動した開発用 Chrome が残っている場合は、その開発用 Chrome を閉じて npm run dev:browser を再実行すること。`,
+      `[sift] 専用プロファイルの CDP 接続先を確認できない: ${PROFILE}。` +
+        (chromeLogOutput
+          ? ` Chrome の出力: ${chromeLogOutput}`
+          : " Chrome が起動中か、起動直後に終了した。"),
     );
   }
   console.log(`[sift] CDP を有効にした開発用プロファイルを開いた: ${PROFILE}`);
