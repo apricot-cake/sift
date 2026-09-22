@@ -6,6 +6,7 @@ import fs from "node:fs";
 import { homedir } from "node:os";
 import path from "node:path";
 import { selectAdapter } from "../utils/adapters/index.ts";
+import { isYouTubeFilterPage } from "../utils/adapters/youtube.ts";
 import { findChromePath } from "./chrome-path.ts";
 import {
   type DevBrowserEndpoint,
@@ -124,14 +125,18 @@ async function verifySupportedPage(version: DevBrowserEndpoint): Promise<void> {
   const target = (await readCdpTargets(version)).find((candidate) => {
     if (candidate.type !== "page") return false;
     try {
-      return selectAdapter(new URL(candidate.url).hostname) !== null;
+      const page = new URL(candidate.url);
+      const adapter = selectAdapter(page.hostname);
+      return (
+        adapter?.settingsKey === "youtube" && isYouTubeFilterPage(page.pathname)
+      );
     } catch {
       return false;
     }
   });
   if (!target) {
     throw new Error(
-      "[sift] 開発用 Chrome に対応サイトのタブが無い。確認対象を開いてから再実行すること。",
+      "[sift] 開発用 Chrome に対応する YouTube の一覧タブが無い。確認対象を開いてから再実行すること。",
     );
   }
 

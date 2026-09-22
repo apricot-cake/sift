@@ -12,6 +12,12 @@ describe("抽出の操作入口", () => {
     const content = readEntrypoint("entrypoints/sift.ts");
 
     expect(background).toContain("browser.action.onClicked.addListener");
+    expect(background).toContain("opensPanelDirectlyFromActionUrl");
+    expect(background).toContain("isYouTubeFilterPage(page.pathname)");
+    expect(background).toContain("const panelOpening = sidePanel?.open");
+    expect(
+      background.indexOf("const panelOpening = sidePanel?.open"),
+    ).toBeLessThan(background.indexOf("await browser.scripting.insertCSS"));
     expect(background).toContain("await sidePanel?.open({ tabId: tab.id })");
     expect(background).toContain("sidePanel?.setOptions({ enabled: false })");
     expect(background).toContain("browser.runtime.onInstalled.addListener");
