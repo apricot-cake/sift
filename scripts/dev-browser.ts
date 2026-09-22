@@ -12,6 +12,10 @@ import {
   type DevBrowserEndpoint,
   readDevBrowserEndpoint,
 } from "./dev-browser-endpoint.ts";
+import {
+  sendE2eActionShortcut,
+  usesE2eActionShortcut,
+} from "./e2e-shortcut.ts";
 
 const ROOT = path.resolve(import.meta.dirname, "..");
 const PROFILE =
@@ -157,10 +161,17 @@ async function verifySupportedPage(version: DevBrowserEndpoint): Promise<void> {
       "[sift] 再読み込みしたページのタブを CDP で特定できなかった。",
     );
   }
-  await cdpCall(version.webSocketDebuggerUrl, "Extensions.triggerAction", {
-    id: EXTENSION_ID,
+  await cdpCall(version.webSocketDebuggerUrl, "Target.activateTarget", {
     targetId: tabTarget.targetId,
   });
+  if (usesE2eActionShortcut()) {
+    sendE2eActionShortcut();
+  } else {
+    await cdpCall(version.webSocketDebuggerUrl, "Extensions.triggerAction", {
+      id: EXTENSION_ID,
+      targetId: tabTarget.targetId,
+    });
+  }
   console.log(
     `[sift] 対応サイトを再読み込み、サイドパネル操作を実行した: ${target.url}`,
   );

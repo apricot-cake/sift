@@ -62,6 +62,19 @@ export default defineConfig({
     action: {
       default_title: "Sift",
     },
+    // CI のブラウザ E2E だけは Chrome のユーザー操作として action を起動する。
+    // 製品版・ローカル配備版にショートカットを表示しないため、e2e ビルドへ限定する。
+    ...(e2eBuild
+      ? {
+          commands: {
+            _execute_action: {
+              suggested_key: {
+                default: "Ctrl+Shift+Y",
+              },
+            },
+          },
+        }
+      : {}),
   },
   vite: () => ({
     plugins: [tailwindcss()],

@@ -79,9 +79,10 @@ jobs:
 
       - run: npm ci
 
-      # headed Chrome を仮想ディスプレイで撮影する。CDP は Sift の action を
-      # 非干渉で起動し、ImageMagick は Chrome 本体を含む実画面を保存する。
-      - run: sudo apt-get update && sudo apt-get install --yes --no-install-recommends imagemagick
+      # headed Chrome を仮想ディスプレイで撮影する。xdotool は E2E 専用の
+      # 拡張機能ショートカットを Chrome へ送信し、ImageMagick は Chrome 本体を
+      # 含む実画面を保存する。
+      - run: sudo apt-get update && sudo apt-get install --yes --no-install-recommends imagemagick xdotool
       - run: npm run build:e2e
       - run: xvfb-run --auto-servernum --server-args="-screen 0 1440x1000x24" npm run test:e2e:visual
 

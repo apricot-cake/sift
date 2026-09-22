@@ -47,7 +47,7 @@ npm run test:e2e:browser
 
 `npm run test:e2e:browser` は、実在する対応サイトと対象外ページを開き、拡張機能の action を実行して、対象判定、サイドパネルの有効化、設定の反映を確認します。検証中に変更した設定は終了時に戻します。
 
-GitHub Actions では、`main` への push 後に認証不要の YouTube ページで E2E を実行します。仮想画面上で開いた Chrome とサイドパネルのスクリーンショットを artifact として 14 日間保存します。スクリーンショットの差分比較は行いません。
+GitHub Actions では、`main` への push 後に認証不要の YouTube ページで E2E を実行します。E2E 専用ビルドにだけ設定したショートカットを Chrome へ送信して action を起動します。製品版とローカル配備版にはショートカットを含めません。仮想画面上で開いた Chrome とサイドパネルのスクリーンショットを artifact として 14 日間保存します。スクリーンショットの差分比較は行いません。
 
 ## Chrome で確認する
 

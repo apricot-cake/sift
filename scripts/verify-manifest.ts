@@ -103,6 +103,17 @@ assert.equal(
   declaredManifest.action?.default_title,
 );
 assert.equal(generatedManifest.action.default_popup, undefined);
+if (kind === "e2e") {
+  assert.deepEqual(generatedManifest.commands, {
+    _execute_action: {
+      suggested_key: {
+        default: "Ctrl+Shift+Y",
+      },
+    },
+  });
+} else {
+  assert.equal(generatedManifest.commands, undefined);
+}
 
 // WXT の sidepanel エントリポイントが Chrome の manifest へ届いていることを
 // 確かめる。ページを出力しただけでは、ブラウザのサイドパネルから開けることは

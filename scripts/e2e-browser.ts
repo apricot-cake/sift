@@ -6,6 +6,10 @@ import {
   type DevBrowserEndpoint,
   readDevBrowserEndpoint,
 } from "./dev-browser-endpoint.ts";
+import {
+  sendE2eActionShortcut,
+  usesE2eActionShortcut,
+} from "./e2e-shortcut.ts";
 
 const EXTENSION_ID = "bohbpocokkfioejlabmeaimpkpmablkm";
 const PROFILE =
@@ -238,17 +242,28 @@ async function wakeExtension(version: DevBrowserEndpoint): Promise<void> {
     (candidate) => candidate.type === "tab" && candidate.url === target.url,
   );
   if (!tab) {
-    const available = listed.targetInfos
-      .filter((candidate) => candidate.type === "tab")
-      .map((candidate) => candidate.url)
-      .join(", ");
     throw new Error(
-      `Sift を起動するためのタブを特定できなかった: ${target.url} (${available})`,
+      `Sift を起動するためのタブを特定できなかった: ${target.url}`,
     );
+  }
+  await cdpCall(version.webSocketDebuggerUrl, "Target.activateTarget", {
+    targetId: tab.targetId,
+  });
+  await triggerAction(version, tab.targetId);
+}
+
+async function triggerAction(
+  version: DevBrowserEndpoint,
+  targetId: string,
+): Promise<void> {
+  if (usesE2eActionShortcut()) {
+    sendE2eActionShortcut();
+    await delay(250);
+    return;
   }
   await cdpCall(version.webSocketDebuggerUrl, "Extensions.triggerAction", {
     id: EXTENSION_ID,
-    targetId: tab.targetId,
+    targetId,
   });
 }
 
@@ -291,10 +306,7 @@ async function tabIdForTarget(
   );
   if (id === null)
     throw new Error(`${target.url} の拡張機能タブ ID を得られなかった。`);
-  await cdpCall(version.webSocketDebuggerUrl, "Extensions.triggerAction", {
-    id: EXTENSION_ID,
-    targetId: tab.targetId,
-  });
+  await triggerAction(version, tab.targetId);
   return id;
 }
 
