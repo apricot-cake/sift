@@ -25,6 +25,13 @@ export function sendE2eActionShortcut(): void {
     throw new Error("E2E 用 Chrome のウィンドウを見つけられなかった。");
   }
 
-  execFileSync("xdotool", ["windowactivate", "--sync", windowId]);
-  execFileSync("xdotool", ["key", "--clearmodifiers", E2E_ACTION_SHORTCUT]);
+  // Xvfb にはウィンドウマネージャーがない。アクティブ化を要求せず、専用 Chrome
+  // ウィンドウへ直接キーイベントを送る。
+  execFileSync("xdotool", [
+    "key",
+    "--window",
+    windowId,
+    "--clearmodifiers",
+    E2E_ACTION_SHORTCUT,
+  ]);
 }
