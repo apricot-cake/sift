@@ -83,6 +83,12 @@ const PAGE_CASES: readonly PageCase[] = [
     site: "youtube",
   },
   {
+    label: "YouTube チャンネル内検索",
+    url: "https://www.youtube.com/@GoogleJapan/search?query=Gemini",
+    available: true,
+    site: "youtube",
+  },
+  {
     label: "YouTube の視聴ページ",
     url: "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
     available: false,
@@ -543,7 +549,7 @@ async function verifyCase(
 const version = await readDevBrowserEndpoint(PROFILE);
 if (!version) {
   throw new Error(
-    "開発用 Chrome が起動していない。先に npm run dev:browser を実行すること。",
+    "開発用 Chrome が起動していない。先に npm run browser:open を実行すること。",
   );
 }
 

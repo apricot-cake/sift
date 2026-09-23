@@ -1,9 +1,17 @@
 import { execFileSync } from "node:child_process";
+import path from "node:path";
 
 // 製品版には存在しない、CI 専用の action ショートカット。Chrome のウィンドウへ
 // キー入力として届けることで、CDP の Extensions.triggerAction だけでは再現できない
 // ユーザー操作コンテキストでサイドパネルを開く。
 export const E2E_ACTION_SHORTCUT = "ctrl+shift+y";
+const ROOT = path.resolve(import.meta.dirname, "..");
+const WINDOWS_E2E_PROJECT = path.join(
+  ROOT,
+  "tests",
+  "windows-e2e",
+  "Sift.WindowsE2E.csproj",
+);
 
 export function usesE2eActionShortcut(): boolean {
   return process.env.SIFT_E2E_MODE === "ci";
@@ -12,26 +20,24 @@ export function usesE2eActionShortcut(): boolean {
 export function sendE2eActionShortcut(): void {
   if (!usesE2eActionShortcut()) return;
 
-  const windows = execFileSync(
-    "xdotool",
-    ["search", "--onlyvisible", "--class", "google-chrome|chrome"],
-    { encoding: "utf8" },
-  )
-    .trim()
-    .split(/\s+/u)
-    .filter(Boolean);
-  const windowId = windows.at(-1);
-  if (!windowId) {
-    throw new Error("E2E 用 Chrome のウィンドウを見つけられなかった。");
+  if (process.platform !== "win32") {
+    throw new Error(`Windows E2E を実行できない OS: ${process.platform}`);
   }
 
-  // Xvfb にはウィンドウマネージャーがない。アクティブ化を要求せず、専用 Chrome
-  // ウィンドウへ直接キーイベントを送る。
-  execFileSync("xdotool", [
-    "key",
-    "--window",
-    windowId,
-    "--clearmodifiers",
-    E2E_ACTION_SHORTCUT,
-  ]);
+  // Windows runner の Chrome を UI Automation で前面化してから、実キー入力を
+  // 送る。CDP の Extensions.triggerAction では再現できない経路を確認する。
+  execFileSync(
+    "dotnet",
+    [
+      "run",
+      "--no-build",
+      "--configuration",
+      "Release",
+      "--project",
+      WINDOWS_E2E_PROJECT,
+      "--",
+      "shortcut",
+    ],
+    { stdio: "inherit" },
+  );
 }

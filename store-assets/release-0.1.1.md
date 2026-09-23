@@ -2,7 +2,7 @@
 
 ## 提出するファイル
 
-`npm run zip:store` で生成する `.output/store/sift-0.1.1-chrome.zip` を使用します。
+`.output/store/sift-0.1.1-chrome.zip` を使用します。
 
 2026年9月5日に検査した ZIP の SHA256:
 

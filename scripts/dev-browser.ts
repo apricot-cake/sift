@@ -46,8 +46,8 @@ interface CdpTargetInfo {
 }
 
 async function waitForCdp(): Promise<DevBrowserEndpoint | null> {
-  // Linux の仮想ディスプレイで初回起動すると、DevToolsActivePort が使える
-  // ようになるまで数秒かかることがある。起動済みかどうかは固定時間ではなく
+  // 仮想デスクトップで初回起動すると、DevToolsActivePort が使えるようになるまで
+  // 数秒かかることがある。起動済みかどうかは固定時間ではなく
   // 実際の CDP endpoint で判定する。
   for (let attempt = 0; attempt < 240; attempt += 1) {
     const version = await readDevBrowserEndpoint(PROFILE);
@@ -195,7 +195,7 @@ if (process.argv.includes("--print")) {
 
 if (!fs.existsSync(path.join(OUTPUT, "manifest.json"))) {
   throw new Error(
-    `[sift] 共有ビルドが無い。先に "npm run deploy" を実行すること: ${OUTPUT}`,
+    `[sift] 共有ビルドが無い。先に "npm run deploy:local" を実行すること: ${OUTPUT}`,
   );
 }
 

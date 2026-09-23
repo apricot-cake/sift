@@ -1,0 +1,58 @@
+name: ブラウザ E2E
+
+on:
+  push:
+    branches: [main]
+    # ブラウザ E2E は拡張機能・ビルド・実行スクリプトの変更だけを対象にする。
+    # 文書やストア掲載情報だけの更新では、通常 CI のみが実行される。
+    paths:
+      - "entrypoints/**"
+      - "components/**"
+      - "utils/**"
+      - "locales/**"
+      - "public/**"
+      - "scripts/**"
+      - "wxt.config.ts"
+      - "package.json"
+      - "package-lock.json"
+      - ".node-version"
+      - ".github/workflows/browser-e2e.yml"
+  workflow_dispatch:
+
+# 同じブランチへの後続の push が前の push を追い越したなら、前の E2E を
+# 最後まで走らせる必要はない。
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  browser-e2e:
+    # Chrome の action・ショートカット・サイドパネルは Windows の仮想デスクトップで
+    # 確認する。通常の CI は OS に依存しないため Ubuntu のままにする。
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .node-version
+          cache: npm
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v5.3.0
+        with:
+          dotnet-version: 8.0.x
+
+      - run: npm ci
+      - run: dotnet build tests/windows-e2e/Sift.WindowsE2E.csproj --configuration Release
+      - run: npm run build:e2e
+      - run: npm run test:e2e:ci
+
+      - if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: sift-browser-e2e-${{ github.sha }}
+          path: test-results/browser-e2e
+          if-no-files-found: warn
+          retention-days: 14

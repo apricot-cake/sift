@@ -2,3 +2,5 @@ node_modules/
 .output/
 .wxt/
 test-results/
+tests/windows-e2e/bin/
+tests/windows-e2e/obj/

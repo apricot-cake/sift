@@ -58,7 +58,7 @@ function main(): void {
   }
 
   const deployed = deployLocalExtension({
-    assertContext: () => assertWindowsUserContext("npm run deploy"),
+    assertContext: () => assertWindowsUserContext("npm run deploy:local"),
     build: () => buildExtension("local"),
     installHost: () => installReloadHost(),
     publish: publishBuildStamp,

@@ -36,7 +36,7 @@ const AGE_IN_MILLISECONDS: Readonly<Record<string, number>> = Object.freeze({
 });
 
 const CHANNEL_FILTER_PATH =
-  /^\/(?:@[^/]+|channel\/[^/]+|c\/[^/]+|user\/[^/]+)\/(?:videos|shorts|streams|live)\/?$/;
+  /^\/(?:@[^/]+|channel\/[^/]+|c\/[^/]+|user\/[^/]+)\/(?:videos|shorts|streams|live|search)\/?$/;
 const CHANNEL_ROOT_PATH =
   /^\/(?:@[^/]+|channel\/[^/]+|c\/[^/]+|user\/[^/]+)\/?$/;
 

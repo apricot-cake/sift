@@ -15,9 +15,9 @@ const profile = fs.mkdtempSync(path.join(tmpdir(), "sift-browser-e2e-"));
 if (process.env.CI !== "true") {
   throw new Error("実画面の撮影は GitHub Actions の CI でだけ実行します。");
 }
-if (!process.env.DISPLAY) {
+if (process.platform !== "win32") {
   throw new Error(
-    "仮想ディスプレイが無いため、Chrome の画面を検証できません。",
+    "ブラウザ E2E は GitHub Actions の Windows 仮想デスクトップでだけ実行します。",
   );
 }
 
@@ -42,11 +42,12 @@ function run(script: string, ...arguments_: string[]): void {
 }
 
 run("dev-browser.ts");
-run("e2e-browser.ts");
+run("browser-integration.ts");
 // 最後に公開 YouTube ページを選び直して action を実行する。これにより撮影する
 // Chrome ウィンドウには、実際に開いた Sift サイドパネルが残る。
 run("dev-browser.ts", "--verify");
 await new Promise((resolve) => setTimeout(resolve, 1_500));
+run("verify-e2e-panel.ts");
 run(
   "capture-e2e-screen.ts",
   path.join(artifacts, "chrome-with-sift-panel.png"),

@@ -28,26 +28,27 @@ npm run check
 
 ```powershell
 npm run lint
-npm test
+npm run typecheck
+npm run test
 ```
 
 Biome で自動修正する場合は `npm run lint:fix` を実行します。
 
 自動テストでは、保存した HTML を使ってセレクターと判定処理を検証します。実際のサイトとの互換性は、各サイトが表示したページを Chrome で確認します。
 
-## ブラウザ E2E を確認する
+## ブラウザ統合テストを確認する
 
 ブラウザと拡張機能の接続は、専用の開発用 Chrome プロファイルで確認します。日常利用の Chrome や、画面・入力を使う自動操作は使いません。
 
 ```powershell
-npm run deploy
-npm run dev:browser
-npm run test:e2e:browser
+npm run deploy:local
+npm run browser:open
+npm run test:integration:browser
 ```
 
-`npm run test:e2e:browser` は、実在する対応サイトと対象外ページを開き、拡張機能の action を実行して、対象判定、サイドパネルの有効化、設定の反映を確認します。検証中に変更した設定は終了時に戻します。
+`npm run test:integration:browser` は、実在する対応サイトと対象外ページを開き、拡張機能の action を実行して、対象判定、サイドパネルの有効化、設定の反映を確認します。検証中に変更した設定は終了時に戻します。
 
-GitHub Actions では、`main` への push 後に認証不要の YouTube ページで E2E を実行します。E2E 専用ビルドにだけ設定したショートカットを Chrome へ送信して action を起動します。製品版とローカル配備版にはショートカットを含めません。仮想画面上で開いた Chrome とサイドパネルのスクリーンショットを artifact として 14 日間保存します。スクリーンショットの差分比較は行いません。
+GitHub Actions では、拡張機能・ビルド設定・E2E スクリプトを変更して `main` へ push したときに、認証不要の YouTube ページで E2E を実行します。文書だけの更新では実行しません。Windows の仮想デスクトップで、E2E 専用ビルドにだけ設定したショートカットを Chrome へ送信して action を起動します。製品版とローカル配備版にはショートカットを含めません。サイドパネルの DOM とフィルター操作部を検証し、開いた Chrome とサイドパネルのスクリーンショットを artifact として 14 日間保存します。スクリーンショットの差分比較は行いません。必要なら Actions の「ブラウザ E2E」を手動実行できます。
 
 ## Chrome で確認する
 
@@ -66,7 +67,7 @@ npm run build
 Windows では、ローカル配備用のビルドを自動で再読み込みできます。この機能は任意です。
 
 ```powershell
-npm run deploy
+npm run deploy:local
 ```
 
 このコマンドは `.output\chrome-mv3` を作成して検査した後、再読み込み専用の[ネイティブメッセージングホスト](https://developer.chrome.com/docs/extensions/develop/concepts/native-messaging)を現在の Windows ユーザーへ登録します。サイドパネルが開いていれば、配備後に拡張機能を再読み込みします。閉じている場合は、次に開いたときに新しいビルドを読み込みます。
@@ -76,22 +77,22 @@ npm run deploy
 専用の Chrome プロファイルを使う場合は、配備後に次のコマンドを実行します。
 
 ```powershell
-npm run dev:browser
+npm run browser:open
 ```
 
 このコマンドは通常利用する Chrome とは別のプロファイルを開き、`.output\chrome-mv3` を読み込みます。ポートは Chrome が空きポートを自動取得します。専用プロファイルの `DevToolsActivePort` から接続先を読み、応答のブラウザ識別子が一致した場合だけ再利用します。コマンドが終了した後も Chrome は開いたままになります。接続先を表示する場合は、ブラウザーを開かずに次のコマンドを実行します。
 
 ```powershell
-node scripts/dev-browser.ts --print
+npm run browser:status
 ```
 
 開発用 Chrome で対応サイトを開いた後、別のターミナルから確認を実行できます。
 
 ```powershell
-npm run verify:browser
+npm run browser:verify
 ```
 
-このコマンドも専用プロファイルから同じ CDP 接続先を自動取得し、配備済みビルドの読み込み、対応サイトの再読み込み、サイドパネル操作を実行して終了します。開いている Chrome は維持します。`npm run dev:browser` を重ねて実行した場合も、起動済みなら二重起動せず終了します。
+このコマンドも専用プロファイルから同じ CDP 接続先を自動取得し、配備済みビルドの読み込み、対応サイトの再読み込み、サイドパネル操作を実行して終了します。開いている Chrome は維持します。`npm run browser:open` を重ねて実行した場合も、起動済みなら二重起動せず終了します。
 
 接続には専用プロファイルとローカルの待受アドレスを使います。[Chrome のリモートデバッグ](https://developer.chrome.com/blog/remote-debugging-port)では、通常利用するプロファイルとは別のデータディレクトリが必要です。
 
@@ -100,7 +101,7 @@ npm run verify:browser
 次のコマンドで Chrome ウェブストア提出用の ZIP を作成します。
 
 ```powershell
-npm run zip:store
+npm run package:store
 ```
 
 出力先は `.output\store` です。提出用ビルドには、ネイティブメッセージング権限や自動再読み込み処理を含めません。マニフェスト、権限、ロケール、`activeTab` で注入するスクリプトも生成後に検査します。
