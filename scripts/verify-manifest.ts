@@ -14,18 +14,14 @@ import { HOST_NAME } from "../native-host/install.ts";
 import config from "../wxt.config.ts";
 
 const kind = process.argv[2];
-if (kind !== "e2e" && kind !== "local" && kind !== "store") {
+if (kind !== "local" && kind !== "store") {
   throw new Error(
-    "manifest の検査には e2e、local または store を指定してください。",
+    "manifest の検査には local または store を指定してください。",
   );
 }
 const packageJson = JSON.parse(await readFile("package.json", "utf8"));
 const output =
-  kind === "local"
-    ? ".output/chrome-mv3"
-    : kind === "e2e"
-      ? ".output/e2e/chrome-mv3"
-      : ".output/store/chrome-mv3";
+  kind === "local" ? ".output/chrome-mv3" : ".output/store/chrome-mv3";
 const generatedManifest = JSON.parse(
   await readFile(`${output}/manifest.json`, "utf8"),
 );
@@ -47,8 +43,8 @@ if (
 assert.equal(generatedManifest.manifest_version, 3);
 assert.equal(generatedManifest.name, declaredManifest.name);
 assert.equal(generatedManifest.description, declaredManifest.description);
-if (kind === "local" || kind === "e2e") {
-  // ローカル配備と E2E は、同じ安定した拡張機能 ID を保つ。
+if (kind === "local") {
+  // ローカル配備は、安定した拡張機能 ID を保つ。
   assert.equal(typeof declaredManifest.key, "string");
   assert.equal(generatedManifest.key, declaredManifest.key);
 } else {
@@ -103,17 +99,7 @@ assert.equal(
   declaredManifest.action?.default_title,
 );
 assert.equal(generatedManifest.action.default_popup, undefined);
-if (kind === "e2e") {
-  assert.deepEqual(generatedManifest.commands, {
-    _execute_action: {
-      suggested_key: {
-        default: "Ctrl+Shift+Y",
-      },
-    },
-  });
-} else {
-  assert.equal(generatedManifest.commands, undefined);
-}
+assert.equal(generatedManifest.commands, undefined);
 
 // WXT の sidepanel エントリポイントが Chrome の manifest へ届いていることを
 // 確かめる。ページを出力しただけでは、ブラウザのサイドパネルから開けることは

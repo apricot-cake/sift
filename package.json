@@ -9,11 +9,7 @@
   "scripts": {
     "browser:open": "node scripts/dev-browser.ts",
     "browser:status": "node scripts/dev-browser.ts --print",
-    "browser:verify": "node scripts/dev-browser.ts --verify",
-    "test:integration:browser": "node scripts/browser-integration.ts",
-    "test:e2e:ci": "node scripts/e2e-ci.ts",
     "build": "node scripts/build-extension.ts store",
-    "build:e2e": "node scripts/build-extension.ts e2e",
     "package:store": "node scripts/build-extension.ts store zip",
     "deploy:local": "node scripts/deploy-extension.ts",
     "lint": "biome ci .",

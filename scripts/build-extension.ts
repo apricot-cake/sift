@@ -3,16 +3,13 @@ import { randomUUID } from "node:crypto";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-export type BuildKind = "e2e" | "local" | "store";
+export type BuildKind = "local" | "store";
 export type BuildAction = "build" | "zip";
 
 const ROOT = path.resolve(import.meta.dirname, "..");
 
 export function outputFor(kind: BuildKind): string {
   if (kind === "local") return path.join(ROOT, ".output", "chrome-mv3");
-  if (kind === "e2e") {
-    return path.join(ROOT, ".output", "e2e", "chrome-mv3");
-  }
   return path.join(ROOT, ".output", "store", "chrome-mv3");
 }
 
@@ -48,10 +45,10 @@ export function buildExtension(
 }
 
 function parseKind(value: string | undefined): BuildKind {
-  if (value === "e2e" || value === "local" || value === "store") {
+  if (value === "local" || value === "store") {
     return value;
   }
-  throw new Error("ビルド種別は e2e、local または store を指定してください。");
+  throw new Error("ビルド種別は local または store を指定してください。");
 }
 
 function parseAction(value: string | undefined): BuildAction {

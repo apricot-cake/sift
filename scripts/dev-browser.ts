@@ -5,17 +5,11 @@ import { spawn } from "node:child_process";
 import fs from "node:fs";
 import { homedir } from "node:os";
 import path from "node:path";
-import { selectAdapter } from "../utils/adapters/index.ts";
-import { isYouTubeFilterPage } from "../utils/adapters/youtube.ts";
 import { findChromePath } from "./chrome-path.ts";
 import {
   type DevBrowserEndpoint,
   readDevBrowserEndpoint,
 } from "./dev-browser-endpoint.ts";
-import {
-  sendE2eActionShortcut,
-  usesE2eActionShortcut,
-} from "./e2e-shortcut.ts";
 
 const ROOT = path.resolve(import.meta.dirname, "..");
 const PROFILE =
@@ -25,24 +19,19 @@ const OUTPUT = process.env.SIFT_EXTENSION_OUTPUT
   : path.join(ROOT, ".output", "chrome-mv3");
 const EXTENSION_ID = "bohbpocokkfioejlabmeaimpkpmablkm";
 const CDP_HOST = "127.0.0.1";
+const cliArguments = process.argv.slice(2);
+
+if (
+  cliArguments.length > 1 ||
+  (cliArguments[0] && cliArguments[0] !== "--print")
+) {
+  throw new Error("利用できる引数は --print だけです。");
+}
 
 interface ExtensionInfo {
   id: string;
   path: string;
   enabled: boolean;
-}
-
-interface CdpTarget {
-  id: string;
-  type: string;
-  url: string;
-  webSocketDebuggerUrl: string;
-}
-
-interface CdpTargetInfo {
-  targetId: string;
-  type: string;
-  url: string;
 }
 
 async function waitForCdp(): Promise<DevBrowserEndpoint | null> {
@@ -55,16 +44,6 @@ async function waitForCdp(): Promise<DevBrowserEndpoint | null> {
     await new Promise((resolve) => setTimeout(resolve, 250));
   }
   return null;
-}
-
-async function readCdpTargets(
-  version: DevBrowserEndpoint,
-): Promise<CdpTarget[]> {
-  const response = await fetch(`${version.url}/json/list`);
-  if (!response.ok) {
-    throw new Error("[sift] CDP からタブ一覧を読めなかった。");
-  }
-  return (await response.json()) as CdpTarget[];
 }
 
 async function cdpCall<T>(
@@ -125,62 +104,10 @@ async function loadSharedExtension(version: DevBrowserEndpoint): Promise<void> {
   }
 }
 
-async function verifySupportedPage(version: DevBrowserEndpoint): Promise<void> {
-  const target = (await readCdpTargets(version)).find((candidate) => {
-    if (candidate.type !== "page") return false;
-    try {
-      const page = new URL(candidate.url);
-      const adapter = selectAdapter(page.hostname);
-      return (
-        adapter?.settingsKey === "youtube" && isYouTubeFilterPage(page.pathname)
-      );
-    } catch {
-      return false;
-    }
-  });
-  if (!target) {
-    throw new Error(
-      "[sift] 開発用 Chrome に対応する YouTube の一覧タブが無い。確認対象を開いてから再実行すること。",
-    );
-  }
-
-  await cdpCall(target.webSocketDebuggerUrl, "Page.reload", {
-    ignoreCache: true,
-  });
-  await new Promise((resolve) => setTimeout(resolve, 500));
-  const targetInfos = await cdpCall<{ targetInfos: CdpTargetInfo[] }>(
-    version.webSocketDebuggerUrl,
-    "Target.getTargets",
-    { filter: [{ type: "tab", exclude: false }, { exclude: true }] },
-  );
-  const tabTarget = targetInfos.targetInfos.find(
-    (candidate) => candidate.type === "tab" && candidate.url === target.url,
-  );
-  if (!tabTarget) {
-    throw new Error(
-      "[sift] 再読み込みしたページのタブを CDP で特定できなかった。",
-    );
-  }
-  await cdpCall(version.webSocketDebuggerUrl, "Target.activateTarget", {
-    targetId: tabTarget.targetId,
-  });
-  if (usesE2eActionShortcut()) {
-    sendE2eActionShortcut();
-  } else {
-    await cdpCall(version.webSocketDebuggerUrl, "Extensions.triggerAction", {
-      id: EXTENSION_ID,
-      targetId: tabTarget.targetId,
-    });
-  }
-  console.log(
-    `[sift] 対応サイトを再読み込み、サイドパネル操作を実行した: ${target.url}`,
-  );
-}
-
 const chrome = process.env.SIFT_CHROME || findChromePath();
 const chromeLogPath = path.join(PROFILE, "chrome-stderr.log");
 
-if (process.argv.includes("--print")) {
+if (cliArguments.includes("--print")) {
   console.log(`chrome:      ${chrome}`);
   console.log(`プロファイル: ${PROFILE}`);
   const endpoint = await readDevBrowserEndpoint(PROFILE);
@@ -215,10 +142,6 @@ if (!version) {
       "--disable-backgrounding-occluded-windows",
       "--disable-background-timer-throttling",
       "--disable-renderer-backgrounding",
-      // GitHub Actions の仮想ディスプレイでは共有メモリと GPU を使わない。
-      ...(process.env.CI === "true"
-        ? ["--disable-dev-shm-usage", "--disable-gpu"]
-        : []),
     ],
     {
       detached: true,
@@ -249,7 +172,3 @@ if (!version) {
 await loadSharedExtension(version);
 console.log(`[sift] 開発用プロファイルで共有ビルドを読み込んだ: ${OUTPUT}`);
 console.log(`[sift] CDP 接続先: ${version.url}`);
-
-if (process.argv.includes("--verify")) {
-  await verifySupportedPage(version);
-}
