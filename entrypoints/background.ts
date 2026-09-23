@@ -1,11 +1,11 @@
 import { browser } from "wxt/browser";
-import { isYouTubeFilterPage } from "../utils/adapters/youtube.ts";
 import { contentStyle } from "../utils/content-style.ts";
 import {
   FILTER_CONTEXT_REQUEST,
   type FilterContextResponse,
   isFilterContextResponse,
 } from "../utils/filter-context.ts";
+import { startLocalBuildReload } from "../utils/local-build-reload.ts";
 import {
   SIDE_PANEL_CONTROL,
   SIDE_PANEL_TAB_STORAGE_KEY,
@@ -43,24 +43,16 @@ async function readFilterContext(
   return null;
 }
 
-function opensPanelDirectlyFromActionUrl(url: string | undefined): boolean {
-  if (url === undefined) return false;
-  try {
-    const page = new URL(url);
-    return (
-      page.hostname === "www.youtube.com" && isYouTubeFilterPage(page.pathname)
-    );
-  } catch {
-    return false;
-  }
-}
-
 export default defineBackground(() => {
+  if (__SIFT_LOCAL_DEPLOY__) {
+    startLocalBuildReload(__SIFT_BUILD_ID__);
+  }
+
   const sidePanel = (browser as { sidePanel?: typeof browser.sidePanel })
     .sidePanel;
 
   // default_path は WXT が manifest に生成する。パネルはユーザーが action を
-  // 実行し、現在のタブが対応タイムラインだと確認できた場合だけ開く。worker の
+  // 実行した対応サイトで開き、対象外のページなら閉じる。worker の
   // 起動ごとに無効化すると、action 後に worker が再起動しただけで開いたパネルが
   // 無効になるため、初回インストールまたは更新時だけ既定値を設定する。
   browser.runtime.onInstalled.addListener(() => {
@@ -72,51 +64,78 @@ export default defineBackground(() => {
       return;
     }
 
-    const openedDirectly = opensPanelDirectlyFromActionUrl(tab.url);
-    if (openedDirectly) {
-      // sidePanel.open() は action のユーザー操作を保っている間に呼ぶ必要がある。
-      // /videos など URL だけで対象と分かる YouTube の一覧は、DOM の読み取りを
-      // 待たずに表示する。下の確認で対象外なら直ちに無効化する。
-      const savedTab = browser.storage.session.set({
-        [SIDE_PANEL_TAB_STORAGE_KEY]: tab.id,
-      });
-      const configured = sidePanel?.setOptions({
-        tabId: tab.id,
-        path: "sidepanel.html",
-        enabled: true,
-      });
-      const panelOpening = sidePanel?.open({ tabId: tab.id });
-      await Promise.all([savedTab, configured, panelOpening]);
-    }
-
+    // 非同期のページ判定を待つと action のユーザー操作が失われるため、
+    // 全サイトで最初の await より前に開く。対象外なら下の判定で閉じる。
+    const savedTab = browser.storage.session.set({
+      [SIDE_PANEL_TAB_STORAGE_KEY]: tab.id,
+    });
+    const configured = sidePanel?.setOptions({
+      tabId: tab.id,
+      path: "sidepanel.html",
+      enabled: true,
+    });
+    const panelOpening = sidePanel?.open({ tabId: tab.id });
+    await Promise.all([savedTab, configured, panelOpening]);
     const target = { tabId: tab.id };
     await browser.scripting.insertCSS({ target, css: contentStyle });
     await browser.scripting.executeScript({ target, files: ["/sift.js"] });
     const context = await readFilterContext(tab.id);
     if (context === null || !context.timelineAvailable) {
-      if (openedDirectly) {
-        await sidePanel?.setOptions({ tabId: tab.id, enabled: false });
-      }
+      await sidePanel?.setOptions({ tabId: tab.id, enabled: false });
+    }
+  }
+
+  async function refreshOpenPanelForNavigation(
+    tabId: number,
+    tab: Browser.tabs.Tab,
+  ): Promise<void> {
+    let panelTabId: unknown;
+    try {
+      const stored = await browser.storage.session.get(
+        SIDE_PANEL_TAB_STORAGE_KEY,
+      );
+      panelTabId = stored[SIDE_PANEL_TAB_STORAGE_KEY];
+    } catch {
+      return;
+    }
+    if (panelTabId !== tabId) {
       return;
     }
 
-    if (!openedDirectly) {
-      await browser.storage.session.set({
-        [SIDE_PANEL_TAB_STORAGE_KEY]: tab.id,
-      });
-      await sidePanel?.setOptions({
-        tabId: tab.id,
-        path: "sidepanel.html",
-        enabled: true,
-      });
-      await sidePanel?.open({ tabId: tab.id });
+    // onUpdated の tab は、tabs 権限がない activeTab 拡張では URL を含まない
+    // ことがある。ユーザーが action を実行した同じタブだけを再取得する。
+    const url =
+      tab.url ?? (await browser.tabs.get(tabId).catch(() => null))?.url;
+    if (!isSupportedSiteUrl(url)) {
+      void browser.runtime
+        .sendMessage({ type: SIDE_PANEL_CONTROL.setPanelTab, tabId })
+        .catch(() => {});
+      return;
     }
+
+    // 同じ document の SPA 遷移なら既存の runtime が応答する。ページ遷移で
+    // content script が失われたときだけ再注入するので、監視処理を重ねない。
+    if ((await readFilterContext(tabId)) === null) {
+      const target = { tabId };
+      await browser.scripting.insertCSS({ target, css: contentStyle });
+      await browser.scripting.executeScript({ target, files: ["/sift.js"] });
+    }
+
+    void browser.runtime
+      .sendMessage({ type: SIDE_PANEL_CONTROL.setPanelTab, tabId })
+      .catch(() => {});
   }
 
   browser.action.onClicked.addListener((tab) => {
     void openPanelForActiveTab(tab).catch((error: unknown) => {
       console.error("Sift のサイドパネルを開けなかった。", error);
     });
+  });
+
+  browser.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+    if (changeInfo.url !== undefined || changeInfo.status === "complete") {
+      void refreshOpenPanelForNavigation(tabId, tab).catch(() => {});
+    }
   });
 
   sidePanel?.onOpened.addListener((panel) => {
@@ -133,6 +152,7 @@ export default defineBackground(() => {
     }
   });
   sidePanel?.onClosed?.addListener(() => {
+    void browser.storage.session.remove(SIDE_PANEL_TAB_STORAGE_KEY);
     void browser.tabs.query({}).then((tabs) => {
       for (const tab of tabs) {
         if (tab.id !== undefined) {

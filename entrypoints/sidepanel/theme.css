@@ -23,7 +23,7 @@
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
-  --font-sans: "Segoe UI Variable", "Segoe UI", system-ui, sans-serif;
+  --font-sans: "Noto Sans Variable", "Noto Sans JP Variable", sans-serif;
 }
 
 :root {

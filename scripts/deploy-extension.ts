@@ -1,7 +1,6 @@
 // ローカル配備用の production ビルドを共有出力へ直接作る。検査後に自己
-// リロード専用Native Hostを登録し、最後に配備スタンプを発行する。開いて
-// いるSiftのサイドパネルは直ちに読み直す。閉じている場合は、次に開くページが
-// 配備済みのファイルを直接読むので、追加のリロードはしない。
+// リロード専用Native Hostを登録し、最後に配備スタンプを発行する。各
+// プロファイルの background service worker がこの通知を受けて再読み込みする。
 import { execSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";

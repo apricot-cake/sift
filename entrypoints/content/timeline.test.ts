@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fakeBrowser } from "wxt/testing/fake-browser";
 import { ContentScriptContext } from "wxt/utils/content-script-context";
 import { blueskyAdapter } from "../../utils/adapters/bluesky.ts";
+import { niconicoAdapter } from "../../utils/adapters/niconico.ts";
 import { xAdapter } from "../../utils/adapters/x.ts";
 import { youtubeAdapter } from "../../utils/adapters/youtube.ts";
 import { startContentRuntime } from "../../utils/content-runtime.ts";
@@ -78,6 +79,44 @@ function dispatchTrustedWheel(deltaY: number): void {
 }
 
 describe("タイムラインのフィルター", () => {
+  it("拡張機能が無効になった後は監視を停止し、DOMを再変更しない", async () => {
+    document.body.innerHTML = timelineMarkup;
+    const runtime = startContentRuntime(
+      new ContentScriptContext("sift-test"),
+      xAdapter,
+    );
+    const descriptor = Object.getOwnPropertyDescriptor(
+      fakeBrowser.runtime,
+      "id",
+    );
+    try {
+      await setFiltering(true);
+      await vi.waitFor(() =>
+        expect(
+          document.querySelector("[data-sift-filter-state]"),
+        ).not.toBeNull(),
+      );
+      Object.defineProperty(fakeBrowser.runtime, "id", {
+        configurable: true,
+        value: undefined,
+      });
+      await vi.waitFor(() =>
+        expect(document.querySelector("[data-sift-filter-state]")).toBeNull(),
+      );
+      const cell = document.querySelector<HTMLElement>(
+        '[data-testid="cellInnerDiv"]',
+      );
+      if (!cell) throw new Error("投稿がない");
+      cell.dataset.siftFilterState = "hidden";
+      cell.append(document.createElement("span"));
+      await new Promise((resolve) => window.setTimeout(resolve, 850));
+      expect(cell.dataset.siftFilterState).toBe("hidden");
+    } finally {
+      if (descriptor)
+        Object.defineProperty(fakeBrowser.runtime, "id", descriptor);
+      runtime.dispose();
+    }
+  });
   it("絞り込み中はセルフリプの接続線を隠す", async () => {
     document.body.innerHTML = xPostMarkup("100", 1_100, true);
     const runtime = startContentRuntime(
@@ -507,6 +546,88 @@ describe("タイムラインのフィルター", () => {
     await expect(getFilterContext()).resolves.toMatchObject({
       site: "x",
       filteringEnabled: true,
+    });
+
+    runtime.dispose();
+  });
+
+  it.each([
+    {
+      adapter: xAdapter,
+      path: "/search?q=sift",
+      markup: xPostMarkup("100", 14000) + xPostMarkup("200", 800),
+    },
+    {
+      adapter: blueskyAdapter,
+      path: "/profile/example.bsky.social",
+      markup: [14000, 800]
+        .map(
+          (count) =>
+            `<div data-testid="feedItem-by-example.bsky.social"><button data-testid="likeBtn" aria-label="${count} likes"></button></div>`,
+        )
+        .join(""),
+    },
+    {
+      adapter: niconicoAdapter,
+      path: "/search/music",
+      markup: [14000, 800]
+        .map(
+          (count, index) =>
+            `<article data-video-id="sm${index}"><a href="/watch/sm${index}">動画</a><span title="${count} 再生">${count}</span></article>`,
+        )
+        .join(""),
+    },
+  ])(
+    "$adapter.id の候補は最低値未満の投稿も集計する",
+    async ({ adapter, path, markup }) => {
+      history.replaceState({}, "", path);
+      document.body.innerHTML = markup;
+      const runtime = startContentRuntime(
+        new ContentScriptContext("sift-test"),
+        adapter,
+      );
+      try {
+        await setFiltering(true);
+        await vi.waitFor(async () => {
+          await expect(getFilterContext()).resolves.toMatchObject({
+            site: adapter.id,
+            metricCounts: [14000, 800],
+          });
+        });
+      } finally {
+        runtime.dispose();
+      }
+    },
+  );
+
+  it("YouTube のパネル用集計には、最低再生回数で隠れた動画も含める", async () => {
+    history.replaceState({}, "", "/@sift/videos");
+    document.body.innerHTML = `
+      <ytd-video-renderer>
+        <div id="metadata-line">
+          <span class="inline-metadata-item">1.4万回視聴</span>
+          <span class="inline-metadata-item">1日前</span>
+        </div>
+      </ytd-video-renderer>
+      <ytd-video-renderer>
+        <div id="metadata-line">
+          <span class="inline-metadata-item">800回視聴</span>
+          <span class="inline-metadata-item">2日前</span>
+        </div>
+      </ytd-video-renderer>
+    `;
+    const runtime = startContentRuntime(
+      new ContentScriptContext("sift-test"),
+      youtubeAdapter,
+    );
+    await setFiltering(true);
+
+    await vi.waitFor(async () => {
+      await expect(getFilterContext()).resolves.toMatchObject({
+        site: "youtube",
+        metricCounts: [14_000, 800],
+        metricCreatedAtMs: expect.arrayContaining([expect.any(Number)]),
+      });
     });
 
     runtime.dispose();

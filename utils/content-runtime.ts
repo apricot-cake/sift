@@ -64,6 +64,17 @@ export function startContentRuntime(
     : null;
   let observedPageKey = pageKey();
 
+  function runtimeIsActive(): boolean {
+    if (disposed) return false;
+    try {
+      if (browser.runtime.id) return true;
+    } catch {
+      // 拡張機能の更新で旧コンテキストへのアクセスが失敗する場合も停止する。
+    }
+    dispose();
+    return false;
+  }
+
   function filteringEnabled(): boolean {
     return pageFilteringEnabled;
   }
@@ -102,6 +113,53 @@ export function startContentRuntime(
       return hasVideo;
     }
     return hasImage || hasVideo;
+  }
+
+  function metricContextForContext(): {
+    metricCounts: number[];
+    metricCreatedAtMs: number[];
+  } {
+    const siteSettings = selectedSiteSettings();
+    if (!timelineAvailable()) {
+      return { metricCounts: [], metricCreatedAtMs: [] };
+    }
+
+    const thresholds = thresholdsFor(siteSettings);
+    const withoutMinimum = {
+      ...thresholds,
+      inclusion: { ...thresholds.inclusion, minimum: null },
+    };
+
+    const metricCounts: number[] = [];
+    const metricCreatedAtMs: number[] = [];
+    for (const postCard of adapter.getPostCards(document)) {
+      const metricCount = adapter.readMetricCount(postCard);
+      if (!Number.isSafeInteger(metricCount) || metricCount < 0) {
+        continue;
+      }
+      const result = classifyPost(
+        {
+          mediaMatches: matchesMediaFilter(postCard, siteSettings),
+          metricCount,
+          createdAtMs: adapter.readCreatedAt?.(postCard) ?? Number.NaN,
+          isReply: adapter.readIsReply?.(postCard) ?? false,
+          isQuote: adapter.readIsQuote?.(postCard) ?? false,
+          isRepost: adapter.readIsRepost(postCard),
+          isMembersOnly: adapter.readIsMembersOnly?.(postCard) ?? false,
+        },
+        withoutMinimum,
+      );
+      if (result.state === "hidden") {
+        continue;
+      }
+
+      metricCounts.push(metricCount);
+      const createdAtMs = adapter.readCreatedAt?.(postCard) ?? Number.NaN;
+      if (Number.isSafeInteger(createdAtMs)) {
+        metricCreatedAtMs.push(createdAtMs);
+      }
+    }
+    return { metricCounts, metricCreatedAtMs };
   }
 
   function setCellState(
@@ -251,7 +309,7 @@ export function startContentRuntime(
 
   function filterVisiblePosts(): void {
     filterFrame = null;
-    if (disposed) {
+    if (!runtimeIsActive()) {
       return;
     }
 
@@ -351,7 +409,7 @@ export function startContentRuntime(
   }
 
   function scheduleFilter(): void {
-    if (disposed || filterFrame !== null) {
+    if (!runtimeIsActive() || filterFrame !== null) {
       return;
     }
     filterFrame = window.requestAnimationFrame(filterVisiblePosts);
@@ -377,6 +435,7 @@ export function startContentRuntime(
   }
 
   function handleRoute(): void {
+    if (!runtimeIsActive()) return;
     const nextPageKey = pageKey();
     if (nextPageKey !== observedPageKey) {
       stopLayoutProbe(false);
@@ -415,6 +474,7 @@ export function startContentRuntime(
     message: unknown,
   ): Promise<FilterContextResponse | undefined> {
     if (isFilterContextRequest(message)) {
+      const metricContext = metricContextForContext();
       return {
         site: adapter.settingsKey,
         pageTitle: document.title,
@@ -423,6 +483,7 @@ export function startContentRuntime(
         filteringEnabled: filteringEnabled(),
         continuousLoadingWarning:
           filteringEnabled() && (loadWarningTracker?.warning ?? false),
+        ...metricContext,
       };
     }
     if (!isTimelineControlRequest(message)) {
@@ -470,7 +531,11 @@ export function startContentRuntime(
     stopLayoutProbe();
     window.removeEventListener("pagehide", handlePageHide);
     window.removeEventListener("pageshow", handlePageShow);
-    browser.runtime.onMessage.removeListener(handleTimelineControlMessage);
+    try {
+      browser.runtime.onMessage.removeListener(handleTimelineControlMessage);
+    } catch {
+      // 無効になったコンテキストでも、残りの監視とタイマーは必ず解除する。
+    }
     window.removeEventListener("wheel", handleUserNavigation, true);
     window.removeEventListener("touchstart", handleUserNavigation, true);
     window.removeEventListener("pointerdown", handleUserNavigation, true);
@@ -605,7 +670,7 @@ export function startContentRuntime(
   void settingsItem
     .getValue()
     .then((storedSettings) => {
-      if (disposed) {
+      if (!runtimeIsActive()) {
         return;
       }
       settings = normalizeSettings(storedSettings);

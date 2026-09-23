@@ -8,6 +8,7 @@ export type MetricSiteSettingsKey = "youtube" | "niconico";
 export type SiteSettingsKey = ReactionSiteSettingsKey | MetricSiteSettingsKey;
 
 export interface ReactionSiteSettings {
+  readonly manualMinimum?: number;
   readonly kind: "reactions";
   readonly mediaEnabled: boolean;
   readonly mediaMode: MediaMode;
@@ -19,6 +20,7 @@ export interface ReactionSiteSettings {
 }
 
 export interface MetricSiteSettings {
+  readonly manualMinimum?: number;
   readonly kind: "metric";
   readonly minCountEnabled: boolean;
   readonly minCount: number;
@@ -139,6 +141,16 @@ function normalizeReactionSiteSettings(
   const source = objectSource(value);
   const mediaMode = normalizeMediaMode(source.mediaMode, fallback.mediaMode);
   return {
+    ...(source.manualMinimum === undefined
+      ? {}
+      : {
+          manualMinimum: clampInteger(
+            source.manualMinimum,
+            fallback.minReactions,
+            0,
+            1000000000,
+          ),
+        }),
     kind: "reactions",
     mediaEnabled:
       typeof source.mediaEnabled === "boolean"
@@ -178,6 +190,16 @@ function normalizeMetricSiteSettings(
 ): MetricSiteSettings {
   const source = objectSource(value);
   return {
+    ...(source.manualMinimum === undefined
+      ? {}
+      : {
+          manualMinimum: clampInteger(
+            source.manualMinimum,
+            fallback.minCount,
+            0,
+            1000000000,
+          ),
+        }),
     kind: "metric",
     minCountEnabled:
       source.minCountEnabled === true

@@ -13,6 +13,12 @@ export interface FilterContextResponse {
   readonly timelineAvailable: boolean;
   readonly filteringEnabled: boolean;
   readonly continuousLoadingWarning: boolean;
+  readonly metricCounts: readonly number[];
+  /**
+   * 最低値を除いた現在の条件に合う投稿の公開日時。日付を読めない投稿は
+   * 入れないので、`metricCounts` と同じ長さであるとは限らない。
+   */
+  readonly metricCreatedAtMs: readonly number[];
 }
 
 export function isFilterContextRequest(
@@ -41,6 +47,14 @@ export function isFilterContextResponse(
     typeof response.pageKey === "string" &&
     typeof response.timelineAvailable === "boolean" &&
     typeof response.filteringEnabled === "boolean" &&
-    typeof response.continuousLoadingWarning === "boolean"
+    typeof response.continuousLoadingWarning === "boolean" &&
+    Array.isArray(response.metricCounts) &&
+    response.metricCounts.every(
+      (count) => Number.isSafeInteger(count) && count >= 0,
+    ) &&
+    Array.isArray(response.metricCreatedAtMs) &&
+    response.metricCreatedAtMs.every((createdAtMs) =>
+      Number.isSafeInteger(createdAtMs),
+    )
   );
 }

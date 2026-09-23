@@ -107,10 +107,9 @@ assert.equal(generatedManifest.commands, undefined);
 assert.equal(generatedManifest.side_panel.default_path, "sidepanel.html");
 assert.ok(generatedManifest.permissions.includes("sidePanel"));
 
-// サイドパネルは現在のページだけを調整する。他のサイトや保存済みページの設定は
-// ブラウザの拡張機能設定からも開ける専用ページに分ける。
-assert.equal(generatedManifest.options_ui.page, "options.html");
-assert.equal(generatedManifest.options_ui.open_in_tab, true);
+// 設定の操作入口はサイドパネルにまとめる。
+assert.equal(generatedManifest.options_ui, undefined);
+assert.equal(generatedManifest.options_page, undefined);
 
 // Chrome MV3 の service worker が entrypoints/background.ts から生成されている。
 assert.equal(generatedManifest.background.service_worker, "background.js");
