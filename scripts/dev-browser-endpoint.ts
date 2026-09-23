@@ -10,7 +10,15 @@ export interface DevBrowserEndpoint {
 // ブラウザごとに変わる WebSocket のパスが一致しなければ接続先として採用しない。
 export async function readDevBrowserEndpoint(
   profile: string,
+  fixedPort?: number,
 ): Promise<DevBrowserEndpoint | null> {
+  if (fixedPort !== undefined) {
+    if (!Number.isInteger(fixedPort) || fixedPort < 1 || fixedPort > 65535) {
+      return null;
+    }
+    return await readEndpoint(`http://127.0.0.1:${fixedPort}`);
+  }
+
   let contents: string;
   try {
     contents = fs.readFileSync(
@@ -34,6 +42,13 @@ export async function readDevBrowserEndpoint(
   }
   const url = `http://127.0.0.1:${Number(portText)}`;
   const webSocketDebuggerUrl = `ws://127.0.0.1:${Number(portText)}${browserPath}`;
+  const endpoint = await readEndpoint(url);
+  return endpoint?.webSocketDebuggerUrl === webSocketDebuggerUrl
+    ? endpoint
+    : null;
+}
+
+async function readEndpoint(url: string): Promise<DevBrowserEndpoint | null> {
   try {
     const response = await fetch(`${url}/json/version`, {
       signal: AbortSignal.timeout(500),
@@ -44,8 +59,11 @@ export async function readDevBrowserEndpoint(
     return typeof version === "object" &&
       version !== null &&
       "webSocketDebuggerUrl" in version &&
-      version.webSocketDebuggerUrl === webSocketDebuggerUrl
-      ? { url, webSocketDebuggerUrl }
+      typeof version.webSocketDebuggerUrl === "string" &&
+      version.webSocketDebuggerUrl.startsWith(
+        `${url.replace("http://", "ws://")}/devtools/browser/`,
+      )
+      ? { url, webSocketDebuggerUrl: version.webSocketDebuggerUrl }
       : null;
   } catch {
     return null;

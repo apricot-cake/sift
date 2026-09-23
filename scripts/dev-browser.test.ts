@@ -8,10 +8,13 @@ const source = fs.readFileSync(
 );
 
 describe("開発用Chromeプロファイル", () => {
-  test("日常用プロファイルと同じproductionビルドを読む", () => {
-    expect(source).toContain('path.join(ROOT, ".output", "chrome-mv3")');
-    expect(source).toContain('"Extensions.loadUnpacked"');
-    expect(source).toContain('"Extensions.getExtensions"');
+  test("固定ポートで起動し、拡張機能の読み込みはChromeに任せる", () => {
+    expect(source).toContain("const CDP_PORT = 9224;");
+    expect(source).toContain('const PROFILE_DIRECTORY = "Default";');
+    expect(source).toContain("--profile-directory=$" + "{PROFILE_DIRECTORY}");
+    expect(source).toContain(`\`--remote-debugging-port=\${CDP_PORT}\``);
+    expect(source).not.toContain('"Extensions.loadUnpacked"');
+    expect(source).not.toContain('"Extensions.getExtensions"');
   });
 
   test("背面でも描画とタイマーを維持する", () => {

@@ -29,6 +29,20 @@ describe("専用プロファイルのCDP接続先", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
+  test("固定ポートを指定したときは接続先を直接確認する", async () => {
+    const endpoint = {
+      url: "http://127.0.0.1:9224",
+      webSocketDebuggerUrl: "ws://127.0.0.1:9224/devtools/browser/sift-browser",
+    };
+    fetchMock.mockResolvedValue(Response.json(endpoint));
+
+    expect(await readDevBrowserEndpoint(profile, 9224)).toEqual(endpoint);
+    expect(fetchMock).toHaveBeenCalledWith(
+      `${endpoint.url}/json/version`,
+      expect.objectContaining({ redirect: "error" }),
+    );
+  });
+
   test("Chromeが選んだポートを別の呼び出しでも再利用する", async () => {
     record("49152\r\n/devtools/browser/sift-browser\r\n");
     const endpoint = {
