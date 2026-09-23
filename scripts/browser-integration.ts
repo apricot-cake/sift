@@ -245,7 +245,9 @@ async function wakeExtension(version: DevBrowserEndpoint): Promise<void> {
     { filter: [{ type: "tab", exclude: false }, { exclude: true }] },
   );
   const tab = listed.targetInfos.find(
-    (candidate) => candidate.type === "tab" && candidate.url === target.url,
+    (candidate) =>
+      candidate.type === "tab" &&
+      (candidate.targetId === target.id || candidate.url === target.url),
   );
   if (!tab) {
     throw new Error(
@@ -300,7 +302,9 @@ async function tabIdForTarget(
     { filter: [{ type: "tab", exclude: false }, { exclude: true }] },
   );
   const tab = listed.targetInfos.find(
-    (candidate) => candidate.type === "tab" && candidate.url === target.url,
+    (candidate) =>
+      candidate.type === "tab" &&
+      (candidate.targetId === target.id || candidate.url === target.url),
   );
   if (!tab) throw new Error(`${target.url} のタブを特定できなかった。`);
   await cdpCall(version.webSocketDebuggerUrl, "Target.activateTarget", {
