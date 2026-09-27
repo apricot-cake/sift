@@ -37,14 +37,31 @@ const AGE_IN_MILLISECONDS: Readonly<Record<string, number>> = Object.freeze({
 });
 
 const CHANNEL_FILTER_PATH =
-  /^\/(?:@[^/]+|channel\/[^/]+|c\/[^/]+|user\/[^/]+)\/(?:videos|shorts|streams|live|search)\/?$/;
+  /^\/(?:@[^/]+|channel\/[^/]+|c\/[^/]+|user\/[^/]+)\/(?:videos|shorts|streams)\/?$/;
 
 export function isYouTubeFilterPage(pathname: string): boolean {
-  return (
-    pathname === "/results" ||
-    pathname === "/feed/subscriptions" ||
-    CHANNEL_FILTER_PATH.test(pathname)
+  return CHANNEL_FILTER_PATH.test(pathname);
+}
+
+export function readYouTubeSortOrder(
+  root: ParentNode,
+  page: Pick<Location, "pathname">,
+): "newest" | "popular" | "unknown" {
+  if (!CHANNEL_FILTER_PATH.test(page.pathname)) return "unknown";
+  const selected = root.querySelectorAll(
+    'ytd-browse:not([hidden]) [role="combobox"], ytd-browse:not([hidden]) [role="tab"][aria-selected="true"], ytd-browse:not([hidden]) yt-chip-cloud-chip-renderer[selected]',
   );
+  for (const element of selected) {
+    const label = (
+      element.getAttribute("aria-label") ||
+      element.textContent ||
+      ""
+    ).trim();
+    if (/^(人気の動画|再生回数順|Popular|Most popular)$/i.test(label))
+      return "popular";
+    if (/^(新しい順|Latest|Newest)$/i.test(label)) return "newest";
+  }
+  return "unknown";
 }
 
 function amountFrom(value: string): number {
@@ -202,7 +219,9 @@ export function publishedAtFromYouTubeText(
 
 function metadataTexts(postCard: Element): string[] {
   return Array.from(postCard.querySelectorAll(YOUTUBE_SELECTORS.metadata))
-    .map((element) => (element.textContent ?? "").trim())
+    .map((element) =>
+      (element.getAttribute("aria-label") || element.textContent || "").trim(),
+    )
     .filter(Boolean);
 }
 
@@ -239,6 +258,33 @@ export const youtubeAdapter = Object.freeze({
   id: "youtube",
   matches: Object.freeze(["https://www.youtube.com/*"]),
   settingsKey: "youtube",
+  readSortOrder: readYouTubeSortOrder,
+  supportsPublicationAge(page: Pick<Location, "pathname">) {
+    return !/\/shorts\/?$/.test(page.pathname);
+  },
+  readPageSupport(root: ParentNode, page: Pick<Location, "pathname">) {
+    if (!isYouTubeFilterPage(page.pathname)) return "unsupported";
+    if (readYouTubeSortOrder(root, page) !== "unknown") return "supported";
+    const selected = root.querySelectorAll(
+      'ytd-browse:not([hidden]) [role="combobox"], ytd-browse:not([hidden]) [role="tab"][aria-selected="true"], ytd-browse:not([hidden]) yt-chip-cloud-chip-renderer[selected]',
+    );
+    return [...selected].some((e) =>
+      /^(古い順|Oldest)$/i.test(
+        (e.getAttribute("aria-label") || e.textContent || "").trim(),
+      ),
+    )
+      ? "unsupported"
+      : "unknown";
+  },
+  hasEmptyTimeline(root: ParentNode) {
+    return [
+      ...root.querySelectorAll("ytd-browse:not([hidden]) ytd-message-renderer"),
+    ].some((e) =>
+      /^(このチャンネルには動画がありません。?|このチャンネルにはコンテンツがありません。?|This channel (?:has no|doesn't have any) (?:videos|content)\.?)$/i.test(
+        e.textContent?.trim() ?? "",
+      ),
+    );
+  },
 
   readTimelineKey(
     root: ParentNode,
@@ -268,7 +314,11 @@ export const youtubeAdapter = Object.freeze({
   },
 
   isTimelineAvailable(root: ParentNode, page: Pick<Location, "pathname">) {
-    return isYouTubeFilterPage(page.pathname) && this.hasPostCards(root);
+    return (
+      isYouTubeFilterPage(page.pathname) &&
+      readYouTubeSortOrder(root, page) !== "unknown" &&
+      this.hasPostCards(root)
+    );
   },
 
   findPostCell(postCard: Element) {

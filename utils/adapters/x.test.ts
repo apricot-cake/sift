@@ -24,26 +24,28 @@ function renderPost(inner = ""): Element {
 }
 
 describe("投稿を見つける", () => {
+  it("hrefのない引用カードを作者アバターで認識する", () => {
+    const post = renderPost(`<a href="/author/status/100"><time></time></a>
+      <div role="link" tabindex="0"><div data-testid="Tweet-User-Avatar"></div><span>引用元</span></div>`);
+    expect(xAdapter.readIsQuote(post)).toBe(true);
+  });
+  it("アバターのない外部リンクカードを引用としない", () => {
+    const post = renderPost(`<a href="/author/status/100"><time></time></a>
+      <div role="link" tabindex="0"><img src="thumbnail.png"><span>外部記事</span></div>`);
+    expect(xAdapter.readIsQuote(post)).toBe(false);
+  });
   it.each([
     "/author/status/100",
     "/author/status/100/photo/1",
     "/author/status/100/video/1",
     "/i/web/status/100",
-  ])("%s ではURLが指す当該投稿だけを表示対象として保護する", (pathname) => {
+  ])("%s は投稿があってもフィルター対象外", (pathname) => {
     const post = renderPost(`
       <a href="/author/status/100"><time datetime="2026-09-06"></time></a>
       <a href="/quoted/status/200">引用元</a>
     `);
-    const reply = renderPost(
-      '<a href="/reply/status/101"><time datetime="2026-09-06"></time></a>',
-    );
-    expect(xAdapter.isDetailPost(post, { pathname })).toBe(true);
-    expect(xAdapter.isDetailPost(reply, { pathname })).toBe(false);
-    expect(
-      xAdapter.isDetailPost(post, { pathname: "/quoted/status/200" }),
-    ).toBe(false);
-    expect(xAdapter.isDetailPost(post, { pathname: "/home" })).toBe(false);
-    expect(xAdapter.isDetailPost(renderPost(), { pathname })).toBe(false);
+    expect(xAdapter.isTimelineAvailable(post, { pathname })).toBe(false);
+    expect(xAdapter.readTimelineKey(post, { pathname, search: "" })).toBeNull();
   });
 
   it("ホーム内の別のタブには同じ位置を復元しない", () => {
@@ -233,8 +235,8 @@ describe("いいね数を読む", () => {
     expect(xAdapter.readMetricCount(card)).toBe(1234);
   });
 
-  it("いいねボタン自体が無ければ 0 を返す", () => {
-    expect(xAdapter.readMetricCount(renderPost())).toBe(0);
+  it("いいねボタン自体が無ければ取得不能を返す", () => {
+    expect(xAdapter.readMetricCount(renderPost())).toBeNaN();
   });
 });
 

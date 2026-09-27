@@ -16,6 +16,14 @@ async function loadFixture(name: string): Promise<HTMLElement> {
 }
 
 describe("対応サイトの HTML fixture", () => {
+  it("Xの検索結果0件を構造取得失敗と区別する", async () => {
+    const page = await loadFixture("x-empty-search");
+    expect(xAdapter.hasEmptyTimeline(page)).toBe(true);
+    expect(xAdapter.getPostCards(page)).toHaveLength(0);
+    const marker = page.querySelector('[data-testid="emptyState"]');
+    marker?.removeAttribute("data-testid");
+    expect(xAdapter.hasEmptyTimeline(page)).toBe(false);
+  });
   it("X のフォロー中タイムラインを読む", async () => {
     const page = await loadFixture("x-following");
     const [post] = xAdapter.getPostCards(page);
@@ -50,26 +58,29 @@ describe("対応サイトの HTML fixture", () => {
     });
   });
 
-  it("YouTube のチャンネル内検索結果を読む", async () => {
+  it("YouTube のチャンネル内検索に読めるカードがあっても対象外", async () => {
     const page = await loadFixture("youtube-channel-search");
     const [post] = youtubeAdapter.getPostCards(page);
 
     expect(
       youtubeAdapter.isTimelineAvailable(page, { pathname: "/@sift/search" }),
-    ).toBe(true);
+    ).toBe(false);
     expect(post).toBeDefined();
     expect(youtubeAdapter.readPostId?.(post as Element)).toBe("abc123");
     expect(youtubeAdapter.readMetricCount(post as Element)).toBe(14000);
     expect(youtubeAdapter.readIsMembersOnly?.(post as Element)).toBe(true);
   });
 
-  it("ニコニコ動画の検索結果を読む", async () => {
+  it("ニコニコ動画の検索に読めるカードがあっても対象外", async () => {
     const page = await loadFixture("niconico-search");
     const [post] = niconicoAdapter.getPostCards(page);
 
     expect(
-      niconicoAdapter.isTimelineAvailable(page, { pathname: "/search/music" }),
-    ).toBe(true);
+      niconicoAdapter.isTimelineAvailable(page, {
+        pathname: "/search/music",
+        search: "?sort=v&order=d",
+      }),
+    ).toBe(false);
     expect(post).toBeDefined();
     expect(niconicoAdapter.readPostId?.(post as Element)).toBe("sm456");
     expect(niconicoAdapter.readMetricCount(post as Element)).toBe(79000);

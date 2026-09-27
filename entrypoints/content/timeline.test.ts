@@ -42,7 +42,7 @@ function xPostMarkup(
 
 beforeEach(() => {
   fakeBrowser.reset();
-  history.replaceState({}, "", "/");
+  history.replaceState({}, "", "/example");
   document.body.innerHTML = "";
 });
 
@@ -79,6 +79,175 @@ function dispatchTrustedWheel(deltaY: number): void {
 }
 
 describe("タイムラインのフィルター", () => {
+  it("並び順を読めない対応ページは取得失敗になり、復旧後は正常に戻る", async () => {
+    history.replaceState({}, "", "/@example/videos");
+    document.body.innerHTML =
+      '<ytd-browse><button role="combobox">不明な表示</button><ytd-video-renderer><div id="metadata-line"><span>1万回視聴</span></div></ytd-video-renderer></ytd-browse>';
+    const clock = vi.spyOn(Date, "now").mockReturnValue(1000);
+    const runtime = startContentRuntime(
+      new ContentScriptContext("sift-test"),
+      youtubeAdapter,
+    );
+    try {
+      expect((await getFilterContext()).health).toMatchObject({
+        state: "loading",
+        issue: "page",
+      });
+      clock.mockReturnValue(10000);
+      expect((await getFilterContext()).health).toMatchObject({
+        state: "unreadable",
+        issue: "page",
+      });
+      const sortButton = document.querySelector("button");
+      if (!sortButton) throw new Error("並び順がありません");
+      sortButton.textContent = "新しい順";
+      await vi.waitFor(async () =>
+        expect((await getFilterContext()).health?.state).toBe("ready"),
+      );
+      sortButton.textContent = "古い順";
+      expect((await getFilterContext()).health?.state).toBe("unsupported");
+    } finally {
+      runtime.dispose();
+      clock.mockRestore();
+    }
+  });
+  it("指標の取得失敗を0件と混同せず、実投稿の更新で復旧する", async () => {
+    document.body.innerHTML =
+      '<article data-testid="tweet"><button data-testid="renamed-like"></button></article>';
+    const clock = vi.spyOn(Date, "now").mockReturnValue(1000);
+    const runtime = startContentRuntime(
+      new ContentScriptContext("sift-test"),
+      xAdapter,
+    );
+    try {
+      expect((await getFilterContext()).health?.state).toBe("loading");
+      clock.mockReturnValue(10000);
+      expect((await getFilterContext()).health).toMatchObject({
+        state: "unreadable",
+        issue: "metrics",
+        sampledPosts: 1,
+      });
+      const button = document.querySelector("button");
+      if (!button) throw new Error("指標ボタンがありません");
+      button.setAttribute("data-testid", "like");
+      button.setAttribute("aria-label", "100 likes");
+      await vi.waitFor(async () =>
+        expect((await getFilterContext()).health?.state).toBe("ready"),
+      );
+    } finally {
+      runtime.dispose();
+      clock.mockRestore();
+    }
+  });
+  it("静止中の再判定と問い合わせで投稿を読み直さず、指標の変更には追従する", async () => {
+    document.body.innerHTML = timelineMarkup;
+    const readMetricCount = vi.fn(xAdapter.readMetricCount);
+    const runtime = startContentRuntime(new ContentScriptContext("sift-test"), {
+      ...xAdapter,
+      readMetricCount,
+    });
+    try {
+      await setFiltering(true);
+      await vi.waitFor(() =>
+        expect(
+          document.querySelector("[data-sift-filter-state]"),
+        ).not.toBeNull(),
+      );
+      expect((await getFilterContext()).metricCounts).toEqual([1100]);
+      readMetricCount.mockClear();
+      await new Promise((resolve) => window.setTimeout(resolve, 900));
+      await getFilterContext();
+      await getFilterContext();
+      expect(readMetricCount).not.toHaveBeenCalled();
+
+      document
+        .querySelector("button")
+        ?.setAttribute("aria-label", "900 件のいいね");
+      await vi.waitFor(() => expect(readMetricCount).toHaveBeenCalled());
+      expect((await getFilterContext()).metricCounts).toEqual([900]);
+
+      document.body.insertAdjacentHTML("beforeend", xPostMarkup("new", 2000));
+      await vi.waitFor(async () =>
+        expect((await getFilterContext()).metricCounts).toEqual([900, 2000]),
+      );
+    } finally {
+      runtime.dispose();
+    }
+  });
+  it("再評価で結果が変わらない投稿の属性を書き換えない", async () => {
+    document.body.innerHTML = timelineMarkup;
+    const runtime = startContentRuntime(
+      new ContentScriptContext("sift-test"),
+      xAdapter,
+    );
+    const writes: MutationRecord[] = [];
+    const mutations = new MutationObserver((records) =>
+      writes.push(...records),
+    );
+    try {
+      await setFiltering(true);
+      await vi.waitFor(() =>
+        expect(
+          document.querySelector("[data-sift-filter-state]"),
+        ).not.toBeNull(),
+      );
+      mutations.observe(document.body, {
+        subtree: true,
+        attributes: true,
+        attributeFilter: ["data-sift-filter-state", "data-sift-filter-reason"],
+      });
+      document.querySelector("article")?.append(document.createElement("span"));
+      await new Promise((resolve) => window.setTimeout(resolve, 100));
+      expect(writes).toHaveLength(0);
+    } finally {
+      mutations.disconnect();
+      runtime.dispose();
+    }
+  });
+  it.each(["/i/lists/add_member", "/example/status/100/photo/1"])(
+    "%s への遷移でパネルが停止しても、戻った一覧の位置を復元する",
+    async (path) => {
+      history.replaceState({}, "", "/home");
+      document.body.innerHTML = `<div data-testid="ScrollSnap-List" role="tablist">
+        <div role="tab" aria-selected="false">おすすめ</div>
+        <div role="tab" aria-selected="false">フォロー中</div>
+        <div role="tab" aria-selected="true">リスト</div>
+      </div>${xPostMarkup("100", 1_100)}`;
+      let top = -30;
+      const cell = document.querySelector(
+        '[data-testid="cellInnerDiv"]',
+      ) as HTMLElement;
+      const rect = vi
+        .spyOn(cell, "getBoundingClientRect")
+        .mockImplementation(() => new DOMRect(0, top, 500, 300));
+      const scroll = vi
+        .spyOn(window, "scrollBy")
+        .mockImplementation((...args: unknown[]) => {
+          top -= (args[0] as ScrollToOptions).top ?? 0;
+        });
+      const runtime = startContentRuntime(
+        new ContentScriptContext("sift-test"),
+        xAdapter,
+      );
+      try {
+        await setFiltering(true);
+        await vi.waitFor(() =>
+          expect(cell.dataset.siftFilterState).toBe("matched"),
+        );
+        history.pushState({}, "", path);
+        await setFiltering(false);
+        top = 470;
+        history.pushState({}, "", "/home");
+        await setFiltering(true);
+        await vi.waitFor(() => expect(top).toBe(-30));
+      } finally {
+        runtime.dispose();
+        rect.mockRestore();
+        scroll.mockRestore();
+      }
+    },
+  );
+
   it("拡張機能が無効になった後は監視を停止し、DOMを再変更しない", async () => {
     document.body.innerHTML = timelineMarkup;
     const runtime = startContentRuntime(
@@ -173,7 +342,7 @@ describe("タイムラインのフィルター", () => {
       await vi.waitFor(
         () => {
           expect(cells[0]?.dataset.siftFilterState).toBeUndefined();
-          expect(cells[1]?.dataset.siftFilterState).toBe("hidden");
+          expect(cells[1]?.dataset.siftFilterState).toBeUndefined();
         },
         { timeout: 2_000 },
       );
@@ -181,7 +350,7 @@ describe("タイムラインのフィルター", () => {
       history.pushState({}, "", "/quoted/status/200");
       await vi.waitFor(
         () => {
-          expect(cells[0]?.dataset.siftFilterState).toBe("hidden");
+          expect(cells[0]?.dataset.siftFilterState).toBeUndefined();
           expect(cells[1]?.dataset.siftFilterState).toBeUndefined();
         },
         { timeout: 2_000 },
@@ -306,6 +475,7 @@ describe("タイムラインのフィルター", () => {
   });
 
   it("Blueskyで初期投稿が全件不一致でも次ページ判定を進める", async () => {
+    history.replaceState({}, "", "/profile/alice.test");
     document.body.innerHTML = `
       <div data-testid="homeScreenFeedTabs-selector-Following">
         <div style="background-color: blue"></div>
@@ -340,6 +510,7 @@ describe("タイムラインのフィルター", () => {
   });
 
   it("Blueskyで一致が一件だけで表示範囲を満たさなくても次ページ判定を進める", async () => {
+    history.replaceState({}, "", "/profile/alice.test");
     document.body.innerHTML = `
       <div data-testid="homeScreenFeedTabs-selector-Following">
         <div style="background-color: blue"></div>
@@ -374,6 +545,7 @@ describe("タイムラインのフィルター", () => {
   });
 
   it("Blueskyで連続読み込みの警告が出ても次ページ判定を止めない", async () => {
+    history.replaceState({}, "", "/profile/alice.test");
     document.body.innerHTML = `
       <div data-testid="homeScreenFeedTabs-selector-Following">
         <div style="background-color: blue"></div>
@@ -415,6 +587,7 @@ describe("タイムラインのフィルター", () => {
   }, 10_000);
 
   it("Blueskyがフィードの終端を示した後は読み込み判定を再開しない", async () => {
+    history.replaceState({}, "", "/profile/alice.test");
     document.body.innerHTML = `
       <div data-testid="homeScreenFeedTabs-selector-Following">
         <div style="background-color: blue"></div>
@@ -456,6 +629,7 @@ describe("タイムラインのフィルター", () => {
   });
 
   it("Blueskyで読み込み判定中に上へスクロールしたら最下部への移動を止める", async () => {
+    history.replaceState({}, "", "/profile/alice.test");
     document.body.innerHTML = `
       <div data-testid="homeScreenFeedTabs-selector-Following">
         <div style="background-color: blue"></div>
@@ -502,9 +676,12 @@ describe("タイムラインのフィルター", () => {
     runtime.dispose();
   });
 
-  it("YouTubeの対象外ページへ移るとフィルター状態を消す", async () => {
-    history.replaceState({}, "", "/results");
-    document.body.innerHTML = `
+  it.each(["対象外ページ", "古い順"])(
+    "YouTubeの%sへ移るとフィルター状態を消す",
+    async (destination) => {
+      history.replaceState({}, "", "/@sift/videos");
+      document.body.innerHTML = `
+      <ytd-browse><button role="tab" aria-selected="true">新しい順</button></ytd-browse>
       <ytd-video-renderer>
         <div id="metadata-line">
           <span>1万回視聴</span>
@@ -512,25 +689,33 @@ describe("タイムラインのフィルター", () => {
         </div>
       </ytd-video-renderer>
     `;
-    const runtime = startContentRuntime(
-      new ContentScriptContext("sift-test"),
-      youtubeAdapter,
-    );
-    await setFiltering(true);
+      const runtime = startContentRuntime(
+        new ContentScriptContext("sift-test"),
+        youtubeAdapter,
+      );
+      await setFiltering(true);
 
-    await vi.waitFor(() => {
-      expect(document.querySelector("[data-sift-filter-state]")).not.toBeNull();
-    });
+      await vi.waitFor(() => {
+        expect(
+          document.querySelector("[data-sift-filter-state]"),
+        ).not.toBeNull();
+      });
 
-    history.pushState({}, "", "/");
-    document.body.append(document.createElement("div"));
+      if (destination === "古い順") {
+        const chip = document.querySelector('[role="tab"]');
+        if (chip) chip.textContent = "古い順";
+      } else {
+        history.pushState({}, "", "/");
+      }
+      document.body.append(document.createElement("div"));
 
-    await vi.waitFor(() => {
-      expect(document.querySelector("[data-sift-filter-state]")).toBeNull();
-    });
+      await vi.waitFor(() => {
+        expect(document.querySelector("[data-sift-filter-state]")).toBeNull();
+      });
 
-    runtime.dispose();
-  });
+      runtime.dispose();
+    },
+  );
 
   it("戻る操作でキャッシュから復元された後もサイドパネルへ応答する", async () => {
     document.body.innerHTML = timelineMarkup;
@@ -554,7 +739,7 @@ describe("タイムラインのフィルター", () => {
   it.each([
     {
       adapter: xAdapter,
-      path: "/search?q=sift",
+      path: "/search?q=sift&f=live",
       markup: xPostMarkup("100", 14000) + xPostMarkup("200", 800),
     },
     {
@@ -569,7 +754,7 @@ describe("タイムラインのフィルター", () => {
     },
     {
       adapter: niconicoAdapter,
-      path: "/search/music",
+      path: "/user/123/video?sortKey=viewCount&sortOrder=desc",
       markup: [14000, 800]
         .map(
           (count, index) =>
@@ -603,6 +788,7 @@ describe("タイムラインのフィルター", () => {
   it("YouTube のパネル用集計には、最低再生回数で隠れた動画も含める", async () => {
     history.replaceState({}, "", "/@sift/videos");
     document.body.innerHTML = `
+      <ytd-browse><button role="tab" aria-selected="true">新しい順</button></ytd-browse>
       <ytd-video-renderer>
         <div id="metadata-line">
           <span class="inline-metadata-item">1.4万回視聴</span>

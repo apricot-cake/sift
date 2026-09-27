@@ -1,15 +1,31 @@
 import { parseMetric } from "../filter-core.ts";
 import type { ServiceAdapter } from "./types.ts";
 
-const WATCH_LINK = 'a[href^="/watch/"]';
+const WATCH_LINK = 'a[href*="/watch/"]';
 const CARD_CANDIDATES =
-  "[data-decoration-video-id], [data-video-id], article, li, [class*='VideoItem']";
+  "[data-decoration-video-id], [data-video-id], .NC-VideoMediaObject, article, li, [class*='VideoItem']";
 const VIEW_TEXT = /(?:再生|視聴|views?)/i;
 const DATE_TEXT = /\d{4}[/.年-]\d{1,2}[/.月-]\d{1,2}/;
+
+function videoId(link: Element): string | null {
+  try {
+    const url = new URL(
+      link.getAttribute("href") ?? "",
+      "https://www.nicovideo.jp",
+    );
+    if (url.protocol !== "https:" || url.hostname !== "www.nicovideo.jp") {
+      return null;
+    }
+    return /^\/watch\/([a-z]*\d+)\/?$/.exec(url.pathname)?.[1] ?? null;
+  } catch {
+    return null;
+  }
+}
 
 function cards(root: ParentNode): Element[] {
   const result = new Set<Element>();
   for (const link of root.querySelectorAll(WATCH_LINK)) {
+    if (videoId(link) === null) continue;
     const card = link.closest(CARD_CANDIDATES);
     if (card) {
       result.add(card);
@@ -27,23 +43,50 @@ function texts(card: Element): string[] {
 }
 
 export function isNiconicoFilterPage(pathname: string): boolean {
-  return (
-    pathname.startsWith("/search/") ||
-    pathname.startsWith("/tag/") ||
-    /^\/user\/\d+\/(?:video|mylist)/.test(pathname)
-  );
+  return /^\/user\/\d+\/video\/?$/.test(pathname);
+}
+
+export function isNiconicoSupportedSort(
+  _root: ParentNode,
+  page: Pick<Location, "pathname"> & Partial<Pick<Location, "search">>,
+): boolean {
+  const params = new URLSearchParams(page.search ?? "");
+  if (/^\/user\/\d+\/video\/?$/.test(page.pathname)) {
+    const key = params.get("sortKey") ?? "registeredAt";
+    const order = params.get("sortOrder") ?? "desc";
+    return order === "desc" && (key === "registeredAt" || key === "viewCount");
+  }
+  return false;
 }
 
 export const niconicoAdapter = Object.freeze({
   id: "niconico",
   matches: Object.freeze(["https://www.nicovideo.jp/*"]),
   settingsKey: "niconico",
+  readPageSupport(
+    root: ParentNode,
+    page: Pick<Location, "pathname"> & Partial<Pick<Location, "search">>,
+  ) {
+    return this.isTimelineAvailable(root, page) ? "supported" : "unsupported";
+  },
+  hasEmptyTimeline(root: ParentNode) {
+    return [...root.querySelectorAll('main p, [role="main"] p')].some((e) =>
+      /^(投稿動画はありません|動画がありません|投稿された動画はありません)[。！]?$/.test(
+        e.textContent?.trim() ?? "",
+      ),
+    );
+  },
   getPostCards: cards,
   hasPostCards(root: ParentNode) {
     return cards(root).length > 0;
   },
-  isTimelineAvailable(root: ParentNode, page: Pick<Location, "pathname">) {
-    return isNiconicoFilterPage(page.pathname) && this.hasPostCards(root);
+  isTimelineAvailable(
+    root: ParentNode,
+    page: Pick<Location, "pathname"> & Partial<Pick<Location, "search">>,
+  ) {
+    return (
+      isNiconicoFilterPage(page.pathname) && isNiconicoSupportedSort(root, page)
+    );
   },
   findPostCell(card: Element) {
     return card;
@@ -52,13 +95,15 @@ export const niconicoAdapter = Object.freeze({
     return (
       (card.getAttribute("data-decoration-video-id") ||
         card.getAttribute("data-video-id") ||
-        /^\/watch\/([^/?#]+)/.exec(
-          card.querySelector(WATCH_LINK)?.getAttribute("href") ?? "",
-        )?.[1]) ??
+        Array.from(card.querySelectorAll(WATCH_LINK))
+          .map(videoId)
+          .find((id) => id !== null)) ??
       null
     );
   },
   readMetricCount(card: Element) {
+    const views = card.querySelector(".NC-VideoMetaCount_view");
+    if (views) return parseMetric(views.textContent ?? "");
     const text = texts(card).find((item) => VIEW_TEXT.test(item));
     if (text !== undefined) {
       return parseMetric(text);
@@ -77,7 +122,9 @@ export const niconicoAdapter = Object.freeze({
         return parsed;
       }
     }
-    const text = texts(card).find((item) => DATE_TEXT.test(item));
+    const text =
+      card.querySelector(".NC-VideoRegisteredAtText-text")?.textContent ??
+      texts(card).find((item) => DATE_TEXT.test(item));
     return text === undefined
       ? Number.NaN
       : Date.parse(text.replace(/年|月/g, "/").replace("日", ""));

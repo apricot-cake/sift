@@ -14,6 +14,7 @@ import {
   type ClassifyState,
   classifyPost,
 } from "./filter-core.ts";
+import { PageHealthTracker } from "./page-health.ts";
 import {
   defaults,
   normalizeSettings,
@@ -59,10 +60,59 @@ export function startContentRuntime(
   let disposed = false;
   let pageFilteringEnabled = false;
   let reportedTimelineAvailable: boolean | null = null;
+  let metricContextCache: {
+    metricCounts: number[];
+    metricCreatedAtMs: number[];
+  } | null = null;
   const loadWarningTracker = adapter.readPostId
     ? new ContinuousLoadWarningTracker()
     : null;
   let observedPageKey = pageKey();
+  const healthTracker = new PageHealthTracker();
+  let healthCounts: {
+    knownMetricOmissions: number;
+    sampledPosts: number;
+    readableMetrics: number;
+    readableDates: number;
+  } | null = null;
+
+  function pageHealth() {
+    if (healthCounts === null) {
+      // 診断のための全件再走査は避け、先頭の投稿を上限付きで確認する。
+      const cards = adapter.getPostCards(document).slice(0, 32);
+      healthCounts = {
+        sampledPosts: cards.length,
+        knownMetricOmissions: cards.filter(
+          (card) =>
+            !Number.isFinite(adapter.readMetricCount(card)) &&
+            adapter.readIsMembersOnly?.(card),
+        ).length,
+        readableMetrics: cards.filter((card) =>
+          Number.isFinite(adapter.readMetricCount(card)),
+        ).length,
+        readableDates: cards.filter((card) =>
+          Number.isFinite(adapter.readCreatedAt?.(card)),
+        ).length,
+      };
+    }
+    const sort = adapter.readSortOrder?.(document, location);
+    const thresholds = thresholdsFor(
+      selectedSiteSettings(),
+      sort,
+      adapter.supportsPublicationAge?.(location),
+    );
+    return healthTracker.observe({
+      pageKey: `${pageKey()}:${sort ?? ""}`,
+      support:
+        adapter.readPageSupport?.(document, location) ??
+        (timelineAvailable() ? "supported" : "unsupported"),
+      empty: adapter.hasEmptyTimeline?.(document) ?? false,
+      requiresDates:
+        thresholds.inclusion.maximumAgeHours != null ||
+        thresholds.inclusion.minimumAgeHours != null,
+      ...healthCounts,
+    });
+  }
 
   function runtimeIsActive(): boolean {
     if (disposed) return false;
@@ -123,11 +173,20 @@ export function startContentRuntime(
     if (!timelineAvailable()) {
       return { metricCounts: [], metricCreatedAtMs: [] };
     }
+    if (metricContextCache !== null) return metricContextCache;
 
-    const thresholds = thresholdsFor(siteSettings);
+    const thresholds = thresholdsFor(
+      siteSettings,
+      adapter.readSortOrder?.(document, location),
+      adapter.supportsPublicationAge?.(location),
+    );
     const withoutMinimum = {
       ...thresholds,
-      inclusion: { ...thresholds.inclusion, minimum: null },
+      inclusion: {
+        ...thresholds.inclusion,
+        minimum: null,
+        maximumAgeHours: null,
+      },
     };
 
     const metricCounts: number[] = [];
@@ -137,11 +196,12 @@ export function startContentRuntime(
       if (!Number.isSafeInteger(metricCount) || metricCount < 0) {
         continue;
       }
+      const createdAtMs = adapter.readCreatedAt?.(postCard) ?? Number.NaN;
       const result = classifyPost(
         {
           mediaMatches: matchesMediaFilter(postCard, siteSettings),
           metricCount,
-          createdAtMs: adapter.readCreatedAt?.(postCard) ?? Number.NaN,
+          createdAtMs,
           isReply: adapter.readIsReply?.(postCard) ?? false,
           isQuote: adapter.readIsQuote?.(postCard) ?? false,
           isRepost: adapter.readIsRepost(postCard),
@@ -154,12 +214,12 @@ export function startContentRuntime(
       }
 
       metricCounts.push(metricCount);
-      const createdAtMs = adapter.readCreatedAt?.(postCard) ?? Number.NaN;
       if (Number.isSafeInteger(createdAtMs)) {
         metricCreatedAtMs.push(createdAtMs);
       }
     }
-    return { metricCounts, metricCreatedAtMs };
+    metricContextCache = { metricCounts, metricCreatedAtMs };
+    return metricContextCache;
   }
 
   function setCellState(
@@ -167,8 +227,12 @@ export function startContentRuntime(
     state: ClassifyState,
     reason: ClassifyReason,
   ): void {
-    cell.dataset.siftFilterState = state;
-    cell.dataset.siftFilterReason = reason;
+    if (cell.dataset.siftFilterState !== state) {
+      cell.dataset.siftFilterState = state;
+    }
+    if (cell.dataset.siftFilterReason !== reason) {
+      cell.dataset.siftFilterReason = reason;
+    }
   }
 
   function clearCellState(cell: HTMLElement): void {
@@ -329,6 +393,11 @@ export function startContentRuntime(
     }
 
     const siteSettings = selectedSiteSettings();
+    const thresholds = thresholdsFor(
+      siteSettings,
+      adapter.readSortOrder?.(document, location),
+      adapter.supportsPublicationAge?.(location),
+    );
     const loadObservations: ContinuousLoadObservation[] = [];
     const updates: {
       cell: HTMLElement;
@@ -341,7 +410,7 @@ export function startContentRuntime(
       // までなのは、そこまでしか読まないから。
       const cell = adapter.findPostCell(postCard) as HTMLElement;
       setThreadConnectorsHidden(postCard, filteringEnabled());
-      if (!filteringEnabled() || adapter.isDetailPost?.(postCard, location)) {
+      if (!filteringEnabled()) {
         updates.push({
           cell,
           state: null,
@@ -360,7 +429,7 @@ export function startContentRuntime(
           isRepost: adapter.readIsRepost(postCard),
           isMembersOnly: adapter.readIsMembersOnly?.(postCard) ?? false,
         },
-        thresholdsFor(siteSettings),
+        thresholds,
       );
 
       updates.push({
@@ -409,6 +478,8 @@ export function startContentRuntime(
   }
 
   function scheduleFilter(): void {
+    healthCounts = null;
+    metricContextCache = null;
     if (!runtimeIsActive() || filterFrame !== null) {
       return;
     }
@@ -436,16 +507,23 @@ export function startContentRuntime(
 
   function handleRoute(): void {
     if (!runtimeIsActive()) return;
+    // 対象外画面でフィルターを解除する前に、元の一覧を離れたことを記録する。
+    if (filteringEnabled()) timelineViewport?.syncRoute();
     const nextPageKey = pageKey();
-    if (nextPageKey !== observedPageKey) {
+    const pageChanged = nextPageKey !== observedPageKey;
+    const previousAvailability = reportedTimelineAvailable;
+    if (pageChanged) {
       stopLayoutProbe(false);
       observedPageKey = nextPageKey;
       layoutProbePausedByUser = false;
       loadWarningTracker?.reset(readCurrentPostIds());
     }
-    if (timelineAvailable()) {
-      scheduleFilter();
-    } else {
+    const available = timelineAvailable();
+    if (available) {
+      if (pageChanged || previousAvailability !== available) scheduleFilter();
+    } else if (pageChanged || previousAvailability !== available) {
+      healthCounts = null;
+      metricContextCache = null;
       clearTimelineState();
     }
   }
@@ -459,7 +537,10 @@ export function startContentRuntime(
       layoutProbePausedByUser = false;
     } else {
       stopLayoutProbe();
-      timelineViewport?.reset();
+      // パネルは対象外画面への遷移でも停止通知を送る。戻り先の位置は残す。
+      // 対応一覧上で明示的に停止した場合は、従来どおり破棄する。
+      if (timelineAvailable()) timelineViewport?.reset();
+      else timelineViewport?.syncRoute();
     }
     loadWarningTracker?.reset(readCurrentPostIds());
     keepViewportOnNextFilter = true;
@@ -476,7 +557,11 @@ export function startContentRuntime(
     if (isFilterContextRequest(message)) {
       const metricContext = metricContextForContext();
       return {
+        health: pageHealth(),
         site: adapter.settingsKey,
+        sortOrder: adapter.readSortOrder?.(document, location) ?? "unknown",
+        supportsPublicationAge:
+          adapter.supportsPublicationAge?.(location) ?? true,
         pageTitle: document.title,
         pageKey: pageKey(),
         timelineAvailable: timelineAvailable(),
@@ -679,6 +764,19 @@ export function startContentRuntime(
       observer.observe(document.body, {
         childList: true,
         characterData: true,
+        attributes: true,
+        attributeFilter: [
+          "aria-selected",
+          "selected",
+          "aria-label",
+          "datetime",
+          "href",
+          "src",
+          "hidden",
+          "data-testid",
+          "style",
+          "class",
+        ],
         subtree: true,
       });
       routeTimer = window.setInterval(handleRoute, 750);

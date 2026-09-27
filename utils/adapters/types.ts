@@ -1,6 +1,8 @@
 // サービスごとのアダプターが満たす契約。どれか1つのアダプターから推論させず
 // ここに置いてあるのは、個々のアダプターが互いを基準にするのではなく、同じ形に
 // 対して検査されるようにするため。
+
+import type { PageSupport } from "../page-health.ts";
 import type { SiteSettingsKey } from "../settings.ts";
 
 export interface PostMedia {
@@ -9,6 +11,16 @@ export interface PostMedia {
 }
 
 export interface ServiceAdapter {
+  readPageSupport?(
+    root: ParentNode,
+    page: Pick<Location, "pathname"> & Partial<Pick<Location, "search">>,
+  ): PageSupport;
+  hasEmptyTimeline?(root: ParentNode): boolean;
+  supportsPublicationAge?(page: Pick<Location, "pathname">): boolean;
+  readSortOrder?(
+    root: ParentNode,
+    page: Pick<Location, "pathname" | "search">,
+  ): "newest" | "popular" | "unknown";
   readonly id: string;
   // このサービス向けに manifest が登録する match パターン。
   readonly matches: readonly string[];
@@ -24,7 +36,7 @@ export interface ServiceAdapter {
   // 投稿が一時的にまだ描かれていない画面でも、操作できるタイムラインなら true。
   isTimelineAvailable(
     root: ParentNode,
-    page: Pick<Location, "pathname">,
+    page: Pick<Location, "pathname"> & Partial<Pick<Location, "search">>,
   ): boolean;
   // 隠される単位＝投稿カードそのものとは限らない。
   findPostCell(postCard: Element): Element;
@@ -33,8 +45,6 @@ export interface ServiceAdapter {
   // 仮想リストが同じ投稿を描き直しても、新しい取得として数え直さないための
   // 識別子。連続読み込みを観測するサービスだけが実装する。
   readPostId?(postCard: Element): string | null;
-  // 詳細画面で開いた当該投稿は、絞り込み条件に関係なく表示する。
-  isDetailPost?(postCard: Element, page: Pick<Location, "pathname">): boolean;
   // 幅変更や別画面から戻る際に位置を復元する一覧。モーダルなどは null。
   readTimelineKey?(
     root: ParentNode,

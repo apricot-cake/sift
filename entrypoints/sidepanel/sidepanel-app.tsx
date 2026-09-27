@@ -1,7 +1,6 @@
 import {
   CalendarClock,
-  Eye,
-  Heart,
+  CircleMinus,
   Image,
   ListFilter,
   LockKeyhole,
@@ -9,7 +8,6 @@ import {
   MessageCircle,
   Quote,
   Repeat2,
-  TextCursorInput,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { browser } from "wxt/browser";
@@ -28,6 +26,11 @@ import {
   metricAggregationScope,
 } from "../../utils/metric-aggregation-scope.ts";
 import { metricThresholdSuggestions } from "../../utils/metric-threshold-suggestions.ts";
+import { isKnownUnsupportedSite } from "../../utils/panel-connection.ts";
+import {
+  countWithinPeriod,
+  PUBLICATION_PERIODS,
+} from "../../utils/publication-period.ts";
 import {
   defaults,
   type MetricSiteSettings,
@@ -44,6 +47,7 @@ import { settingsItem } from "../../utils/settings-storage.ts";
 import {
   isSidePanelTabId,
   isSidePanelTabRequest,
+  SIDE_PANEL_CONTROL,
   SIDE_PANEL_TAB_STORAGE_KEY,
 } from "../../utils/sidepanel-controls.ts";
 import { TIMELINE_CONTROL } from "../../utils/timeline-controls.ts";
@@ -71,6 +75,7 @@ export function SidepanelApp(): React.JSX.Element {
   const [activeContext, setActiveContext] =
     useState<FilterContextResponse | null>(null);
   const [activeSite, setActiveSite] = useState<SiteSettingsKey | null>(null);
+  const [knownUnsupportedSite, setKnownUnsupportedSite] = useState(false);
   const [selectedSite, setSelectedSite] = useState<SiteSettingsKey>("x");
   const followActiveContext = useRef(true);
   const settingsRef = useRef(settings);
@@ -148,17 +153,21 @@ export function SidepanelApp(): React.JSX.Element {
   };
 
   useEffect(() => {
+    let refreshing = false;
+    let connectionAttempt: string | null = null;
     const refreshActiveHost = async (forceSelection = false): Promise<void> => {
-      const [tab] = await browser.tabs.query({
-        active: true,
-        currentWindow: true,
-      });
+      if (refreshing || document.visibilityState === "hidden") return;
+      refreshing = true;
       try {
+        const [tab] = await browser.tabs.query({
+          active: true,
+          currentWindow: true,
+        });
+        setKnownUnsupportedSite(isKnownUnsupportedSite(tab?.url));
         if (panelTabId.current === null && tab?.id !== undefined) {
           panelTabId.current = tab.id;
         }
-        const panelTabMatches = panelTabId.current === tab?.id;
-        if (!panelTabMatches) {
+        if (panelTabId.current !== tab?.id) {
           const previousPage = activePageRef.current;
           if (previousPage !== null) {
             void browser.tabs
@@ -173,8 +182,11 @@ export function SidepanelApp(): React.JSX.Element {
           setPageFilteringEnabled(false);
           setActiveContext(null);
           setActiveSite(null);
-          return;
+          panelTabId.current = tab?.id ?? null;
+          panelInitialized.current = false;
+          connectionAttempt = null;
         }
+        const panelTabMatches = panelTabId.current === tab?.id;
         let context: FilterContextResponse | null = null;
         if (tab?.id !== undefined) {
           context = await browser.tabs
@@ -183,6 +195,27 @@ export function SidepanelApp(): React.JSX.Element {
               isFilterContextResponse(response) ? response : null,
             )
             .catch(() => null);
+          const attemptKey = `${tab.id}:${tab.url ?? ""}`;
+          if (
+            context === null &&
+            connectionAttempt !== attemptKey &&
+            !isKnownUnsupportedSite(tab.url)
+          ) {
+            connectionAttempt = attemptKey;
+            await browser.runtime
+              .sendMessage({
+                type: SIDE_PANEL_CONTROL.connectTab,
+                tabId: tab.id,
+              })
+              .catch(() => {});
+            context = await browser.tabs
+              .sendMessage(tab.id, { type: FILTER_CONTEXT_REQUEST })
+              .then((response) =>
+                isFilterContextResponse(response) ? response : null,
+              )
+              .catch(() => null);
+          }
+          if (context !== null) connectionAttempt = null;
         }
         const nextPage =
           tab?.id !== undefined && context?.timelineAvailable
@@ -222,7 +255,11 @@ export function SidepanelApp(): React.JSX.Element {
               context.site,
               siteSettings.kind === "reactions"
                 ? { ...siteSettings, minReactionsEnabled: false }
-                : { ...siteSettings, minCountEnabled: false },
+                : {
+                    ...siteSettings,
+                    minCountEnabled: false,
+                    postedWithinDays: 0,
+                  },
             );
             await settingsItem.setValue(next);
             setSettings(next);
@@ -265,7 +302,10 @@ export function SidepanelApp(): React.JSX.Element {
           followActiveContext.current = true;
           setSelectedSite(site);
         }
-      } catch {}
+      } catch {
+      } finally {
+        refreshing = false;
+      }
     };
 
     const handleTabActivated = () => void refreshActiveHost(true);
@@ -286,6 +326,10 @@ export function SidepanelApp(): React.JSX.Element {
     const handlePanelTab = (message: unknown): void => {
       if (!isSidePanelTabRequest(message)) {
         return;
+      }
+      if (message.resetMinimum === true) {
+        initializedMinimums.current.clear();
+        setManualSites({});
       }
       const previousPage = activePageRef.current;
       if (previousPage !== null && previousPage.tabId !== message.tabId) {
@@ -375,6 +419,7 @@ export function SidepanelApp(): React.JSX.Element {
   };
 
   const setManualMinimum = (value: number, enabled: boolean): void => {
+    setManualSites((sites) => ({ ...sites, [selectedSite]: true }));
     saveSiteSettings(
       selectedSite,
       selectedSettings.kind === "metric"
@@ -415,6 +460,21 @@ export function SidepanelApp(): React.JSX.Element {
   };
 
   const currentPageIsEditable = activeSite === selectedSite;
+  const healthState = activeContext?.health?.state;
+  const healthMessage =
+    healthState === "unreadable"
+      ? "sidepanelReadFailed"
+      : healthState === "loading"
+        ? "sidepanelReading"
+        : healthState === "empty"
+          ? "sidepanelEmpty"
+          : healthState === "degraded"
+            ? "sidepanelPartialData"
+            : null;
+  const healthBlocksControls =
+    healthState === "unreadable" ||
+    healthState === "loading" ||
+    healthState === "empty";
   const filteringIsAvailable =
     activeContext?.timelineAvailable === true &&
     activeContext.site === selectedSite;
@@ -429,214 +489,290 @@ export function SidepanelApp(): React.JSX.Element {
     >
       <div className="relative mx-auto flex min-h-screen max-w-xl flex-col p-6">
         <div data-filter-controls="">
-          {pageIsUnsupported && activeSite !== "youtube" && (
-            <div className="text-sm leading-6 text-muted-foreground">
-              {t("sidepanelStatusUnavailable")}
-            </div>
-          )}
-          {pageIsUnsupported && activeSite === "youtube" && (
-            <div className="text-sm leading-6 text-muted-foreground">
-              <p className="m-0">{t("sidepanelYouTubeUnsupportedTitle")}</p>
-              <div className="mt-6">
-                <p className="m-0 font-medium">
-                  {t("sidepanelYouTubeSupportedPagesTitle")}
-                </p>
-                <ul className="mb-0 mt-3 list-disc space-y-1 pl-5">
-                  <li>{t("sidepanelYouTubeSupportedSearchResults")}</li>
-                  <li>{t("sidepanelYouTubeSupportedSubscriptions")}</li>
-                  <li>{t("sidepanelYouTubeSupportedChannelVideos")}</li>
-                  <li>{t("sidepanelYouTubeSupportedChannelSearch")}</li>
-                </ul>
-              </div>
-            </div>
-          )}
-          {currentPageIsEditable && !pageIsUnsupported && (
-            <fieldset
-              className="m-0 min-w-0 space-y-7 border-0 p-0 disabled:opacity-60"
-              disabled={!filteringIsAvailable}
+          {healthMessage !== null && activeSite !== null && (
+            <p
+              role="status"
+              data-page-health={healthState}
+              className="m-0 mb-6 text-sm leading-6 text-muted-foreground"
             >
-              <div>
-                {selectedSettings.kind === "metric" ? (
-                  <>
-                    <section data-minimum-group="">
-                      <h2 className="m-0 pb-3 text-sm font-medium">
-                        <ItemLabel icon={Eye}>{t("optionsMinViews")}</ItemLabel>
-                      </h2>
-                      <MetricThresholdSuggestions
-                        selectionEnabled={
-                          !manualActive && selectedSettings.minCountEnabled
-                        }
-                        currentMinimum={selectedSettings.minCount}
-                        metricCounts={activeContext?.metricCounts ?? []}
-                        metricCreatedAtMs={
-                          activeContext?.metricCreatedAtMs ?? []
-                        }
-                        onSelect={(minimum) => {
-                          setManualSites((sites) => ({
-                            ...sites,
-                            [selectedSite]: false,
-                          }));
-                          saveSiteSettings(selectedSite, {
-                            ...selectedSettings,
-                            manualMinimum,
-                            minCount: minimum,
-                            minCountEnabled: true,
-                          });
-                        }}
-                      >
-                        <ThresholdSetting
-                          enabled={
-                            manualActive && selectedSettings.minCountEnabled
+              {t(healthMessage)}
+            </p>
+          )}
+          {pageIsUnsupported && activeSite === null && (
+            <div className="text-sm leading-6 text-muted-foreground">
+              <p className="m-0">
+                {t(
+                  knownUnsupportedSite
+                    ? "sidepanelStatusUnavailable"
+                    : "sidepanelConnectionUnavailable",
+                )}
+              </p>
+              <p className="mb-0 mt-6">
+                {t(
+                  knownUnsupportedSite
+                    ? "sidepanelSupportedSitesHint"
+                    : "sidepanelConnectionHint",
+                )}
+              </p>
+            </div>
+          )}
+          {pageIsUnsupported &&
+            activeSite !== null &&
+            !healthBlocksControls && (
+              <div className="text-sm leading-6 text-muted-foreground">
+                <p className="m-0">{t("sidepanelYouTubeUnsupportedTitle")}</p>
+                <div className="mt-6">
+                  <p className="m-0 font-medium">
+                    {t("sidepanelYouTubeSupportedPagesTitle")}
+                  </p>
+                  <ul className="mb-0 mt-3 list-disc space-y-1 pl-5">
+                    {activeSite === "youtube" ? (
+                      <li>{t("sidepanelYouTubeSupportedChannelVideos")}</li>
+                    ) : activeSite === "niconico" ? (
+                      <li>{t("sidepanelNiconicoSupportedSortHint")}</li>
+                    ) : (
+                      <>
+                        <li>{t("sidepanelSupportedFollowing")}</li>
+                        <li>{t("sidepanelSupportedLists")}</li>
+                        <li>{t("sidepanelSupportedLatestSearch")}</li>
+                        <li>
+                          {t(
+                            activeSite === "x"
+                              ? "sidepanelSupportedXProfiles"
+                              : "sidepanelSupportedProfiles",
+                          )}
+                        </li>
+                      </>
+                    )}
+                  </ul>
+                </div>
+              </div>
+            )}
+          {currentPageIsEditable &&
+            !pageIsUnsupported &&
+            !healthBlocksControls && (
+              <fieldset
+                className="m-0 min-w-0 space-y-7 border-0 p-0 disabled:opacity-60"
+                disabled={!filteringIsAvailable}
+              >
+                <div>
+                  {selectedSettings.kind === "metric" ? (
+                    <>
+                      {activeContext?.sortOrder === "popular" &&
+                      activeContext.supportsPublicationAge !== false ? (
+                        <PublicationPeriodPicker
+                          settings={selectedSettings}
+                          dates={activeContext.metricCreatedAtMs}
+                          total={activeContext.metricCounts.length}
+                          onChange={(patch) =>
+                            saveSiteSettings(selectedSite, {
+                              ...selectedSettings,
+                              ...patch,
+                            })
                           }
-                          label={t("optionsManualMinimum")}
-                          min={0}
-                          onEnabledChange={toggleManualMinimum}
-                          onValueChange={(value) =>
-                            setManualMinimum(value, manualActive)
-                          }
-                          suffix={t("optionsUnitViews")}
-                          value={manualMinimum}
                         />
-                      </MetricThresholdSuggestions>
-                    </section>
-                    <section data-filter-section="">
-                      <h2>
-                        <ItemLabel icon={ListFilter}>
-                          {t("optionsSectionExclude")}
-                        </ItemLabel>
-                      </h2>
-                      <NewerVideosSetting
-                        enabled={selectedSettings.hidePublishedWithinEnabled}
-                        unit={selectedSettings.hidePublishedWithinUnit}
-                        value={selectedSettings.hidePublishedWithinValue}
-                        onChange={(
-                          hidePublishedWithinEnabled,
-                          hidePublishedWithinUnit,
-                        ) =>
-                          saveSiteSettings(selectedSite, {
-                            ...selectedSettings,
-                            hidePublishedWithinEnabled,
-                            hidePublishedWithinUnit,
-                          })
-                        }
-                        onValueChange={(value) =>
-                          updateMetricSetting("hidePublishedWithinValue", value)
-                        }
-                      />
-                      {selectedSite === "youtube" &&
-                        isYouTubeSiteSettings(selectedSettings) && (
-                          <MembersOnlySetting
-                            enabled={selectedSettings.hideMembersOnly}
-                            onEnabledChange={(value) =>
+                      ) : (
+                        <section data-minimum-group="">
+                          <h2 className="m-0 pb-3 text-sm font-medium">
+                            <ItemLabel icon={ListFilter}>
+                              {t("optionsMinViews")}
+                            </ItemLabel>
+                          </h2>
+                          {selectedSite === "youtube" &&
+                            activeContext?.supportsPublicationAge !== false && (
+                              <p className="m-0 mb-5 text-xs text-muted-foreground">
+                                {t("sidepanelSortFilterHint")}
+                              </p>
+                            )}
+                          <MetricThresholdSuggestions
+                            minimumEnabled={selectedSettings.minCountEnabled}
+                            onManual={() => toggleManualMinimum(true)}
+                            onClear={() => toggleManualMinimum(false)}
+                            selectionEnabled={
+                              !manualActive && selectedSettings.minCountEnabled
+                            }
+                            currentMinimum={selectedSettings.minCount}
+                            metricCounts={activeContext?.metricCounts ?? []}
+                            metricCreatedAtMs={
+                              activeContext?.metricCreatedAtMs ?? []
+                            }
+                            onSelect={(minimum) => {
+                              setManualSites((sites) => ({
+                                ...sites,
+                                [selectedSite]: false,
+                              }));
                               saveSiteSettings(selectedSite, {
                                 ...selectedSettings,
-                                hideMembersOnly: value,
-                              })
+                                manualMinimum,
+                                minCount: minimum,
+                                minCountEnabled: true,
+                              });
+                            }}
+                          >
+                            <ThresholdSetting
+                              label={t("optionsManualMinimum")}
+                              min={0}
+                              onValueChange={(value) =>
+                                setManualMinimum(value, true)
+                              }
+                              suffix={t(
+                                "sidepanelMinimumSuggestionMinimumSuffix",
+                              )}
+                              value={manualMinimum}
+                            />
+                          </MetricThresholdSuggestions>
+                        </section>
+                      )}
+                      <section data-filter-section="">
+                        <h2>
+                          <ItemLabel icon={CircleMinus}>
+                            {t("optionsSectionExclude")}
+                          </ItemLabel>
+                        </h2>
+                        {activeContext?.sortOrder !== "popular" &&
+                          activeContext?.supportsPublicationAge !== false && (
+                            <NewerVideosSetting
+                              enabled={
+                                selectedSettings.hidePublishedWithinEnabled
+                              }
+                              unit={selectedSettings.hidePublishedWithinUnit}
+                              value={selectedSettings.hidePublishedWithinValue}
+                              onChange={(
+                                hidePublishedWithinEnabled,
+                                hidePublishedWithinUnit,
+                              ) =>
+                                saveSiteSettings(selectedSite, {
+                                  ...selectedSettings,
+                                  hidePublishedWithinEnabled,
+                                  hidePublishedWithinUnit,
+                                })
+                              }
+                              onValueChange={(value) =>
+                                updateMetricSetting(
+                                  "hidePublishedWithinValue",
+                                  value,
+                                )
+                              }
+                            />
+                          )}
+                        {selectedSite === "youtube" &&
+                          isYouTubeSiteSettings(selectedSettings) && (
+                            <MembersOnlySetting
+                              enabled={selectedSettings.hideMembersOnly}
+                              onEnabledChange={(value) =>
+                                saveSiteSettings(selectedSite, {
+                                  ...selectedSettings,
+                                  hideMembersOnly: value,
+                                })
+                              }
+                            />
+                          )}
+                      </section>
+                    </>
+                  ) : (
+                    <>
+                      <section data-minimum-group="">
+                        <h2 className="m-0 pb-3 text-sm font-medium">
+                          <ItemLabel icon={ListFilter}>
+                            {t("optionsMinLikes")}
+                          </ItemLabel>
+                        </h2>
+                        <MetricThresholdSuggestions
+                          minimumEnabled={selectedSettings.minReactionsEnabled}
+                          onManual={() => toggleManualMinimum(true)}
+                          onClear={() => toggleManualMinimum(false)}
+                          kind="reactions"
+                          selectionEnabled={
+                            !manualActive &&
+                            selectedSettings.minReactionsEnabled
+                          }
+                          currentMinimum={selectedSettings.minReactions}
+                          metricCounts={activeContext?.metricCounts ?? []}
+                          metricCreatedAtMs={
+                            activeContext?.metricCreatedAtMs ?? []
+                          }
+                          onSelect={(minimum) => {
+                            setManualSites((sites) => ({
+                              ...sites,
+                              [selectedSite]: false,
+                            }));
+                            saveSiteSettings(selectedSite, {
+                              ...selectedSettings,
+                              manualMinimum,
+                              minReactions: minimum,
+                              minReactionsEnabled: true,
+                            });
+                          }}
+                        >
+                          <ThresholdSetting
+                            label={t("optionsManualMinimum")}
+                            min={0}
+                            onValueChange={(value) =>
+                              setManualMinimum(value, true)
                             }
+                            suffix={t("sidepanelLikeSuggestionMinimumSuffix")}
+                            value={manualMinimum}
                           />
-                        )}
-                    </section>
-                  </>
-                ) : (
-                  <>
-                    <section data-minimum-group="">
-                      <h2 className="m-0 pb-3 text-sm font-medium">
-                        <ItemLabel icon={Heart}>
-                          {t("optionsMinLikes")}
-                        </ItemLabel>
-                      </h2>
-                      <MetricThresholdSuggestions
-                        kind="reactions"
-                        selectionEnabled={
-                          !manualActive && selectedSettings.minReactionsEnabled
-                        }
-                        currentMinimum={selectedSettings.minReactions}
-                        metricCounts={activeContext?.metricCounts ?? []}
-                        metricCreatedAtMs={
-                          activeContext?.metricCreatedAtMs ?? []
-                        }
-                        onSelect={(minimum) => {
-                          setManualSites((sites) => ({
-                            ...sites,
-                            [selectedSite]: false,
-                          }));
-                          saveSiteSettings(selectedSite, {
-                            ...selectedSettings,
-                            manualMinimum,
-                            minReactions: minimum,
-                            minReactionsEnabled: true,
-                          });
-                        }}
-                      >
-                        <ThresholdSetting
-                          enabled={
-                            manualActive && selectedSettings.minReactionsEnabled
-                          }
-                          label={t("optionsManualMinimum")}
-                          min={0}
-                          onEnabledChange={toggleManualMinimum}
-                          onValueChange={(value) =>
-                            setManualMinimum(value, manualActive)
-                          }
-                          value={manualMinimum}
-                        />
-                      </MetricThresholdSuggestions>
-                    </section>
-                  </>
-                )}
-                {selectedSettings.kind === "reactions" && (
-                  <MediaSetting
-                    enabled={selectedSettings.mediaEnabled}
-                    mode={selectedSettings.mediaMode}
-                    onChange={(mediaEnabled, mediaMode) =>
-                      saveSiteSettings(selectedSite, {
-                        ...selectedSettings,
-                        mediaEnabled,
-                        mediaMode,
-                      })
-                    }
-                  />
-                )}
-              </div>
+                        </MetricThresholdSuggestions>
+                      </section>
+                    </>
+                  )}
+                  {selectedSettings.kind === "reactions" && (
+                    <MediaSetting
+                      enabled={selectedSettings.mediaEnabled}
+                      mode={selectedSettings.mediaMode}
+                      onChange={(mediaEnabled, mediaMode) =>
+                        saveSiteSettings(selectedSite, {
+                          ...selectedSettings,
+                          mediaEnabled,
+                          mediaMode,
+                        })
+                      }
+                    />
+                  )}
+                </div>
 
-              {selectedSettings.kind === "reactions" && (
-                <section data-filter-section="">
-                  <h2>
-                    <ItemLabel icon={ListFilter}>
-                      {t("optionsSectionExclude")}
-                    </ItemLabel>
-                  </h2>
-                  <SettingRow
-                    icon={MessageCircle}
-                    label={t("optionsHideReplies")}
-                  >
-                    <Switch
-                      checked={selectedSettings.hideReplies}
-                      onCheckedChange={(value) =>
-                        updateReactionSetting("hideReplies", value)
-                      }
-                    />
-                  </SettingRow>
-                  <SettingRow icon={Quote} label={t("optionsHideQuotes")}>
-                    <Switch
-                      checked={selectedSettings.hideQuotes}
-                      onCheckedChange={(value) =>
-                        updateReactionSetting("hideQuotes", value)
-                      }
-                    />
-                  </SettingRow>
-                  <SettingRow icon={Repeat2} label={t("optionsHideReposts")}>
-                    <Switch
-                      checked={selectedSettings.hideReposts}
-                      onCheckedChange={(value) =>
-                        updateReactionSetting("hideReposts", value)
-                      }
-                    />
-                  </SettingRow>
-                </section>
-              )}
-            </fieldset>
-          )}
+                {selectedSettings.kind === "reactions" && (
+                  <section data-filter-section="">
+                    <h2>
+                      <ItemLabel icon={CircleMinus}>
+                        {t("optionsSectionExclude")}
+                      </ItemLabel>
+                    </h2>
+                    <SettingRow
+                      icon={MessageCircle}
+                      label={t("optionsHideReplies")}
+                    >
+                      <Switch
+                        aria-label={t("optionsHideReplies")}
+                        checked={selectedSettings.hideReplies}
+                        onCheckedChange={(value) =>
+                          updateReactionSetting("hideReplies", value)
+                        }
+                      />
+                    </SettingRow>
+                    <SettingRow icon={Quote} label={t("optionsHideQuotes")}>
+                      <Switch
+                        aria-label={t("optionsHideQuotes")}
+                        checked={selectedSettings.hideQuotes}
+                        onCheckedChange={(value) =>
+                          updateReactionSetting("hideQuotes", value)
+                        }
+                      />
+                    </SettingRow>
+                    <SettingRow icon={Repeat2} label={t("optionsHideReposts")}>
+                      <Switch
+                        aria-label={t("optionsHideReposts")}
+                        checked={selectedSettings.hideReposts}
+                        onCheckedChange={(value) =>
+                          updateReactionSetting("hideReposts", value)
+                        }
+                      />
+                    </SettingRow>
+                  </section>
+                )}
+              </fieldset>
+            )}
         </div>
 
         {filteringEnabled && activeContext?.continuousLoadingWarning && (
@@ -773,25 +909,132 @@ function SettingRow({
   );
 }
 
+function PublicationPeriodPicker({
+  settings,
+  dates,
+  total,
+  onChange,
+}: {
+  settings: MetricSiteSettings;
+  dates: readonly number[];
+  total: number;
+  onChange: (patch: Partial<MetricSiteSettings>) => void;
+}): React.JSX.Element {
+  const [manual, setManual] = useState(false);
+  const days = settings.postedWithinDays ?? 0;
+  const custom =
+    days > 0 &&
+    (manual || !PUBLICATION_PERIODS.some((period) => period.days === days));
+  const inputRef = useRef<HTMLDivElement>(null);
+  const savedDays = settings.manualPeriodDays ?? 30;
+  return (
+    <section data-period-group="">
+      <h2>
+        <ItemLabel icon={CalendarClock}>{t("optionsPostingPeriod")}</ItemLabel>
+      </h2>
+      <p className="mt-3 mb-5 text-xs text-muted-foreground">
+        {t("sidepanelSortFilterHint")}
+      </p>
+      <Select
+        value={days === 0 ? "none" : custom ? "custom" : String(days)}
+        onValueChange={(value) => {
+          setManual(value === "custom");
+          onChange({
+            postedWithinDays:
+              value === "none"
+                ? 0
+                : value === "custom"
+                  ? savedDays
+                  : Number(value),
+          });
+        }}
+      >
+        <div data-minimum-picker="" data-custom={custom} ref={inputRef}>
+          {custom && (
+            <div data-custom-minimum="">
+              <EditableNumberInput
+                ariaLabel={t("optionsPostingPeriod")}
+                min={1}
+                value={days}
+                onValueChange={(value) =>
+                  onChange({ postedWithinDays: value, manualPeriodDays: value })
+                }
+              />
+              <span className="text-sm text-muted-foreground">
+                {t("optionsPeriodDaysSuffix")}
+              </span>
+            </div>
+          )}
+          <SelectTrigger aria-label={t("optionsPostingPeriod")}>
+            {!custom && <SelectValue />}
+          </SelectTrigger>
+        </div>
+        <SelectContent
+          data-minimum-menu=""
+          align="end"
+          style={{ width: "min(240px, calc(100vw - 48px))" }}
+          className="max-h-[var(--radix-select-content-available-height)] overflow-y-auto"
+          onCloseAutoFocus={(event) => {
+            const input = inputRef.current?.querySelector("input");
+            if (input) {
+              event.preventDefault();
+              input.focus();
+            }
+          }}
+        >
+          <SelectItem value="none">
+            {t("optionsMinimumNone")}
+            <span data-choice-count="">
+              {total.toLocaleString()}
+              {t("sidepanelMinimumSuggestionCountSuffix")}
+            </span>
+          </SelectItem>
+          {PUBLICATION_PERIODS.map((period) => (
+            <SelectItem key={period.days} value={String(period.days)}>
+              {t(
+                period.unit === "week"
+                  ? "optionsPeriodWeeks"
+                  : period.unit === "month"
+                    ? "optionsPeriodMonths"
+                    : "optionsPeriodYears",
+                { count: period.value },
+              )}
+              <span data-choice-count="">
+                {countWithinPeriod(dates, period.days).toLocaleString()}
+                {t("sidepanelMinimumSuggestionCountSuffix")}
+              </span>
+            </SelectItem>
+          ))}
+          <SelectItem value="custom">{t("optionsManualPeriod")}</SelectItem>
+        </SelectContent>
+      </Select>
+      <p className="mb-0 mt-4 text-xs leading-5 text-muted-foreground">
+        {t("sidepanelPeriodScope", { count: total })}
+      </p>
+      {dates.length < total && (
+        <p className="mb-0 mt-2 text-xs leading-5 text-muted-foreground">
+          {t("sidepanelPeriodUnknown", { count: total - dates.length })}
+        </p>
+      )}
+    </section>
+  );
+}
+
 function ThresholdSetting({
-  enabled,
   label,
   min,
-  onEnabledChange,
   onValueChange,
   suffix,
   value,
 }: {
-  enabled: boolean;
   label: string;
   min: number;
-  onEnabledChange: (value: boolean) => void;
   onValueChange: (value: number) => void;
   suffix?: string;
   value: number;
 }): React.JSX.Element {
-  const controls = (
-    <div className="flex items-center gap-3">
+  return (
+    <div data-custom-minimum="">
       <EditableNumberInput
         ariaLabel={label}
         min={min}
@@ -801,21 +1044,14 @@ function ThresholdSetting({
       {suffix && (
         <span className="text-sm text-muted-foreground">{suffix}</span>
       )}
-      <Switch
-        aria-label={label}
-        checked={enabled}
-        onCheckedChange={onEnabledChange}
-      />
     </div>
-  );
-  return (
-    <SettingRow icon={TextCursorInput} label={label}>
-      {controls}
-    </SettingRow>
   );
 }
 
 function MetricThresholdSuggestions({
+  minimumEnabled,
+  onManual,
+  onClear,
   children,
   selectionEnabled,
   kind = "metric",
@@ -824,6 +1060,9 @@ function MetricThresholdSuggestions({
   metricCreatedAtMs,
   onSelect,
 }: {
+  minimumEnabled: boolean;
+  onManual: () => void;
+  onClear: () => void;
   children: React.ReactNode;
   selectionEnabled: boolean;
   kind?: "metric" | "reactions";
@@ -833,6 +1072,18 @@ function MetricThresholdSuggestions({
   onSelect: (minimum: number) => void;
 }): React.JSX.Element {
   const suggestions = metricThresholdSuggestions(metricCounts, currentMinimum);
+  const pickerRef = useRef<HTMLDivElement>(null);
+  const [pickerWidth, setPickerWidth] = useState<number>();
+  useEffect(() => {
+    const picker = pickerRef.current;
+    if (!picker) return;
+    const updateWidth = () =>
+      setPickerWidth(picker.getBoundingClientRect().width);
+    updateWidth();
+    const observer = new ResizeObserver(updateWidth);
+    observer.observe(picker);
+    return () => observer.disconnect();
+  }, []);
 
   const formatter = new Intl.NumberFormat(undefined, {
     notation: "compact",
@@ -871,46 +1122,79 @@ function MetricThresholdSuggestions({
 
   return (
     <div data-threshold-suggestions="">
-      <div className="flex flex-col gap-2">
-        {suggestions.map((suggestion) => {
-          const selected =
-            selectionEnabled && suggestion.minimum === currentMinimum;
-          return (
-            <Button
-              aria-pressed={selected}
+      <Select
+        value={
+          !minimumEnabled
+            ? "none"
+            : selectionEnabled
+              ? String(currentMinimum)
+              : "custom"
+        }
+        onValueChange={(value) => {
+          if (value === "none") onClear();
+          else if (value === "custom") onManual();
+          else onSelect(Number(value));
+        }}
+      >
+        <div
+          data-minimum-picker=""
+          ref={pickerRef}
+          data-custom={minimumEnabled && !selectionEnabled}
+        >
+          {minimumEnabled && !selectionEnabled && children}
+          <SelectTrigger
+            aria-label={t(
+              kind === "reactions" ? "optionsMinLikes" : "optionsMinViews",
+            )}
+          >
+            {(!minimumEnabled || selectionEnabled) && <SelectValue />}
+          </SelectTrigger>
+        </div>
+        <SelectContent
+          data-minimum-menu=""
+          align="end"
+          style={{ width: pickerWidth }}
+          className="max-h-[var(--radix-select-content-available-height)] overflow-y-auto"
+          onCloseAutoFocus={(event) => {
+            const input = document.querySelector<HTMLInputElement>(
+              "[data-custom-minimum] input",
+            );
+            if (input) {
+              event.preventDefault();
+              input.focus();
+            }
+          }}
+        >
+          <SelectItem value="none">
+            {t("optionsMinimumNone")}
+            <span data-choice-count="">
+              {metricCounts.length.toLocaleString()}
+              {t(
+                kind === "reactions"
+                  ? "sidepanelLikeSuggestionCountSuffix"
+                  : "sidepanelMinimumSuggestionCountSuffix",
+              )}
+            </span>
+          </SelectItem>
+          {suggestions.map((suggestion) => (
+            <SelectItem
               key={suggestion.minimum}
-              onClick={() => onSelect(suggestion.minimum)}
-              size="sm"
-              className="justify-between"
-              variant={selected ? "default" : "outline"}
+              value={String(suggestion.minimum)}
             >
-              <span>
-                {formatter.format(suggestion.minimum)}
-                {t(
-                  kind === "reactions"
-                    ? "sidepanelLikeSuggestionMinimumSuffix"
-                    : "sidepanelMinimumSuggestionMinimumSuffix",
-                )}
-              </span>
-              <span
-                className={
-                  selected
-                    ? "text-primary-foreground/75"
-                    : "text-muted-foreground"
-                }
-              >
-                {formatter.format(suggestion.count)}
+              {formatter.format(suggestion.minimum)}
+              <span data-choice-count="">
+                {suggestion.count.toLocaleString()}
                 {t(
                   kind === "reactions"
                     ? "sidepanelLikeSuggestionCountSuffix"
                     : "sidepanelMinimumSuggestionCountSuffix",
                 )}
               </span>
-            </Button>
-          );
-        })}
-      </div>
-      <div data-manual-minimum="">{children}</div>
+            </SelectItem>
+          ))}
+          <SelectItem value="custom">{t("optionsManualMinimum")}</SelectItem>
+        </SelectContent>
+      </Select>
       {suggestions.length > 0 && (
         <p className="mb-0 mt-3 text-xs leading-5 text-muted-foreground">
           {scopeText}
@@ -1040,12 +1324,6 @@ function NewerVideosSetting({
             {t("optionsHidePublishedWithin")}
           </ItemLabel>
         </span>
-        <Switch
-          className="shrink-0"
-          aria-label={t("optionsHidePublishedWithin")}
-          checked={enabled}
-          onCheckedChange={(nextEnabled) => onChange(nextEnabled, unit)}
-        />
       </div>
       <div
         className="flex min-w-0 flex-wrap items-center gap-1.5"
@@ -1095,6 +1373,12 @@ function NewerVideosSetting({
           {t("optionsHidePublishedWithinSuffix")}
         </span>
       </div>
+      <Switch
+        className="shrink-0"
+        aria-label={t("optionsHidePublishedWithin")}
+        checked={enabled}
+        onCheckedChange={(nextEnabled) => onChange(nextEnabled, unit)}
+      />
     </fieldset>
   );
 }

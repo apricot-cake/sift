@@ -20,6 +20,8 @@ export interface ReactionSiteSettings {
 }
 
 export interface MetricSiteSettings {
+  readonly postedWithinDays?: number;
+  readonly manualPeriodDays?: number;
   readonly manualMinimum?: number;
   readonly kind: "metric";
   readonly minCountEnabled: boolean;
@@ -190,6 +192,16 @@ function normalizeMetricSiteSettings(
 ): MetricSiteSettings {
   const source = objectSource(value);
   return {
+    ...(source.postedWithinDays === undefined
+      ? {}
+      : {
+          postedWithinDays: clampInteger(source.postedWithinDays, 0, 0, 36500),
+        }),
+    ...(source.manualPeriodDays === undefined
+      ? {}
+      : {
+          manualPeriodDays: clampInteger(source.manualPeriodDays, 30, 1, 36500),
+        }),
     ...(source.manualMinimum === undefined
       ? {}
       : {
@@ -301,7 +313,13 @@ export function publicationAgeInHours(
   return value * HOURS_PER_PUBLICATION_AGE_UNIT[unit];
 }
 
-export function thresholdsFor(settings: SiteSettings): ClassifyThresholds {
+export function thresholdsFor(
+  settings: SiteSettings,
+  sortOrder?: string,
+  supportsPublicationAge = true,
+): ClassifyThresholds {
+  const usePublicationPeriod =
+    supportsPublicationAge && sortOrder === "popular";
   if (settings.kind === "metric") {
     return {
       mediaEnabled: false,
@@ -309,13 +327,26 @@ export function thresholdsFor(settings: SiteSettings): ClassifyThresholds {
       hideQuotes: false,
       hideReposts: false,
       inclusion: {
-        minimum: settings.minCountEnabled ? settings.minCount : null,
-        minimumAgeHours: settings.hidePublishedWithinEnabled
-          ? publicationAgeInHours(
-              settings.hidePublishedWithinValue,
-              settings.hidePublishedWithinUnit,
-            )
-          : null,
+        ...(usePublicationPeriod
+          ? {
+              maximumAgeHours: settings.postedWithinDays
+                ? settings.postedWithinDays * 24
+                : null,
+            }
+          : {}),
+        minimum:
+          !usePublicationPeriod && settings.minCountEnabled
+            ? settings.minCount
+            : null,
+        minimumAgeHours:
+          supportsPublicationAge &&
+          !usePublicationPeriod &&
+          settings.hidePublishedWithinEnabled
+            ? publicationAgeInHours(
+                settings.hidePublishedWithinValue,
+                settings.hidePublishedWithinUnit,
+              )
+            : null,
       },
       hideMembersOnly:
         "hideMembersOnly" in settings && settings.hideMembersOnly,

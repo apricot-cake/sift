@@ -50,6 +50,25 @@ describe("投稿を見つける", () => {
     expect(blueskyAdapter.hasPostCards(feed)).toBe(true);
   });
 
+  it("一部の投稿でいいねボタンが欠けても診断対象から落とさない", () => {
+    const feed = renderFeed(likeButton, `<a href="${postHref}">投稿時刻</a>`);
+    const cards = blueskyAdapter.getPostCards(feed);
+    expect(cards).toHaveLength(2);
+    const missing = cards[1];
+    if (!missing) throw new Error("欠損投稿が取得できません");
+    expect(blueskyAdapter.readMetricCount(missing)).toBeNaN();
+  });
+  it("検索結果でも指標が欠けた投稿を残し、引用の入れ子を重複取得しない", () => {
+    const page = render(
+      `<div data-testid="searchScreen"><div role="link"><a href="${postHref}">投稿</a><div role="link"><a href="/profile/quoted.example/post/other">引用</a></div></div></div>`,
+    );
+    const cards = blueskyAdapter.getPostCards(page);
+    expect(cards).toHaveLength(1);
+    const card = cards[0];
+    if (!card) throw new Error("投稿がありません");
+    expect(blueskyAdapter.readMetricCount(card)).toBeNaN();
+  });
+
   it("詳細の画面が自分で描く testid の投稿も見つける", () => {
     const screen = render(
       `<div data-testid="postThreadItem-by-example.bsky.social">${likeButton}</div>`,
@@ -104,6 +123,7 @@ describe("Home の対象フィード", () => {
         <div style="background-color: rgb(0, 96, 255)"></div>
       </div>
       <div data-testid="homeScreenFeedTabs-selector-1">開発</div>
+      <div data-testid="followingFeedPage"></div>
     `);
 
     expect(isBlueskySupportedHomeTimeline(page)).toBe(true);
@@ -112,7 +132,7 @@ describe("Home の対象フィード", () => {
     );
   });
 
-  it("ピン留めフィードも投稿の描き直し中に操作できる", () => {
+  it("ピン留めリストは操作できるがカスタムフィードは対象外", () => {
     const page = render(`
       <div data-testid="homeScreenFeedTabs-selector-0">Following</div>
       <div data-testid="homeScreenFeedTabs-selector-1">
@@ -121,10 +141,37 @@ describe("Home の対象フィード", () => {
       </div>
     `);
 
-    expect(isBlueskySupportedHomeTimeline(page)).toBe(true);
-    expect(blueskyAdapter.isTimelineAvailable(page, { pathname: "/" })).toBe(
-      true,
+    const storage = localStorage;
+    storage.setItem(
+      "BSKY_STORAGE",
+      JSON.stringify({ session: { currentAccount: { did: "did:plc:test" } } }),
     );
+    const key = "bsky_account\\did:plc:test:lastSelectedHomeFeed";
+    try {
+      storage.setItem(
+        key,
+        JSON.stringify({
+          data: "list|at://did:plc:test/app.bsky.graph.list/123",
+        }),
+      );
+      expect(blueskyAdapter.isTimelineAvailable(page, { pathname: "/" })).toBe(
+        true,
+      );
+      storage.setItem(
+        key,
+        JSON.stringify({
+          data: "feedgen|at://did:plc:test/app.bsky.feed.generator/123",
+        }),
+      );
+      expect(blueskyAdapter.isTimelineAvailable(page, { pathname: "/" })).toBe(
+        false,
+      );
+      storage.setItem(key, "broken");
+      expect(isBlueskySupportedHomeTimeline(page)).toBe(false);
+    } finally {
+      storage.removeItem(key);
+      storage.removeItem("BSKY_STORAGE");
+    }
   });
 
   it("選択状態をまだ読めない間は対象外", () => {
@@ -154,13 +201,13 @@ describe("いいね数を読む", () => {
     expect(blueskyAdapter.readMetricCount(renderPost())).toBe(63561);
   });
 
-  it("いいねボタンが無ければ 0 を返す", () => {
+  it("いいねボタンが無ければ取得不能を返す", () => {
     const row = renderFeed("<span>liked your post</span>").firstElementChild;
     if (!row) {
       throw new Error("描画したフィードに行が無い");
     }
 
-    expect(blueskyAdapter.readMetricCount(row)).toBe(0);
+    expect(blueskyAdapter.readMetricCount(row)).toBeNaN();
   });
 });
 

@@ -1,4 +1,5 @@
 export const SIDE_PANEL_CONTROL = {
+  connectTab: "sift:sidepanel-connect-tab",
   configureForTab: "sift:sidepanel-configure-for-tab",
   setPanelTab: "sift:sidepanel-set-panel-tab",
 } as const;
@@ -19,6 +20,7 @@ export interface SidePanelConfigureRequest {
 export interface SidePanelTabRequest {
   readonly type: typeof SIDE_PANEL_CONTROL.setPanelTab;
   readonly tabId: number;
+  readonly resetMinimum?: boolean;
 }
 
 export function isSidePanelConfigureRequest(

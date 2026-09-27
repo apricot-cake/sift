@@ -1,3 +1,4 @@
+import { isPageHealth, type PageHealth } from "./page-health.ts";
 import type { SiteSettingsKey } from "./settings.ts";
 
 export const FILTER_CONTEXT_REQUEST = "sift:get-filter-context";
@@ -7,6 +8,9 @@ export interface FilterContextRequest {
 }
 
 export interface FilterContextResponse {
+  readonly health?: PageHealth;
+  readonly supportsPublicationAge?: boolean;
+  readonly sortOrder?: "newest" | "popular" | "unknown";
   readonly site: SiteSettingsKey;
   readonly pageTitle: string;
   readonly pageKey: string;
@@ -39,6 +43,13 @@ export function isFilterContextResponse(
   }
   const response = value as Partial<FilterContextResponse>;
   return (
+    (response.health === undefined || isPageHealth(response.health)) &&
+    (response.supportsPublicationAge === undefined ||
+      typeof response.supportsPublicationAge === "boolean") &&
+    (response.sortOrder === undefined ||
+      response.sortOrder === "newest" ||
+      response.sortOrder === "popular" ||
+      response.sortOrder === "unknown") &&
     (response.site === "x" ||
       response.site === "bluesky" ||
       response.site === "youtube" ||

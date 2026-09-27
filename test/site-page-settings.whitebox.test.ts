@@ -74,7 +74,7 @@ const PAGE_CASES: readonly PageCase[] = [
       markup: `
         <div data-testid="homeScreenFeedTabs-selector-Following">
           Following<div style="background-color: blue"></div>
-        </div>`,
+        </div><div data-testid="followingFeedPage"></div>`,
     },
     rejected: {
       pathname: "/",
@@ -84,11 +84,12 @@ const PAGE_CASES: readonly PageCase[] = [
   },
   {
     name: "YouTube",
-    url: "https://www.youtube.com/results?search_query=sift",
+    url: "https://www.youtube.com/@sift/videos",
     adapter: ADAPTERS[2] as ServiceAdapter,
     accepted: {
-      pathname: "/results",
-      markup: "<ytd-video-renderer></ytd-video-renderer>",
+      pathname: "/@sift/videos",
+      markup:
+        '<ytd-browse><button role="tab" aria-selected="true">新しい順</button></ytd-browse><ytd-video-renderer></ytd-video-renderer>',
     },
     rejected: {
       pathname: "/watch",
@@ -97,10 +98,10 @@ const PAGE_CASES: readonly PageCase[] = [
   },
   {
     name: "ニコニコ動画",
-    url: "https://www.nicovideo.jp/search/sift",
+    url: "https://www.nicovideo.jp/user/123/video",
     adapter: ADAPTERS[3] as ServiceAdapter,
     accepted: {
-      pathname: "/search/sift",
+      pathname: "/user/123/video",
       markup:
         '<article data-video-id="sm1"><a href="/watch/sm1">Sift</a></article>',
     },
@@ -126,6 +127,7 @@ describe("サイトと対象ページ", () => {
       expect(
         adapter.isTimelineAvailable(render(accepted.markup), {
           pathname: accepted.pathname,
+          search: "?sort=v&order=d",
         }),
       ).toBe(true);
       expect(

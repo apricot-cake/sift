@@ -7,6 +7,7 @@ import {
 } from "../utils/filter-context.ts";
 import { startLocalBuildReload } from "../utils/local-build-reload.ts";
 import {
+  isSidePanelTabId,
   SIDE_PANEL_CONTROL,
   SIDE_PANEL_TAB_STORAGE_KEY,
 } from "../utils/sidepanel-controls.ts";
@@ -52,7 +53,7 @@ export default defineBackground(() => {
     .sidePanel;
 
   // default_path は WXT が manifest に生成する。パネルはユーザーが action を
-  // 実行した対応サイトで開き、対象外のページなら閉じる。worker の
+  // 実行したタブで開き、対象外のサイト・ページはパネル内で案内する。worker の
   // 起動ごとに無効化すると、action 後に worker が再起動しただけで開いたパネルが
   // 無効になるため、初回インストールまたは更新時だけ既定値を設定する。
   browser.runtime.onInstalled.addListener(() => {
@@ -60,12 +61,12 @@ export default defineBackground(() => {
   });
 
   async function openPanelForActiveTab(tab: Browser.tabs.Tab): Promise<void> {
-    if (tab.id === undefined || !isSupportedSiteUrl(tab.url)) {
+    if (tab.id === undefined) {
       return;
     }
 
     // 非同期のページ判定を待つと action のユーザー操作が失われるため、
-    // 全サイトで最初の await より前に開く。対象外なら下の判定で閉じる。
+    // 全サイトで最初の await より前に開く。
     const savedTab = browser.storage.session.set({
       [SIDE_PANEL_TAB_STORAGE_KEY]: tab.id,
     });
@@ -76,13 +77,21 @@ export default defineBackground(() => {
     });
     const panelOpening = sidePanel?.open({ tabId: tab.id });
     await Promise.all([savedTab, configured, panelOpening]);
-    const target = { tabId: tab.id };
-    await browser.scripting.insertCSS({ target, css: contentStyle });
-    await browser.scripting.executeScript({ target, files: ["/sift.js"] });
-    const context = await readFilterContext(tab.id);
-    if (context === null || !context.timelineAvailable) {
-      await sidePanel?.setOptions({ tabId: tab.id, enabled: false });
+    if (isSupportedSiteUrl(tab.url)) {
+      const target = { tabId: tab.id };
+      await browser.scripting.insertCSS({ target, css: contentStyle });
+      await browser.scripting.executeScript({ target, files: ["/sift.js"] });
+      // カードが未描画でも閉じない。対応状況はパネルが継続して取得する。
+      await readFilterContext(tab.id);
     }
+    // 既存のパネルを開き直す場合は onOpened が発火しないことがある。
+    // 注入後にも接続先を通知し、前のタブに結び付いたままにしない。
+    void browser.runtime
+      .sendMessage({
+        type: SIDE_PANEL_CONTROL.setPanelTab,
+        tabId: tab.id,
+      })
+      .catch(() => {});
   }
 
   async function refreshOpenPanelForNavigation(
@@ -132,6 +141,36 @@ export default defineBackground(() => {
     });
   });
 
+  // パネルの復元やタブ切替は action を伴わない。既に許可された現在のタブなら
+  // 接続を復旧する。新しいサイト権限は要求せず、拒否された場合はパネルで案内する。
+  browser.runtime.onMessage.addListener((message, sender) => {
+    // ファイルの再取得ではなく、現在実行中のバックグラウンドがビルドIDを返す。
+    // ローカル配備の診断専用。通常ページ・content scriptからは受け付けない。
+    if (
+      __SIFT_LOCAL_DEPLOY__ &&
+      message?.type === "sift:get-local-build" &&
+      sender.url === browser.runtime.getURL("/sidepanel.html") &&
+      sender.tab === undefined
+    )
+      return Promise.resolve({ buildId: __SIFT_BUILD_ID__ });
+    if (
+      sender.url !== browser.runtime.getURL("/sidepanel.html") ||
+      sender.tab !== undefined ||
+      message?.type !== SIDE_PANEL_CONTROL.connectTab ||
+      !isSidePanelTabId(message.tabId)
+    )
+      return;
+    return (async () => {
+      const tab = await browser.tabs.get(message.tabId);
+      if (!tab.active) return false;
+      await browser.storage.session.set({
+        [SIDE_PANEL_TAB_STORAGE_KEY]: tab.id,
+      });
+      await refreshOpenPanelForNavigation(message.tabId, tab);
+      return true;
+    })().catch(() => false);
+  });
+
   browser.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
     if (changeInfo.url !== undefined || changeInfo.status === "complete") {
       void refreshOpenPanelForNavigation(tabId, tab).catch(() => {});
@@ -139,7 +178,11 @@ export default defineBackground(() => {
   });
 
   sidePanel?.onOpened.addListener((panel) => {
-    if (panel.path === "sidepanel.html" && panel.tabId !== undefined) {
+    // Chrome の開閉通知では先頭に / が付く場合がある。
+    if (
+      (panel.path === "sidepanel.html" || panel.path === "/sidepanel.html") &&
+      panel.tabId !== undefined
+    ) {
       void browser.storage.session.set({
         [SIDE_PANEL_TAB_STORAGE_KEY]: panel.tabId,
       });
@@ -147,6 +190,7 @@ export default defineBackground(() => {
         .sendMessage({
           type: SIDE_PANEL_CONTROL.setPanelTab,
           tabId: panel.tabId,
+          resetMinimum: true,
         })
         .catch(() => {});
     }

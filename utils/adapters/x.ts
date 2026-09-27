@@ -24,6 +24,37 @@ const X_SELECTORS = Object.freeze({
   homeTab: '[role="tab"]',
 });
 const X_STATUS_ID = /\/status\/(\d+)/;
+const X_RESERVED_PATHS = new Set([
+  "home",
+  "search",
+  "explore",
+  "notifications",
+  "messages",
+  "settings",
+  "i",
+  "compose",
+  "login",
+  "logout",
+  "signup",
+  "tos",
+  "privacy",
+]);
+
+export function isXFilterPage(
+  root: ParentNode,
+  page: Pick<Location, "pathname"> & Partial<Pick<Location, "search">>,
+): boolean {
+  if (page.pathname === "/home") return isXSupportedHomeTimeline(root);
+  if (page.pathname === "/search") {
+    return new URLSearchParams(page.search ?? "").get("f") === "live";
+  }
+  if (/^\/i\/lists\/\d+\/?$/.test(page.pathname)) return true;
+  // プロフィールは「ポスト」のみ。返信やメディアなどの下位ページは対象外。
+  const profile = /^\/([\w]{1,15})\/?$/.exec(page.pathname);
+  return Boolean(
+    profile?.[1] && !X_RESERVED_PATHS.has(profile[1].toLowerCase()),
+  );
+}
 
 function timelinePostCards(root: ParentNode): Element[] {
   return Array.from(root.querySelectorAll(X_SELECTORS.postCard)).filter(
@@ -77,24 +108,34 @@ export const xAdapter = Object.freeze({
   id: "x",
   matches: Object.freeze(["https://x.com/*", "https://twitter.com/*"]),
   settingsKey: "x",
+  readPageSupport(
+    root: ParentNode,
+    page: Pick<Location, "pathname"> & Partial<Pick<Location, "search">>,
+  ) {
+    if (
+      page.pathname === "/home" &&
+      !root.querySelector(`${X_SELECTORS.homeTabs} [aria-selected="true"]`)
+    )
+      return "unknown";
+    return isXFilterPage(root, page) ? "supported" : "unsupported";
+  },
+  hasEmptyTimeline(root: ParentNode) {
+    return [
+      ...root.querySelectorAll(
+        '[data-testid="primaryColumn"] [data-testid="emptyState"]',
+      ),
+    ].some((e) =>
+      /(?:ポストがありません|まだポストしていません|動画をポストしていません|検索結果はありません|No results|hasn.t posted|No posts yet)/i.test(
+        e.textContent ?? "",
+      ),
+    );
+  },
 
   readTimelineKey(
     root: ParentNode,
     page: Pick<Location, "pathname" | "search">,
   ) {
-    // 狭い画面ではリスト選択などがタイムラインを置き換える。
-    if (
-      page.pathname.startsWith("/i/") &&
-      !/^\/i\/lists\/\d+$/.test(page.pathname)
-    ) {
-      return null;
-    }
-    if (page.pathname === "/home" && !isXSupportedHomeTimeline(root)) {
-      return null;
-    }
-    if (page.pathname !== "/home" && !this.hasPostCards(root)) {
-      return null;
-    }
+    if (!this.isTimelineAvailable(root, page)) return null;
     const tabs = Array.from(root.querySelectorAll('[role="tab"]'));
     const selected = tabs.findIndex(
       (tab) => tab.getAttribute("aria-selected") === "true",
@@ -113,10 +154,11 @@ export const xAdapter = Object.freeze({
   // Home は投稿を仮想化していて、描き直し中は一時的にカードが無くなる。それでも
   // フォロー中とピン留めリストでは、投稿の描き直し中も抽出を受け付ける。
   // おすすめだけは対象外。固定 URL を持つリストの専用ページも従来どおり扱う。
-  isTimelineAvailable(root: ParentNode, page: Pick<Location, "pathname">) {
-    return page.pathname === "/home"
-      ? isXSupportedHomeTimeline(root)
-      : this.hasPostCards(root);
+  isTimelineAvailable(
+    root: ParentNode,
+    page: Pick<Location, "pathname"> & Partial<Pick<Location, "search">>,
+  ) {
+    return isXFilterPage(root, page);
   },
 
   // 隠される単位。X は投稿を、区切り線と周囲の余白も持つセルで包んでいるので、
@@ -139,15 +181,10 @@ export const xAdapter = Object.freeze({
     return X_STATUS_ID.exec(href ?? "")?.[1] ?? null;
   },
 
-  isDetailPost(postCard: Element, page: Pick<Location, "pathname">) {
-    const detailId = X_STATUS_ID.exec(page.pathname)?.[1];
-    return detailId !== undefined && this.readPostId(postCard) === detailId;
-  },
-
   readMetricCount(postCard: Element) {
     const button = postCard.querySelector(X_SELECTORS.reactionButton);
     if (!button) {
-      return 0;
+      return Number.NaN;
     }
 
     const accessibleText = button.getAttribute("aria-label") || "";
@@ -159,7 +196,11 @@ export const xAdapter = Object.freeze({
   // このサービスの作りの話ではない。
   readMedia(postCard: Element) {
     return {
-      hasImage: Boolean(postCard.querySelector(X_SELECTORS.image)),
+      hasImage: Array.from(postCard.querySelectorAll(X_SELECTORS.image)).some(
+        (image) =>
+          !image.matches(X_SELECTORS.video) &&
+          !image.querySelector(X_SELECTORS.video),
+      ),
       hasVideo: Boolean(postCard.querySelector(X_SELECTORS.video)),
     };
   },
@@ -194,6 +235,14 @@ export const xAdapter = Object.freeze({
   },
 
   readIsQuote(postCard: Element) {
+    // 現行の引用カードはhrefを持たないことがある。作者アバターを含む
+    // リンク役割のカードで区別し、通常の外部リンクカードとは混同しない。
+    if (
+      Array.from(postCard.querySelectorAll('div[role="link"]')).some((card) =>
+        Boolean(card.querySelector(X_SELECTORS.avatar)),
+      )
+    )
+      return true;
     const ownId = this.readPostId(postCard);
     if (!ownId) {
       return false;

@@ -120,6 +120,7 @@ export interface Post {
 }
 
 export interface InclusionThreshold {
+  maximumAgeHours?: number | null;
   minimum: number | null;
   minimumAgeHours: number | null;
 }
@@ -143,6 +144,7 @@ export type ClassifyReason =
   | "indeterminate-metric"
   | "indeterminate-age"
   | "newer-than-period"
+  | "older-than-period"
   | "no-inclusion-filter"
   | "filter-match"
   | "below-threshold";
@@ -179,7 +181,8 @@ export function classifyPost(
 
   if (
     settings.inclusion.minimum === null &&
-    settings.inclusion.minimumAgeHours === null
+    settings.inclusion.minimumAgeHours === null &&
+    settings.inclusion.maximumAgeHours == null
   ) {
     return { state: "visible", reason: "no-inclusion-filter" };
   }
@@ -207,5 +210,15 @@ export function classifyPost(
     }
   }
 
+  if (settings.inclusion.maximumAgeHours != null) {
+    if (!Number.isFinite(post.createdAtMs))
+      return { state: "visible", reason: "indeterminate-age" };
+    if (
+      (nowMs - post.createdAtMs) / 3600000 >
+      settings.inclusion.maximumAgeHours
+    ) {
+      return { state: "hidden", reason: "older-than-period" };
+    }
+  }
   return { state: "matched", reason: "filter-match" };
 }

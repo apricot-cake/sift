@@ -3,7 +3,7 @@ export interface MetricThresholdSuggestion {
   readonly minimum: number;
 }
 
-const QUANTILES = Object.freeze([0, 0.25, 0.5, 0.75, 1]);
+const STEPS = Object.freeze([1, 2, 3, 5]);
 
 function readableMinimum(value: number): number {
   if (value <= 0) return 0;
@@ -20,13 +20,22 @@ export function metricThresholdSuggestions(
   const sorted = values
     .filter((value) => Number.isSafeInteger(value) && value >= 0)
     .sort((left, right) => left - right);
-  if (sorted.length === 0) return [];
+  const first = sorted[0];
+  const highest = sorted.at(-1);
+  if (first === undefined || highest === undefined) return [];
 
   const minimums = new Set<number>([currentMinimum]);
-  for (const quantile of QUANTILES) {
-    const index = Math.round((sorted.length - 1) * quantile);
-    const value = sorted[index];
-    if (value !== undefined) minimums.add(readableMinimum(value));
+  const lowest = readableMinimum(first);
+  if (lowest === 0) minimums.add(0);
+  for (
+    let magnitude = 10 ** Math.floor(Math.log10(Math.max(1, lowest)));
+    magnitude <= highest;
+    magnitude *= 10
+  ) {
+    for (const step of STEPS) {
+      const minimum = step * magnitude;
+      if (minimum >= lowest && minimum <= highest) minimums.add(minimum);
+    }
   }
 
   return Array.from(minimums)

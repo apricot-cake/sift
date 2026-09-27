@@ -34,18 +34,92 @@ const BLUESKY_SELECTORS = Object.freeze({
 const BLUESKY_POST_ID = /\/profile\/([^/]+)\/post\/([^/?#]+)/;
 const BLUESKY_FEED_END_TEXT = /^(?:End of feed|フィードの終わり)$/;
 
-export function isBlueskySupportedHomeTimeline(root: ParentNode): boolean {
-  return Array.from(root.querySelectorAll(BLUESKY_SELECTORS.homeTab)).some(
-    (tab) => Boolean(tab.querySelector(BLUESKY_SELECTORS.selectedTabMark)),
+// Sift が隠したカード自身は読み直す。サイトが退避した画面・タブは読まない。
+function hasHiddenAncestor(element: Element): boolean {
+  let parent = element.parentElement;
+  while (parent) {
+    if (
+      parent.hasAttribute("hidden") ||
+      (parent as HTMLElement).style.display === "none"
+    )
+      return true;
+    parent = parent.parentElement;
+  }
+  return false;
+}
+
+function selectedTab(root: ParentNode, selector: string): Element | undefined {
+  return Array.from(root.querySelectorAll(selector)).find(
+    (tab) =>
+      !hasHiddenAncestor(tab) &&
+      (tab.getAttribute("aria-selected") === "true" ||
+        Boolean(tab.querySelector(BLUESKY_SELECTORS.selectedTabMark))),
   );
 }
 
-// 通知画面は、投稿ではない行（いいね・フォロー）にも投稿カードの testid を
-// 使い回す。そういう行はいいねボタンを持たない＝これが、投稿なら必ず持ち通知の
-// 行は持たない唯一の部分。
+export function readBlueskyHomeSupport(root: ParentNode): boolean | null {
+  const selected = Array.from(
+    root.querySelectorAll(BLUESKY_SELECTORS.homeTab),
+  ).find((tab) =>
+    Boolean(tab.querySelector(BLUESKY_SELECTORS.selectedTabMark)),
+  );
+  if (!selected) return null;
+  // Following は並べ替え可能なので、タブの位置では識別しない。
+  const following = root.querySelector('[data-testid="followingFeedPage"]');
+  if (following) {
+    let element: Element | null = following;
+    while (
+      element &&
+      !element.hasAttribute("hidden") &&
+      (element as HTMLElement).style?.display !== "none"
+    )
+      element = element.parentElement;
+    if (!element) return true;
+  }
+  // ホームの固定リストとカスタムフィードは同じ DOM を使う。
+  // サイトが保存した現在のアカウントIDと選択フィード種別だけを参照する。
+  // アカウント情報を保持・送信せず、形式が変わった場合は対象外にする。
+  try {
+    const doc = root.ownerDocument ?? (root as Document);
+    const storage = doc.defaultView?.localStorage;
+    const did = JSON.parse(storage?.getItem("BSKY_STORAGE") ?? "null")?.session
+      ?.currentAccount?.did;
+    if (typeof did !== "string" || !did.startsWith("did:")) return null;
+    const feed = JSON.parse(
+      storage?.getItem(`bsky_account\\${did}:lastSelectedHomeFeed`) ?? "null",
+    )?.data;
+    if (typeof feed !== "string") return null;
+    if (/^list\|at:\/\/[^/]+\/app\.bsky\.graph\.list\/[^/]+$/.test(feed))
+      return true;
+    if (/^(?:feedgen|feed)\|/.test(feed)) return false;
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+export function isBlueskySupportedHomeTimeline(root: ParentNode): boolean {
+  return readBlueskyHomeSupport(root) === true;
+}
+
+// 指標を取得できない投稿も診断対象に残す。通知だけの行は除く。
 function readablePostCards(root: ParentNode): Element[] {
-  return Array.from(root.querySelectorAll(BLUESKY_SELECTORS.postCard)).filter(
-    (postCard) => postCard.querySelector(BLUESKY_SELECTORS.reactionButton),
+  const cards = new Set(root.querySelectorAll(BLUESKY_SELECTORS.postCard));
+  // 検索結果は投稿testidを持たない。指標ボタンが欠けても投稿リンクから識別する。
+  for (const card of root.querySelectorAll(
+    '[data-testid="searchScreen"] div[role="link"]',
+  )) {
+    if (
+      !card.parentElement?.closest('div[role="link"]') &&
+      card.querySelector(BLUESKY_SELECTORS.postLink)
+    )
+      cards.add(card);
+  }
+  return Array.from(cards).filter(
+    (postCard) =>
+      !hasHiddenAncestor(postCard) &&
+      (postCard.querySelector(BLUESKY_SELECTORS.reactionButton) ||
+        postCard.querySelector(BLUESKY_SELECTORS.postLink)),
   );
 }
 
@@ -54,6 +128,42 @@ export const blueskyAdapter = Object.freeze({
   id: "bluesky",
   matches: Object.freeze(["https://bsky.app/*"]),
   settingsKey: "bluesky",
+  readPageSupport(
+    root: ParentNode,
+    page: Pick<Location, "pathname"> & Partial<Pick<Location, "search">>,
+  ) {
+    if (page.pathname === "/") {
+      const support = readBlueskyHomeSupport(root);
+      return support === null
+        ? "unknown"
+        : support
+          ? "supported"
+          : "unsupported";
+    }
+    if (page.pathname === "/search") {
+      const tab = selectedTab(
+        root,
+        '[data-testid="searchScreen"] [role="tab"]',
+      );
+      const label = tab?.textContent?.trim() ?? "";
+      if (/^(最新|Latest)$/i.test(label)) return "supported";
+      if (/^(トップ|Top|ユーザー|Users|People)$/i.test(label))
+        return "unsupported";
+      return "unknown";
+    }
+    return this.isTimelineAvailable(root, page) ? "supported" : "unsupported";
+  },
+  hasEmptyTimeline(root: ParentNode) {
+    return [
+      ...root.querySelectorAll(
+        '[data-testid="postsFeed-flatlist"] [dir="auto"], [data-testid="searchScreen"] [dir="auto"]',
+      ),
+    ].some((e) =>
+      /^(まだ投稿がありません|投稿がありません|検索結果がありません|No posts yet|No posts found|No results found)[。.!]?$/.test(
+        e.textContent?.trim() ?? "",
+      ),
+    );
+  },
   needsLayoutProbeForPagination: true,
 
   readTimelineKey(
@@ -63,15 +173,17 @@ export const blueskyAdapter = Object.freeze({
     // 投稿詳細では、戻り先の一覧の位置を保持する。
     if (/^\/profile\/[^/]+\/post\/[^/]+\/?$/.test(page.pathname)) return null;
     if (!this.isTimelineAvailable(root, page)) return null;
-    if (page.pathname !== "/") return `${page.pathname}${page.search}`;
-    const tab = Array.from(
-      root.querySelectorAll(BLUESKY_SELECTORS.homeTab),
-    ).find((item) => item.querySelector(BLUESKY_SELECTORS.selectedTabMark));
+    const tab = selectedTab(
+      root,
+      page.pathname === "/" ? BLUESKY_SELECTORS.homeTab : '[role="tab"]',
+    );
     return `${page.pathname}${page.search}:${tab?.getAttribute("data-testid") ?? ""}:${tab?.textContent ?? ""}`;
   },
 
   hasReachedTimelineEnd(root: ParentNode) {
-    const feed = root.querySelector(BLUESKY_SELECTORS.postsFeed);
+    const feed = Array.from(
+      root.querySelectorAll(BLUESKY_SELECTORS.postsFeed),
+    ).find((item) => !hasHiddenAncestor(item));
     if (!feed) {
       return false;
     }
@@ -89,10 +201,32 @@ export const blueskyAdapter = Object.freeze({
     return readablePostCards(root).length > 0;
   },
 
-  isTimelineAvailable(root: ParentNode, page: Pick<Location, "pathname">) {
-    return page.pathname === "/"
-      ? isBlueskySupportedHomeTimeline(root)
-      : this.hasPostCards(root);
+  isTimelineAvailable(
+    root: ParentNode,
+    page: Pick<Location, "pathname"> & Partial<Pick<Location, "search">>,
+  ) {
+    if (page.pathname === "/") return isBlueskySupportedHomeTimeline(root);
+    if (page.pathname === "/search") {
+      const tab = selectedTab(
+        root,
+        '[data-testid="searchScreen"] [role="tab"]',
+      );
+      return /^(最新|Latest)$/i.test(tab?.textContent?.trim() ?? "");
+    }
+    const profileTab = selectedTab(
+      root,
+      '[data-testid^="profilePager-selector-"]',
+    );
+    if (
+      profileTab &&
+      !/^profilePager-selector-[023]$/.test(
+        profileTab.getAttribute("data-testid") ?? "",
+      )
+    )
+      return false;
+    return /^\/profile\/[^/]+(?:\/(?:lists\/[^/]+|media|video))?\/?$/.test(
+      page.pathname,
+    );
   },
 
   // 隠される単位。X と違い Bluesky は区切り線と余白をカードの内側に持つので、
@@ -114,7 +248,7 @@ export const blueskyAdapter = Object.freeze({
   readMetricCount(postCard: Element) {
     const button = postCard.querySelector(BLUESKY_SELECTORS.reactionButton);
     if (!button) {
-      return 0;
+      return Number.NaN;
     }
 
     // 正確な数を持っているのは読み上げ用のラベル。ボタンの隣に出ている文字は

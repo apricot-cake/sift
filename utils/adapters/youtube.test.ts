@@ -80,30 +80,27 @@ describe("YouTube の動画を見つける", () => {
 
 describe("YouTube の対象ページを選ぶ", () => {
   it.each([
-    "/results",
-    "/feed/subscriptions",
     "/@sift/videos",
     "/@sift/shorts",
     "/@sift/streams",
-    "/@sift/live",
-    "/@sift/search",
     "/channel/UC123/videos",
     "/channel/UC123/shorts/",
     "/channel/UC123/streams",
-    "/channel/UC123/live",
     "/c/sift/videos",
-    "/c/sift/live",
     "/c/sift/streams",
     "/user/sift/shorts",
-    "/user/sift/live/",
     "/user/sift/streams",
-    "/user/sift/search/",
   ])("%s を対象にする", (pathname) => {
     expect(isYouTubeFilterPage(pathname)).toBe(true);
   });
 
   it.each([
     "/",
+    "/results",
+    "/feed/subscriptions",
+    "/@sift/search",
+    "/user/sift/search/",
+    "/@sift/live",
     "/@sift",
     "/@sift/featured",
     "/feed/history",
@@ -118,7 +115,7 @@ describe("YouTube の対象ページを選ぶ", () => {
   it("対象ページでも動画が無ければ操作対象にしない", () => {
     expect(
       youtubeAdapter.isTimelineAvailable(render(""), {
-        pathname: "/results",
+        pathname: "/@sift/videos",
       }),
     ).toBe(false);
   });
@@ -161,6 +158,12 @@ describe("YouTube の対象ページを選ぶ", () => {
 });
 
 describe("YouTube の再生回数を読む", () => {
+  it("単位が読み上げラベルだけにあるカードの再生数を読む", () => {
+    const card = renderVideo(
+      '<span class="ytContentMetadataViewModelMetadataText" aria-label="12万回視聴">12万</span>',
+    );
+    expect(youtubeAdapter.readMetricCount(card)).toBe(120000);
+  });
   it("検索結果の再生回数を読む", () => {
     const video = renderVideo(`
       <div id="metadata-line">

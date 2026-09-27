@@ -7,6 +7,53 @@ function readEntrypoint(path: string): string {
 }
 
 describe("抽出の操作入口", () => {
+  it("最低値の候補は数値だけにし、件数と数値入力の単位は残す", () => {
+    const panel = readEntrypoint("entrypoints/sidepanel/sidepanel-app.tsx");
+    for (const [locale, views, likes] of [
+      ["ja", "回", "いいね"],
+      ["en", " views", " likes"],
+    ]) {
+      const messages = readEntrypoint(`locales/${locale}.yml`);
+      expect(messages).toContain(
+        `sidepanelMinimumSuggestionMinimumSuffix: "${views}"`,
+      );
+      expect(messages).toContain(
+        `sidepanelLikeSuggestionMinimumSuffix: "${likes}"`,
+      );
+    }
+    expect(panel).toContain(
+      'suffix={t("sidepanelLikeSuggestionMinimumSuffix")}',
+    );
+    const candidates = panel.slice(
+      panel.indexOf("{suggestions.map((suggestion)"),
+    );
+    const options = candidates.slice(0, candidates.indexOf("</SelectContent>"));
+    expect(options).toContain("{formatter.format(suggestion.minimum)}");
+    expect(options).not.toContain("SuggestionMinimumSuffix");
+    expect(options).toContain('data-choice-count=""');
+    expect(options).toContain("sidepanelLikeSuggestionCountSuffix");
+    expect(options).toContain("sidepanelMinimumSuggestionCountSuffix");
+  });
+  it("SNSの除外スイッチに表示ラベルと同じ名前を付ける", () => {
+    const panel = readEntrypoint("entrypoints/sidepanel/sidepanel-app.tsx");
+    for (const [label, setting] of [
+      ["optionsHideReplies", "hideReplies"],
+      ["optionsHideQuotes", "hideQuotes"],
+      ["optionsHideReposts", "hideReposts"],
+    ]) {
+      expect(panel.replace(/\s+/g, " ")).toContain(
+        `aria-label={t("${label}")} checked={selectedSettings.${setting}}`,
+      );
+    }
+  });
+  it("パネルの再表示でも最低値の選択を初期化する", () => {
+    const panel = readEntrypoint("entrypoints/sidepanel/sidepanel-app.tsx");
+    const background = readEntrypoint("entrypoints/background.ts");
+    expect(background).toContain("resetMinimum: true");
+    expect(panel).toMatch(
+      /if \(message.resetMinimum === true\) \{\s*initializedMinimums.current.clear\(\);\s*setManualSites\(\{\}\)/,
+    );
+  });
   it("未接続や対象外では初期化を完了せず、有効化の意図も消さない", () => {
     const sidepanel = readEntrypoint("entrypoints/sidepanel/sidepanel-app.tsx");
     expect(sidepanel).toMatch(
@@ -27,12 +74,12 @@ describe("抽出の操作入口", () => {
     expect(sidepanel).toMatch(
       /minReactions: minimum,\s*minReactionsEnabled: true/,
     );
-    expect(sidepanel).toContain("setManualMinimum(value, manualActive)");
+    expect(sidepanel).toContain("setManualMinimum(value, true)");
     expect(sidepanel).toContain(
       "!manualActive && selectedSettings.minCountEnabled",
     );
   });
-  it("対応サイトのタブでだけアイコンからサイドパネルを開く", () => {
+  it("どのタブでもパネルを開き、対応サイトだけに処理を注入する", () => {
     const background = readEntrypoint("entrypoints/background.ts");
     const content = readEntrypoint("entrypoints/sift.ts");
 
@@ -50,6 +97,16 @@ describe("抽出の操作入口", () => {
       actionHandler.search(/^\s*await /m),
     );
     expect(actionHandler.match(/sidePanel\?\.open\(/g)).toHaveLength(1);
+    expect(
+      actionHandler.indexOf("isSupportedSiteUrl(tab.url)"),
+    ).toBeGreaterThan(actionHandler.indexOf("await Promise.all"));
+    expect(actionHandler).toMatch(
+      /if \(isSupportedSiteUrl\(tab.url\)\) \{\s*const target/,
+    );
+    expect(actionHandler).not.toContain("enabled: false");
+    expect(
+      actionHandler.indexOf("SIDE_PANEL_CONTROL.setPanelTab"),
+    ).toBeGreaterThan(actionHandler.indexOf("await readFilterContext(tab.id)"));
     expect(background).toContain("sidePanel?.setOptions({ enabled: false })");
     expect(background).toContain("browser.runtime.onInstalled.addListener");
     expect(background).toContain("isSupportedSiteUrl(tab.url)");
@@ -99,7 +156,7 @@ describe("抽出の操作入口", () => {
     expect(sidepanel).toContain("onBlur={commit}");
   });
 
-  it("最低値は数値欄と同じ行のトグルで切り替える", () => {
+  it("最低値の数値入力はトグルを使わず選択する", () => {
     const sidepanel = readEntrypoint("entrypoints/sidepanel/sidepanel-app.tsx");
     const start = sidepanel.indexOf("function ThresholdSetting");
     const end = sidepanel.indexOf("function EditableNumberInput", start);
@@ -108,7 +165,8 @@ describe("抽出の操作入口", () => {
     expect(start).toBeGreaterThan(-1);
     expect(thresholdSetting).toContain("<EditableNumberInput");
     expect(thresholdSetting).not.toContain("disabled={!enabled}");
-    expect(thresholdSetting).toContain("<Switch");
+    expect(thresholdSetting).not.toContain("<Switch");
+    expect(thresholdSetting).toContain('data-custom-minimum=""');
     expect(sidepanel).not.toContain('t("optionsLikesEnabled")');
     expect(sidepanel).not.toContain('t("optionsViewsEnabled")');
   });
@@ -140,8 +198,12 @@ describe("抽出の操作入口", () => {
     expect(select).toContain('className="size-4 shrink-0 opacity-50"');
     expect(periodSetting).toContain('data-publication-age=""');
     expect(periodSetting).toContain('data-publication-age-inputs=""');
-    expect(periodSetting.indexOf("<Switch")).toBeLessThan(
+    expect(periodSetting.indexOf("<Switch")).toBeGreaterThan(
       periodSetting.indexOf("<EditableNumberInput"),
+    );
+    const styles = readEntrypoint("entrypoints/sidepanel/style.css");
+    expect(styles).toMatch(
+      /\[data-publication-age\] > \[role="switch"\]\s*\{[^}]*grid-row: 1 \/ 3;[^}]*align-self: center;/,
     );
     expect(periodSetting).not.toContain("disabled={!enabled}");
     expect(periodSetting).toContain(
@@ -157,9 +219,11 @@ describe("抽出の操作入口", () => {
     expect(
       sidepanel.match(/label=\{t\("optionsManualMinimum"\)\}/g),
     ).toHaveLength(2);
-    expect(sidepanel.match(/suffix=\{t\("optionsUnitViews"\)\}/g)).toHaveLength(
-      1,
-    );
+    expect(
+      sidepanel.match(
+        /suffix=\{\s*t\(\s*"sidepanelMinimumSuggestionMinimumSuffix",?\s*\)\s*\}/g,
+      ),
+    ).toHaveLength(1);
     expect(sidepanel).not.toContain("optionsViewsPrefix");
   });
 
@@ -219,7 +283,7 @@ describe("抽出の操作入口", () => {
     expect(sidepanel).not.toContain("<summary");
   });
 
-  it("再生回数といいね数の候補・入力欄をまとめ、集計説明を末尾に置く", () => {
+  it("指定なし・候補・数値入力の順に並べ集計説明を末尾に置く", () => {
     const sidepanel = readEntrypoint("entrypoints/sidepanel/sidepanel-app.tsx");
     expect(sidepanel.match(/<section data-minimum-group="">/g)).toHaveLength(2);
     expect(sidepanel.match(/<\/MetricThresholdSuggestions>/g)).toHaveLength(2);
@@ -228,11 +292,19 @@ describe("抽出の操作入口", () => {
       sidepanel.indexOf("function EditableNumberInput"),
     );
     expect(suggestions.indexOf("suggestions.map")).toBeLessThan(
-      suggestions.indexOf('data-manual-minimum=""'),
+      suggestions.indexOf('<SelectItem value="custom">'),
     );
-    expect(suggestions.indexOf('data-manual-minimum=""')).toBeLessThan(
+    expect(suggestions.indexOf('<SelectItem value="custom">')).toBeLessThan(
       suggestions.indexOf("{scopeText}"),
     );
+    expect(suggestions.indexOf('<SelectItem value="none">')).toBeLessThan(
+      suggestions.indexOf("suggestions.map"),
+    );
+    expect(suggestions).toContain('data-minimum-picker=""');
+    expect(suggestions).toContain(
+      "minimumEnabled && !selectionEnabled && children",
+    );
+    expect(suggestions).toContain('value === "custom"');
     expect(suggestions).not.toContain("return null");
   });
 
