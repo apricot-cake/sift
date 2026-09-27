@@ -1,5 +1,6 @@
 import { homedir } from "node:os";
 import path from "node:path";
+import { callFunction } from "./cdp-call.ts";
 import { readDevBrowserEndpoint } from "./dev-browser-endpoint.ts";
 
 const [url, ...rest] = process.argv.slice(2);
@@ -94,15 +95,20 @@ try {
     targetId: initialTab[0].targetId,
   });
   await pause(500);
-  const tab = await ev(
+  const tab = await callFunction(
     worker,
-    `(async()=>{const ts=await chrome.tabs.query({});const matches=ts.filter(t=>t.url===${JSON.stringify(pt.url)});if(matches.length!==1)throw Error('Ambiguous tab');const t=matches[0];return {id:t.id,windowId:t.windowId,active:t.active};})()`,
+    "async function(url){const ts=await chrome.tabs.query({});const matches=ts.filter(t=>t.url===url);if(matches.length!==1)throw Error('Ambiguous tab');const t=matches[0];return {id:t.id,windowId:t.windowId,active:t.active};}",
+    [pt.url],
   );
   await ev(
     worker,
     `(()=>{if(globalThis.__siftSmokeObserver)throw Error('Observer already exists');const s={events:[]};s.opened=info=>s.events.push({event:'opened',...info,time:Date.now()});s.closed=info=>s.events.push({event:'closed',...info,time:Date.now()});chrome.sidePanel.onOpened.addListener(s.opened);chrome.sidePanel.onClosed.addListener(s.closed);globalThis.__siftSmokeObserver=s;return true;})()`,
   );
-  await ev(worker, `chrome.sidePanel.close({tabId:${tab.id}})`);
+  await callFunction(
+    worker,
+    "function(tabId){return chrome.sidePanel.close({tabId});}",
+    [tab.id],
+  );
   await pause(400);
   await ev(worker, "globalThis.__siftSmokeObserver.events.length=0");
   const baseline = await ev(
@@ -153,13 +159,18 @@ try {
   )) {
     const pc = await connect(p.webSocketDebuggerUrl);
     panelStates.push(
-      await ev(
+      await callFunction(
         pc,
-        `(async()=>{const s=await chrome.storage.session.get('sift:sidepanel-tab-id');return {target:${JSON.stringify(p.id)},visibility:document.visibilityState,width:innerWidth,height:innerHeight,tabId:s['sift:sidepanel-tab-id'],text:document.body.innerText};})()`,
+        "async function(target){const s=await chrome.storage.session.get('sift:sidepanel-tab-id');return {target,visibility:document.visibilityState,width:innerWidth,height:innerHeight,tabId:s['sift:sidepanel-tab-id'],text:document.body.innerText};}",
+        [p.id],
       ),
     );
   }
-  await ev(worker, `chrome.sidePanel.close({tabId:${tab.id}})`);
+  await callFunction(
+    worker,
+    "function(tabId){return chrome.sidePanel.close({tabId});}",
+    [tab.id],
+  );
   const closed = await waitEvent("closed");
   await pause(500);
   const closedPage = await ev(
