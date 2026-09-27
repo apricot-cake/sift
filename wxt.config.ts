@@ -4,8 +4,7 @@ import { defineConfig } from "wxt";
 
 const buildKind = process.env.SIFT_BUILD_KIND;
 const localDeploy = buildKind === "local";
-const e2eBuild = buildKind === "e2e";
-const signedBuild = localDeploy || e2eBuild;
+const signedBuild = localDeploy;
 const buildId = localDeploy ? (process.env.SIFT_BUILD_ID ?? "") : "";
 
 if (localDeploy && buildId === "") {
@@ -22,9 +21,7 @@ export default defineConfig({
   // 提出物は誰も読み込まない別の場所で作り、ローカル専用機能を含まない。
   outDir: localDeploy
     ? resolve(import.meta.dirname, ".output")
-    : e2eBuild
-      ? resolve(import.meta.dirname, ".output", "e2e")
-      : resolve(import.meta.dirname, ".output", "store"),
+    : resolve(import.meta.dirname, ".output", "store"),
   outDirTemplate: "{{browser}}-mv{{manifestVersion}}",
   // WXT にブラウザを起動させてはならない。理由は独立に2つある。
   //   - 自動化の仕組みを通して開いたものは自動化フラグの指紋を持ち、X はそれを
@@ -38,7 +35,7 @@ export default defineConfig({
     disabled: true,
   },
   manifest: {
-    // ローカル配備と E2E は固定の署名鍵を持たせ、拡張機能 id を
+    // ローカル配備は固定の署名鍵を持たせ、拡張機能 id を
     // bohbpocokkfioejlabmeaimpkpmablkm に保つ。Chrome ウェブストアは新規アイテムの
     // manifest に key があるパッケージを受け付けないため、ストア提出物には含めない。
     ...(signedBuild
@@ -62,19 +59,6 @@ export default defineConfig({
     action: {
       default_title: "Sift",
     },
-    // CI のブラウザ E2E だけは Chrome のユーザー操作として action を起動する。
-    // 製品版・ローカル配備版にショートカットを表示しないため、e2e ビルドへ限定する。
-    ...(e2eBuild
-      ? {
-          commands: {
-            _execute_action: {
-              suggested_key: {
-                default: "Ctrl+Shift+Y",
-              },
-            },
-          },
-        }
-      : {}),
   },
   vite: () => ({
     plugins: [tailwindcss()],

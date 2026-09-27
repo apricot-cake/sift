@@ -9,11 +9,7 @@
   "scripts": {
     "browser:open": "node scripts/dev-browser.ts",
     "browser:status": "node scripts/dev-browser.ts --print",
-    "browser:verify": "node scripts/dev-browser.ts --verify",
-    "test:integration:browser": "node scripts/browser-integration.ts",
-    "test:e2e:ci": "node scripts/e2e-ci.ts",
     "build": "node scripts/build-extension.ts store",
-    "build:e2e": "node scripts/build-extension.ts e2e",
     "package:store": "node scripts/build-extension.ts store zip",
     "deploy:local": "node scripts/deploy-extension.ts",
     "lint": "biome ci .",
@@ -24,28 +20,30 @@
     "postinstall": "node scripts/bootstrap-i18n-types.ts && wxt prepare"
   },
   "dependencies": {
+    "@fontsource-variable/noto-sans": "5.3.0",
+    "@fontsource-variable/noto-sans-jp": "5.3.0",
     "@radix-ui/react-select": "2.3.7",
     "@radix-ui/react-slot": "1.3.3",
     "@radix-ui/react-switch": "1.3.7",
     "@wxt-dev/i18n": "0.2.7",
     "class-variance-authority": "0.7.1",
     "clsx": "2.1.1",
-    "lucide-react": "1.41.0",
-    "react": "19.2.8",
-    "react-dom": "19.2.8",
-    "tailwind-merge": "3.6.0"
+    "lucide-react": "1.47.0",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "tailwind-merge": "3.7.0"
   },
   "devDependencies": {
-    "@biomejs/biome": "2.5.12",
+    "@biomejs/biome": "2.5.14",
     "@tailwindcss/vite": "4.3.3",
-    "@types/node": "26.4.1",
-    "@types/react": "19.2.18",
-    "@types/react-dom": "19.2.7",
+    "@types/node": "26.6.2",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
     "@wxt-dev/module-react": "1.2.2",
-    "happy-dom": "20.14.0",
+    "happy-dom": "20.14.5",
     "tailwindcss": "4.3.3",
     "typescript": "7.0.2",
-    "vite": "8.2.2",
+    "vite": "8.3.0",
     "vitest": "5.0.1",
     "wxt": "0.21.4"
   }

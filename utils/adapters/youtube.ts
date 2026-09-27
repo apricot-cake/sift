@@ -24,6 +24,7 @@ const YOUTUBE_SELECTORS = Object.freeze({
 const VIEW_LABEL =
   /(?:views?|回視聴|回再生|조회수|次觀看|次观看|visualizaciones?|visualiza(?:ç|c)[õo]es?)/i;
 const MEMBERS_ONLY_LABEL = /(?:members?\s+only|メンバー限定)/i;
+const MEMBERS_ONLY_BADGE_LABEL = /^(?:members?\s+only|メンバー限定)$/i;
 
 const AGE_IN_MILLISECONDS: Readonly<Record<string, number>> = Object.freeze({
   second: 1000,
@@ -37,21 +38,12 @@ const AGE_IN_MILLISECONDS: Readonly<Record<string, number>> = Object.freeze({
 
 const CHANNEL_FILTER_PATH =
   /^\/(?:@[^/]+|channel\/[^/]+|c\/[^/]+|user\/[^/]+)\/(?:videos|shorts|streams|live|search)\/?$/;
-const CHANNEL_ROOT_PATH =
-  /^\/(?:@[^/]+|channel\/[^/]+|c\/[^/]+|user\/[^/]+)\/?$/;
 
 export function isYouTubeFilterPage(pathname: string): boolean {
   return (
     pathname === "/results" ||
     pathname === "/feed/subscriptions" ||
     CHANNEL_FILTER_PATH.test(pathname)
-  );
-}
-
-function isYouTubeChannelGridPage(root: ParentNode, pathname: string): boolean {
-  return (
-    CHANNEL_ROOT_PATH.test(pathname) &&
-    Boolean(root.querySelector("ytd-rich-grid-renderer"))
   );
 }
 
@@ -214,6 +206,35 @@ function metadataTexts(postCard: Element): string[] {
     .filter(Boolean);
 }
 
+function hasMembersOnlyBadge(container: Element): boolean {
+  const badges = Array.from(
+    container.querySelectorAll(YOUTUBE_SELECTORS.memberBadge),
+  );
+  if (
+    badges.some((badge) => {
+      if (badge.matches("[class*='members-only']")) {
+        return true;
+      }
+      return MEMBERS_ONLY_LABEL.test(
+        `${badge.getAttribute("aria-label") ?? ""} ${badge.textContent ?? ""}`,
+      );
+    })
+  ) {
+    return true;
+  }
+
+  // YouTube の新しい一覧では、バッジが動画本体ではなく一覧セルの兄弟要素に
+  // なることがある。ラベルだけを持つ要素も対象にするが、動画タイトルは除く。
+  return Array.from(container.querySelectorAll("*")).some((element) => {
+    if (element.closest(YOUTUBE_SELECTORS.title)) {
+      return false;
+    }
+    return MEMBERS_ONLY_BADGE_LABEL.test(
+      `${element.getAttribute("aria-label") ?? ""} ${element.textContent ?? ""}`.trim(),
+    );
+  });
+}
+
 export const youtubeAdapter = Object.freeze({
   id: "youtube",
   matches: Object.freeze(["https://www.youtube.com/*"]),
@@ -247,11 +268,7 @@ export const youtubeAdapter = Object.freeze({
   },
 
   isTimelineAvailable(root: ParentNode, page: Pick<Location, "pathname">) {
-    return (
-      (isYouTubeFilterPage(page.pathname) ||
-        isYouTubeChannelGridPage(root, page.pathname)) &&
-      this.hasPostCards(root)
-    );
+    return isYouTubeFilterPage(page.pathname) && this.hasPostCards(root);
   },
 
   findPostCell(postCard: Element) {
@@ -295,16 +312,8 @@ export const youtubeAdapter = Object.freeze({
   },
 
   readIsMembersOnly(postCard: Element) {
-    return Array.from(
-      postCard.querySelectorAll(YOUTUBE_SELECTORS.memberBadge),
-    ).some((badge) => {
-      if (badge.matches("[class*='members-only']")) {
-        return true;
-      }
-      return MEMBERS_ONLY_LABEL.test(
-        `${badge.getAttribute("aria-label") ?? ""} ${badge.textContent ?? ""}`,
-      );
-    });
+    const cell = postCard.closest(YOUTUBE_SELECTORS.cell);
+    return hasMembersOnlyBadge(cell ?? postCard);
   },
 
   readIsRepost(_postCard: Element) {

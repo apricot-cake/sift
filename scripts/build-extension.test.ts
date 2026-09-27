@@ -14,10 +14,4 @@ describe("拡張機能ビルドの出力", () => {
       path.resolve(import.meta.dirname, "..", ".output", "store", "chrome-mv3"),
     );
   });
-
-  test("E2Eビルドはローカル配備とストア提出物のどちらも上書きしない", () => {
-    expect(outputFor("e2e")).toBe(
-      path.resolve(import.meta.dirname, "..", ".output", "e2e", "chrome-mv3"),
-    );
-  });
 });

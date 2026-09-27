@@ -14,18 +14,14 @@ import { HOST_NAME } from "../native-host/install.ts";
 import config from "../wxt.config.ts";
 
 const kind = process.argv[2];
-if (kind !== "e2e" && kind !== "local" && kind !== "store") {
+if (kind !== "local" && kind !== "store") {
   throw new Error(
-    "manifest の検査には e2e、local または store を指定してください。",
+    "manifest の検査には local または store を指定してください。",
   );
 }
 const packageJson = JSON.parse(await readFile("package.json", "utf8"));
 const output =
-  kind === "local"
-    ? ".output/chrome-mv3"
-    : kind === "e2e"
-      ? ".output/e2e/chrome-mv3"
-      : ".output/store/chrome-mv3";
+  kind === "local" ? ".output/chrome-mv3" : ".output/store/chrome-mv3";
 const generatedManifest = JSON.parse(
   await readFile(`${output}/manifest.json`, "utf8"),
 );
@@ -47,8 +43,8 @@ if (
 assert.equal(generatedManifest.manifest_version, 3);
 assert.equal(generatedManifest.name, declaredManifest.name);
 assert.equal(generatedManifest.description, declaredManifest.description);
-if (kind === "local" || kind === "e2e") {
-  // ローカル配備と E2E は、同じ安定した拡張機能 ID を保つ。
+if (kind === "local") {
+  // ローカル配備は、安定した拡張機能 ID を保つ。
   assert.equal(typeof declaredManifest.key, "string");
   assert.equal(generatedManifest.key, declaredManifest.key);
 } else {
@@ -103,17 +99,7 @@ assert.equal(
   declaredManifest.action?.default_title,
 );
 assert.equal(generatedManifest.action.default_popup, undefined);
-if (kind === "e2e") {
-  assert.deepEqual(generatedManifest.commands, {
-    _execute_action: {
-      suggested_key: {
-        default: "Ctrl+Shift+Y",
-      },
-    },
-  });
-} else {
-  assert.equal(generatedManifest.commands, undefined);
-}
+assert.equal(generatedManifest.commands, undefined);
 
 // WXT の sidepanel エントリポイントが Chrome の manifest へ届いていることを
 // 確かめる。ページを出力しただけでは、ブラウザのサイドパネルから開けることは
@@ -121,10 +107,9 @@ if (kind === "e2e") {
 assert.equal(generatedManifest.side_panel.default_path, "sidepanel.html");
 assert.ok(generatedManifest.permissions.includes("sidePanel"));
 
-// サイドパネルは現在のページだけを調整する。他のサイトや保存済みページの設定は
-// ブラウザの拡張機能設定からも開ける専用ページに分ける。
-assert.equal(generatedManifest.options_ui.page, "options.html");
-assert.equal(generatedManifest.options_ui.open_in_tab, true);
+// 設定の操作入口はサイドパネルにまとめる。
+assert.equal(generatedManifest.options_ui, undefined);
+assert.equal(generatedManifest.options_page, undefined);
 
 // Chrome MV3 の service worker が entrypoints/background.ts から生成されている。
 assert.equal(generatedManifest.background.service_worker, "background.js");

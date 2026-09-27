@@ -6,8 +6,6 @@ import {
 
 const samePage = {
   hasNextPage: true,
-  hasPreviousPage: true,
-  pageChanged: false,
   panelInitialized: true,
   panelTabMatches: true,
 };
@@ -54,7 +52,7 @@ describe("shouldEnableFiltering", () => {
     ).toBe(false);
   });
 
-  it("初回表示と別ページへの移動では有効化する", () => {
+  it("パネルの初回表示ではフィルター全体を有効化する", () => {
     expect(
       shouldEnableFiltering({
         ...samePage,
@@ -63,14 +61,16 @@ describe("shouldEnableFiltering", () => {
         panelInitialized: false,
       }),
     ).toBe(true);
+  });
+
+  it("オフのまま別ページへ移動しても有効化しない", () => {
     expect(
       shouldEnableFiltering({
         ...samePage,
         contentFilteringEnabled: false,
         panelExpectedFiltering: false,
-        pageChanged: true,
       }),
-    ).toBe(true);
+    ).toBe(false);
   });
 });
 

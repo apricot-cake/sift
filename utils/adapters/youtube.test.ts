@@ -129,7 +129,13 @@ describe("YouTube の対象ページを選ぶ", () => {
     ).toBe(false);
   });
 
-  it("URLを変えないチャンネルの動画タブを対象にする", () => {
+  it.each([
+    "/@sift",
+    "/@sift/featured",
+    "/channel/UC123",
+    "/c/sift",
+    "/user/sift",
+  ])("動画グリッドがあるチャンネルホーム %s も対象にしない", (pathname) => {
     const page = render(`
       <ytd-rich-grid-renderer>
         <ytd-rich-item-renderer>
@@ -138,9 +144,7 @@ describe("YouTube の対象ページを選ぶ", () => {
       </ytd-rich-grid-renderer>
     `);
 
-    expect(
-      youtubeAdapter.isTimelineAvailable(page, { pathname: "/@sift" }),
-    ).toBe(true);
+    expect(youtubeAdapter.isTimelineAvailable(page, { pathname })).toBe(false);
   });
 
   it("チャンネルのホームは動画カードがあっても対象にしない", () => {
@@ -260,6 +264,21 @@ describe("YouTube の動画情報を読む", () => {
     const video = renderVideo(
       '<yt-badge-shape aria-label="Members only"></yt-badge-shape>',
     );
+
+    expect(youtubeAdapter.readIsMembersOnly?.(video)).toBe(true);
+  });
+
+  it("一覧セルの兄弟要素にあるメンバー限定ラベルを読む", () => {
+    const page = render(`
+      <ytd-rich-item-renderer>
+        <yt-lockup-view-model></yt-lockup-view-model>
+        <span>メンバー限定</span>
+      </ytd-rich-item-renderer>
+    `);
+    const video = page.querySelector("yt-lockup-view-model");
+    if (!video) {
+      throw new Error("動画カードが無い");
+    }
 
     expect(youtubeAdapter.readIsMembersOnly?.(video)).toBe(true);
   });

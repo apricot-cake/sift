@@ -9,6 +9,28 @@ import {
 } from "./settings.ts";
 
 describe("normalizeSettings", () => {
+  it.each(["x", "bluesky", "youtube", "niconico"] as const)(
+    "%s の手動値を候補の適用値と別に保持する",
+    (site) => {
+      const settings = normalizeSettings({
+        siteSettings: {
+          [site]: {
+            manualMinimum: 12345,
+            minCount: 50000,
+            minReactions: 50000,
+          },
+        },
+      });
+      const stored = settingsFor(settings, site);
+      expect(stored.manualMinimum).toBe(12345);
+      expect(
+        stored.kind === "metric" ? stored.minCount : stored.minReactions,
+      ).toBe(50000);
+      expect(settingsFor(normalizeSettings(settings), site).manualMinimum).toBe(
+        12345,
+      );
+    },
+  );
   it("サイト別の値を自分の範囲へ収める", () => {
     const settings = normalizeSettings({
       siteSettings: {

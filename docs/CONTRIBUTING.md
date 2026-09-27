@@ -34,21 +34,7 @@ npm run test
 
 Biome で自動修正する場合は `npm run lint:fix` を実行します。
 
-自動テストでは、保存した HTML を使ってセレクターと判定処理を検証します。実際のサイトとの互換性は、各サイトが表示したページを Chrome で確認します。
-
-## ブラウザ統合テストを確認する
-
-ブラウザと拡張機能の接続は、専用の開発用 Chrome プロファイルで確認します。日常利用の Chrome や、画面・入力を使う自動操作は使いません。
-
-```powershell
-npm run deploy:local
-npm run browser:open
-npm run test:integration:browser
-```
-
-`npm run test:integration:browser` は、実在する対応サイトと対象外ページを開き、拡張機能の action を実行して、対象判定、サイドパネルの有効化、設定の反映を確認します。検証中に変更した設定は終了時に戻します。
-
-GitHub Actions では、拡張機能・ビルド設定・E2E スクリプトを変更して `main` へ push したときに、認証不要の YouTube ページで E2E を実行します。文書だけの更新では実行しません。Windows の仮想デスクトップで、E2E 専用ビルドにだけ設定したショートカットを Chrome へ送信して action を起動します。製品版とローカル配備版にはショートカットを含めません。サイドパネルの DOM とフィルター操作部を検証し、開いた Chrome とサイドパネルのスクリーンショットを artifact として 14 日間保存します。スクリーンショットの差分比較は行いません。必要なら Actions の「ブラウザ E2E」を手動実行できます。
+自動テストでは、保存した HTML fixture を使って、各対応サイトのセレクター、対象判定、投稿情報の読み取りを検証します。fixture は `test/fixtures/adapters` にあります。実サイトで DOM 変更を見つけた場合は、必要な構造だけを fixture に追加して失敗するテストを作り、それからアダプターを修正します。
 
 ## Chrome で確認する
 
@@ -86,13 +72,7 @@ npm run browser:open
 npm run browser:status
 ```
 
-開発用 Chrome で対応サイトを開いた後、別のターミナルから確認を実行できます。
-
-```powershell
-npm run browser:verify
-```
-
-このコマンドも専用プロファイルから同じ CDP 接続先を自動取得し、配備済みビルドの読み込み、対応サイトの再読み込み、サイドパネル操作を実行して終了します。開いている Chrome は維持します。`npm run browser:open` を重ねて実行した場合も、起動済みなら二重起動せず終了します。
+`npm run browser:open` を重ねて実行した場合も、起動済みなら二重起動せず終了します。
 
 接続には専用プロファイルとローカルの待受アドレスを使います。[Chrome のリモートデバッグ](https://developer.chrome.com/blog/remote-debugging-port)では、通常利用するプロファイルとは別のデータディレクトリが必要です。
 

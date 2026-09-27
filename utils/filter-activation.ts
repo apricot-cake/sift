@@ -1,16 +1,12 @@
 export function shouldEnableFiltering({
   contentFilteringEnabled,
   hasNextPage,
-  hasPreviousPage,
-  pageChanged,
   panelTabMatches,
   panelExpectedFiltering,
   panelInitialized,
 }: {
   contentFilteringEnabled: boolean;
   hasNextPage: boolean;
-  hasPreviousPage: boolean;
-  pageChanged: boolean;
   panelTabMatches: boolean;
   panelExpectedFiltering: boolean;
   panelInitialized: boolean;
@@ -20,10 +16,7 @@ export function shouldEnableFiltering({
   }
 
   return (
-    !panelInitialized ||
-    !hasPreviousPage ||
-    pageChanged ||
-    (panelExpectedFiltering && !contentFilteringEnabled)
+    !panelInitialized || (panelExpectedFiltering && !contentFilteringEnabled)
   );
 }
 
