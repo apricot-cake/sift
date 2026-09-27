@@ -1,4 +1,4 @@
-import { defineConfig } from "vitest/config";
+import { configDefaults, defineConfig } from "vitest/config";
 import { WxtVitest } from "wxt/testing/vitest-plugin";
 
 export default defineConfig({
@@ -7,6 +7,7 @@ export default defineConfig({
   // 抱える2つ目の組ではなく拡張機能自身のものになる。
   plugins: [WxtVitest()],
   test: {
+    exclude: [...configDefaults.exclude, "e2e/**"],
     // どのアダプターもページに対して走らせるセレクタの集まりなので、ページは
     // 本物でなければならない。`querySelector`・`closest`・`firstElementChild`・
     // 属性の照合が、ブラウザでの意味どおりになるのは happy-dom のおかげ＝手書きの

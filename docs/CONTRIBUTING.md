@@ -53,20 +53,26 @@ npm run build
 Windows では、ローカル配備用のビルドを自動で再読み込みできます。この機能は任意です。
 
 ```powershell
+npm run build:candidate
+npm run browser:open
+npm run browser:candidate
+npm run verify:candidate
 npm run deploy:local
 ```
 
-このコマンドは `.output\chrome-mv3` を作成して検査した後、再読み込み専用の[ネイティブメッセージングホスト](https://developer.chrome.com/docs/extensions/develop/concepts/native-messaging)を現在の Windows ユーザーへ登録します。サイドパネルが開いていれば、配備後に拡張機能を再読み込みします。閉じている場合は、次に開いたときに新しいビルドを読み込みます。
+候補は `.output\candidate\chrome-mv3` に作成し、開発用Chromeに読み込んで検証します。全検証が成功した後、`deploy:local` が同じ成果物を `.output\chrome-mv3` へ配備します。検証後にソースや成果物が変更された場合は配備できません。
+
+配備時に再読み込み専用の[ネイティブメッセージングホスト](https://developer.chrome.com/docs/extensions/develop/concepts/native-messaging)を現在の Windows ユーザーへ登録します。サイドパネルが開いていれば、配備後に拡張機能を再読み込みします。閉じている場合は、次に開いたときに新しいビルドを読み込みます。
 
 登録先が `HKCU` のため、Chrome と同じ Windows ユーザーで実行する必要があります。
 
-専用の Chrome プロファイルを使う場合は、配備後に次のコマンドを実行します。
+専用の Chrome プロファイルは次のコマンドで起動します。
 
 ```powershell
 npm run browser:open
 ```
 
-このコマンドは通常利用する Chrome とは別のプロファイルを開き、`.output\chrome-mv3` を読み込みます。ポートは Chrome が空きポートを自動取得します。専用プロファイルの `DevToolsActivePort` から接続先を読み、応答のブラウザ識別子が一致した場合だけ再利用します。コマンドが終了した後も Chrome は開いたままになります。接続先を表示する場合は、ブラウザーを開かずに次のコマンドを実行します。
+このコマンドは通常利用する Chrome とは別のプロファイルを開きます。拡張機能の登録・候補の読み込みには `browser:candidate` を使います。専用プロファイルの `DevToolsActivePort` またはローカル接続先からブラウザを確認します。コマンドが終了した後も Chrome は開いたままになります。接続先を表示する場合は、ブラウザーを開かずに次のコマンドを実行します。
 
 ```powershell
 npm run browser:status

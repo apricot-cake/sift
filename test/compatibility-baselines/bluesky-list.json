@@ -1,0 +1,49 @@
+{
+  "schema": 1,
+  "caseId": "bluesky-list",
+  "route": "/profile/apricot-cake.com/lists/3kldrwhjefi2w",
+  "regions": {
+    "navigation": [
+      {
+        "tag": "a",
+        "role": "link",
+        "testId": "headerTitle",
+        "attributes": [
+          "href"
+        ]
+      }
+    ],
+    "card": [
+      {
+        "tag": "div",
+        "role": "link",
+        "testId": "feedItem-by-*",
+        "children": [
+          {
+            "tag": "div",
+            "children": [
+              {
+                "tag": "div"
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "metric": [
+      {
+        "tag": "button",
+        "role": "button",
+        "testId": "likeBtn",
+        "attributes": [
+          "aria-label"
+        ],
+        "children": [
+          {
+            "tag": "div"
+          }
+        ]
+      }
+    ]
+  }
+}

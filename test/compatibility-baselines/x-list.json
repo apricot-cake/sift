@@ -1,0 +1,84 @@
+{
+  "schema": 1,
+  "caseId": "x-list",
+  "route": "/i/lists/2082750019069948060",
+  "regions": {
+    "navigation": [
+      {
+        "tag": "h1",
+        "role": "heading",
+        "children": [
+          {
+            "tag": "a",
+            "role": "link",
+            "attributes": [
+              "aria-label",
+              "href"
+            ]
+          }
+        ]
+      },
+      {
+        "tag": "h1",
+        "role": "heading"
+      },
+      {
+        "tag": "h2",
+        "role": "heading",
+        "children": [
+          {
+            "tag": "div"
+          },
+          {
+            "tag": "a",
+            "role": "link",
+            "attributes": [
+              "href"
+            ]
+          }
+        ]
+      },
+      {
+        "tag": "h2",
+        "role": "heading",
+        "children": [
+          {
+            "tag": "div"
+          }
+        ]
+      }
+    ],
+    "card": [
+      {
+        "tag": "article",
+        "role": "article",
+        "testId": "tweet",
+        "children": [
+          {
+            "tag": "div",
+            "children": [
+              {
+                "tag": "div"
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "metric": [
+      {
+        "tag": "button",
+        "role": "button",
+        "testId": "like",
+        "attributes": [
+          "aria-label"
+        ],
+        "children": [
+          {
+            "tag": "div"
+          }
+        ]
+      }
+    ]
+  }
+}

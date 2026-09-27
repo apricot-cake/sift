@@ -6,7 +6,7 @@ describe("ローカル拡張機能の配備", () => {
     const events: string[] = [];
     const result = deployLocalExtension({
       assertContext: () => events.push("context"),
-      build: () => {
+      promote: () => {
         events.push("build");
         return { buildId: "next", output: "C:\\output" };
       },
@@ -35,7 +35,7 @@ describe("ローカル拡張機能の配備", () => {
     expect(() =>
       deployLocalExtension({
         assertContext: () => events.push("context"),
-        build: () => {
+        promote: () => {
           throw new Error("build failed");
         },
         installHost: () => events.push("install"),
@@ -55,7 +55,7 @@ describe("ローカル拡張機能の配備", () => {
         assertContext: () => {
           throw new Error("isolated");
         },
-        build: () => {
+        promote: () => {
           events.push("build");
           return { buildId: "next", output: "C:\\output" };
         },

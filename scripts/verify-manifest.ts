@@ -20,8 +20,11 @@ if (kind !== "local" && kind !== "store") {
   );
 }
 const packageJson = JSON.parse(await readFile("package.json", "utf8"));
-const output =
-  kind === "local" ? ".output/chrome-mv3" : ".output/store/chrome-mv3";
+const output = process.env.SIFT_OUTPUT_DIR
+  ? path.join(process.env.SIFT_OUTPUT_DIR, "chrome-mv3")
+  : kind === "local"
+    ? ".output/candidate/chrome-mv3"
+    : ".output/store/chrome-mv3";
 const generatedManifest = JSON.parse(
   await readFile(`${output}/manifest.json`, "utf8"),
 );

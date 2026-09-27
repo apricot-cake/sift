@@ -1,0 +1,53 @@
+{
+  "schema": 1,
+  "caseId": "bluesky-search",
+  "route": "/search",
+  "regions": {
+    "sort": [
+      {
+        "tag": "div",
+        "role": "tab",
+        "testId": "undefined-selector-#",
+        "children": [
+          {
+            "tag": "div"
+          }
+        ]
+      }
+    ],
+    "card": [
+      {
+        "tag": "div",
+        "role": "link",
+        "children": [
+          {
+            "tag": "div"
+          },
+          {
+            "tag": "div",
+            "children": [
+              {
+                "tag": "div"
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "metric": [
+      {
+        "tag": "button",
+        "role": "button",
+        "testId": "likeBtn",
+        "attributes": [
+          "aria-label"
+        ],
+        "children": [
+          {
+            "tag": "div"
+          }
+        ]
+      }
+    ]
+  }
+}

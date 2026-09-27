@@ -9,13 +9,15 @@ export type BuildAction = "build" | "zip";
 const ROOT = path.resolve(import.meta.dirname, "..");
 
 export function outputFor(kind: BuildKind): string {
-  if (kind === "local") return path.join(ROOT, ".output", "chrome-mv3");
+  if (kind === "local")
+    return path.join(ROOT, ".output", "candidate", "chrome-mv3");
   return path.join(ROOT, ".output", "store", "chrome-mv3");
 }
 
 export function buildExtension(
   kind: BuildKind,
   action: BuildAction = "build",
+  outputDirectory?: string,
 ): { buildId: string; output: string } {
   const buildId = kind === "local" ? randomUUID() : "";
   const wxt = path.join(ROOT, "node_modules", "wxt", "bin", "wxt.mjs");
@@ -23,6 +25,7 @@ export function buildExtension(
     ...process.env,
     SIFT_BUILD_KIND: kind,
     SIFT_BUILD_ID: buildId,
+    ...(outputDirectory ? { SIFT_OUTPUT_DIR: outputDirectory } : {}),
   };
 
   // .cmd のシェル解釈を避け、WXT の公式CLIを現在のNodeで直接実行する。
@@ -41,7 +44,12 @@ export function buildExtension(
     { cwd: ROOT, env, stdio: "inherit" },
   );
 
-  return { buildId, output: outputFor(kind) };
+  return {
+    buildId,
+    output: outputDirectory
+      ? path.join(outputDirectory, "chrome-mv3")
+      : outputFor(kind),
+  };
 }
 
 function parseKind(value: string | undefined): BuildKind {

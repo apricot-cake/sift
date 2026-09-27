@@ -1,0 +1,51 @@
+{
+  "schema": 1,
+  "caseId": "bluesky-following",
+  "route": "/",
+  "regions": {
+    "sort": [
+      {
+        "tag": "div",
+        "role": "tab",
+        "testId": "homeScreenFeedTabs-selector-#",
+        "children": [
+          {
+            "tag": "div"
+          }
+        ]
+      }
+    ],
+    "card": [
+      {
+        "tag": "div",
+        "role": "link",
+        "testId": "feedItem-by-*",
+        "children": [
+          {
+            "tag": "div",
+            "children": [
+              {
+                "tag": "div"
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "metric": [
+      {
+        "tag": "button",
+        "role": "button",
+        "testId": "likeBtn",
+        "attributes": [
+          "aria-label"
+        ],
+        "children": [
+          {
+            "tag": "div"
+          }
+        ]
+      }
+    ]
+  }
+}

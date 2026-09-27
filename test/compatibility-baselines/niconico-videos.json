@@ -1,0 +1,38 @@
+{
+  "schema": 1,
+  "caseId": "niconico-videos",
+  "route": "/user/129217273/video",
+  "regions": {
+    "sort": [
+      {
+        "tag": "span"
+      }
+    ],
+    "card": [
+      {
+        "tag": "div",
+        "children": [
+          {
+            "tag": "div",
+            "children": [
+              {
+                "tag": "a",
+                "attributes": [
+                  "href"
+                ]
+              },
+              {
+                "tag": "div"
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "metric": [
+      {
+        "tag": "div"
+      }
+    ]
+  }
+}

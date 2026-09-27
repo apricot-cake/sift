@@ -9,7 +9,13 @@
   "scripts": {
     "browser:open": "node scripts/dev-browser.ts",
     "browser:status": "node scripts/dev-browser.ts --print",
+    "smoke:panel": "node scripts/smoke-panel.mjs",
+    "smoke:connection": "node scripts/smoke-connection.mjs",
+    "test:live": "playwright test",
     "build": "node scripts/build-extension.ts store",
+    "build:candidate": "node scripts/prepare-candidate.ts",
+    "browser:candidate": "node scripts/load-candidate.ts",
+    "verify:candidate": "node scripts/verify-candidate.ts",
     "package:store": "node scripts/build-extension.ts store zip",
     "deploy:local": "node scripts/deploy-extension.ts",
     "lint": "biome ci .",
@@ -35,6 +41,7 @@
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.14",
+    "@playwright/test": "1.63.0",
     "@tailwindcss/vite": "4.3.3",
     "@types/node": "26.6.2",
     "@types/react": "19.3.0",

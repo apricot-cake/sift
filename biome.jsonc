@@ -41,6 +41,11 @@
   },
   "overrides": [
     {
+      // Playwrightが管理する比較基準は、同ツールのシリアライズを維持する。
+      "includes": ["test/compatibility-baselines/**/*.json"],
+      "formatter": { "enabled": false }
+    },
+    {
       // This stylesheet is injected into a page whose own CSS Sift does not
       // control and cannot outrank by specificity — supported sites style
       // their own posts. !important is the only thing

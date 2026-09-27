@@ -1,0 +1,63 @@
+{
+  "schema": 1,
+  "caseId": "youtube-streams-popular",
+  "route": "/@sutehage_channel/streams",
+  "regions": {
+    "sort": [
+      {
+        "tag": "button",
+        "role": "tab",
+        "attributes": [
+          "aria-label",
+          "aria-selected"
+        ],
+        "children": [
+          {
+            "tag": "div"
+          }
+        ]
+      }
+    ],
+    "card": [
+      {
+        "tag": "ytd-rich-item-renderer",
+        "children": [
+          {
+            "tag": "div",
+            "children": [
+              {
+                "tag": "yt-lockup-view-model"
+              }
+            ]
+          },
+          {
+            "tag": "yt-interaction",
+            "children": [
+              {
+                "tag": "div"
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "metric": [
+      {
+        "tag": "span",
+        "role": "text",
+        "attributes": [
+          "aria-label"
+        ]
+      }
+    ],
+    "date": [
+      {
+        "tag": "span",
+        "role": "text",
+        "attributes": [
+          "aria-label"
+        ]
+      }
+    ]
+  }
+}

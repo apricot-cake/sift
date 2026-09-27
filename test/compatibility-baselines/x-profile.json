@@ -1,0 +1,54 @@
+{
+  "schema": 1,
+  "caseId": "x-profile",
+  "route": "/uowata94",
+  "regions": {
+    "sort": [
+      {
+        "tag": "a",
+        "role": "tab",
+        "attributes": [
+          "aria-selected",
+          "href"
+        ],
+        "children": [
+          {
+            "tag": "div"
+          }
+        ]
+      }
+    ],
+    "card": [
+      {
+        "tag": "article",
+        "role": "article",
+        "testId": "tweet",
+        "children": [
+          {
+            "tag": "div",
+            "children": [
+              {
+                "tag": "div"
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "metric": [
+      {
+        "tag": "button",
+        "role": "button",
+        "testId": "like",
+        "attributes": [
+          "aria-label"
+        ],
+        "children": [
+          {
+            "tag": "div"
+          }
+        ]
+      }
+    ]
+  }
+}

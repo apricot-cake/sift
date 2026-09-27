@@ -17,11 +17,12 @@ export default defineConfig({
   // GeneratedI18nStructure）は locales/<default_locale>.yml から作られる＝
   // manifest.default_locale の設定が要る（下の manifest 節）。
   modules: ["@wxt-dev/i18n/module", "@wxt-dev/module-react"],
-  // ローカル配備は、2つの Chrome プロファイルが共有する場所へ直接書く。ストア
-  // 提出物は誰も読み込まない別の場所で作り、ローカル専用機能を含まない。
-  outDir: localDeploy
-    ? resolve(import.meta.dirname, ".output")
-    : resolve(import.meta.dirname, ".output", "store"),
+  // ローカルビルドは候補へ出力し、実機検証後にのみ共有出力へ昇格する。
+  outDir:
+    process.env.SIFT_OUTPUT_DIR ||
+    (localDeploy
+      ? resolve(import.meta.dirname, ".output", "candidate")
+      : resolve(import.meta.dirname, ".output", "store")),
   outDirTemplate: "{{browser}}-mv{{manifestVersion}}",
   // WXT にブラウザを起動させてはならない。理由は独立に2つある。
   //   - 自動化の仕組みを通して開いたものは自動化フラグの指紋を持ち、X はそれを

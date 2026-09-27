@@ -1,0 +1,56 @@
+{
+  "schema": 1,
+  "caseId": "youtube-shorts-newest",
+  "route": "/@sutehage_channel/shorts",
+  "regions": {
+    "sort": [
+      {
+        "tag": "button",
+        "role": "tab",
+        "attributes": [
+          "aria-label",
+          "aria-selected"
+        ],
+        "children": [
+          {
+            "tag": "div"
+          }
+        ]
+      }
+    ],
+    "card": [
+      {
+        "tag": "ytd-rich-item-renderer",
+        "children": [
+          {
+            "tag": "div",
+            "children": [
+              {
+                "tag": "ytm-shorts-lockup-view-model-v2"
+              }
+            ]
+          },
+          {
+            "tag": "yt-interaction",
+            "children": [
+              {
+                "tag": "div"
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "metric": [
+      {
+        "tag": "div",
+        "children": [
+          {
+            "tag": "span",
+            "role": "text"
+          }
+        ]
+      }
+    ]
+  }
+}
