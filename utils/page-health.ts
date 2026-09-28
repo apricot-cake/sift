@@ -9,6 +9,7 @@ export type PageHealthState =
 export type PageHealthIssue = "page" | "posts" | "metrics" | "dates";
 
 export interface PageHealth {
+  warnPartial?: boolean;
   state: PageHealthState;
   issue?: PageHealthIssue;
   sampledPosts: number;
@@ -17,6 +18,7 @@ export interface PageHealth {
 }
 
 export interface PageHealthObservation {
+  requiresMetrics?: boolean;
   knownMetricOmissions?: number;
   pageKey: string;
   support: PageSupport;
@@ -31,6 +33,8 @@ export interface PageHealthObservation {
 export class PageHealthTracker {
   private failureKey = "";
   private failureSince = 0;
+  private partialKey = "";
+  private partialSince = 0;
 
   private readonly graceMs: number;
 
@@ -49,6 +53,21 @@ export class PageHealthTracker {
       readableDates,
     } = observation;
     const counts = { sampledPosts, readableMetrics, readableDates };
+    const requiredIssue =
+      observation.requiresMetrics &&
+      readableMetrics + (observation.knownMetricOmissions ?? 0) < sampledPosts
+        ? "metrics"
+        : requiresDates && readableDates < sampledPosts
+          ? "dates"
+          : undefined;
+    const partialKey =
+      support === "supported" && sampledPosts > 0 && requiredIssue
+        ? `${pageKey}:${requiredIssue}`
+        : "";
+    if (partialKey !== this.partialKey) {
+      this.partialKey = partialKey;
+      this.partialSince = now;
+    }
     if (support === "unsupported") {
       this.failureKey = "";
       return { state: "unsupported", ...counts };
@@ -90,6 +109,8 @@ export class PageHealthTracker {
           : undefined;
     return {
       state: partial ? "degraded" : "ready",
+      warnPartial:
+        Boolean(partialKey) && now - this.partialSince >= this.graceMs,
       ...(partial ? { issue: partial } : {}),
       ...counts,
     };
@@ -108,6 +129,8 @@ export function isPageHealth(value: unknown): value is PageHealth {
       "unreadable",
       "degraded",
     ].includes(health.state) &&
+    (health.warnPartial === undefined ||
+      typeof health.warnPartial === "boolean") &&
     (health.issue === undefined ||
       ["page", "posts", "metrics", "dates"].includes(health.issue)) &&
     [health.sampledPosts, health.readableMetrics, health.readableDates].every(

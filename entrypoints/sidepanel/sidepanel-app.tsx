@@ -468,7 +468,8 @@ export function SidepanelApp(): React.JSX.Element {
         ? "sidepanelReading"
         : healthState === "empty"
           ? "sidepanelEmpty"
-          : healthState === "degraded"
+          : healthState === "degraded" &&
+              activeContext?.health?.warnPartial === true
             ? "sidepanelPartialData"
             : null;
   const healthBlocksControls =
@@ -1011,11 +1012,6 @@ function PublicationPeriodPicker({
       <p className="mb-0 mt-4 text-xs leading-5 text-muted-foreground">
         {t("sidepanelPeriodScope", { count: total })}
       </p>
-      {dates.length < total && (
-        <p className="mb-0 mt-2 text-xs leading-5 text-muted-foreground">
-          {t("sidepanelPeriodUnknown", { count: total - dates.length })}
-        </p>
-      )}
     </section>
   );
 }

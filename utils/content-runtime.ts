@@ -107,9 +107,12 @@ export function startContentRuntime(
         adapter.readPageSupport?.(document, location) ??
         (timelineAvailable() ? "supported" : "unsupported"),
       empty: adapter.hasEmptyTimeline?.(document) ?? false,
+      requiresMetrics:
+        filteringEnabled() && thresholds.inclusion.minimum !== null,
       requiresDates:
-        thresholds.inclusion.maximumAgeHours != null ||
-        thresholds.inclusion.minimumAgeHours != null,
+        filteringEnabled() &&
+        (thresholds.inclusion.maximumAgeHours != null ||
+          thresholds.inclusion.minimumAgeHours != null),
       ...healthCounts,
     });
   }

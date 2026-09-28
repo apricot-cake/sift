@@ -15,6 +15,50 @@ const good: PageHealthObservation = {
   readableDates: 0,
 };
 describe("ページ情報の健全性", () => {
+  it("不要な情報の欠損は内部診断だけに残す", () => {
+    const tracker = new PageHealthTracker(100);
+    const partial = { ...good, readableMetrics: 1 };
+    tracker.observe(partial, 0);
+    expect(tracker.observe(partial, 1000)).toMatchObject({
+      state: "degraded",
+      warnPartial: false,
+    });
+  });
+  it("必要情報の欠損が続いた場合だけ警告し、解除・復旧・遷移で猶予をリセットする", () => {
+    const tracker = new PageHealthTracker(100);
+    const partial = { ...good, readableMetrics: 1, requiresMetrics: true };
+    expect(tracker.observe(partial, 0).warnPartial).toBe(false);
+    expect(tracker.observe(partial, 99).warnPartial).toBe(false);
+    expect(tracker.observe(partial, 100).warnPartial).toBe(true);
+    expect(
+      tracker.observe({ ...partial, requiresMetrics: false }, 101).warnPartial,
+    ).toBe(false);
+    expect(tracker.observe(partial, 102).warnPartial).toBe(false);
+    tracker.observe(good, 200);
+    expect(tracker.observe(partial, 201).warnPartial).toBe(false);
+    expect(
+      tracker.observe({ ...partial, pageKey: "/other" }, 500).warnPartial,
+    ).toBe(false);
+  });
+  it("既知の非公開指標では警告せず、期間指定は日付の欠損だけを警告する", () => {
+    const tracker = new PageHealthTracker(100);
+    const known = {
+      ...good,
+      readableMetrics: 1,
+      knownMetricOmissions: 2,
+      requiresMetrics: true,
+    };
+    tracker.observe(known, 0);
+    expect(tracker.observe(known, 1000).warnPartial).toBe(false);
+    const dates = {
+      ...good,
+      readableMetrics: 1,
+      readableDates: 2,
+      requiresDates: true,
+    };
+    expect(tracker.observe(dates, 1001).warnPartial).toBe(false);
+    expect(tracker.observe(dates, 1101).warnPartial).toBe(true);
+  });
   it("全件が指標非公開の限定動画でも取得失敗にはせず欠損を報告する", () => {
     const tracker = new PageHealthTracker(0);
     expect(
