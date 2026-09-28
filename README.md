@@ -12,10 +12,6 @@
 
 [CONTRIBUTING.md](docs/CONTRIBUTING.md) を参照してください。
 
-## 実機検証
-
-対象マトリクス・操作方法・合否基準は [実機検証手順](docs/実機検証.md) を参照してください。
-
 ## 脆弱性報告
 
 [非公開フォーム](https://github.com/apricot-cake/sift/security/advisories/new) から報告してください。
