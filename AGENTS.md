@@ -1,3 +1,5 @@
+<!-- markdownlint-disable MD025 -- 各指示を独立した見出しにする -->
+
 # ブラウザ接続
 
 実機確認には、`npm run browser:open` で起動した開発用 Chrome のローカル CDP 接続（ポートは自動取得、接続先は `npm run browser:status` で表示）だけを使う。日常プロファイルでの確認や、画面・入力を使う自動操作は、ユーザーが対象と理由を明示した場合に限る。

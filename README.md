@@ -1,3 +1,5 @@
+<!-- markdownlint-disable MD041 -- リポジトリ名はページ側に表示されるため、紹介動画から始める -->
+
 ## 紹介動画
 
 [![使い方の動画を見る](https://img.youtube.com/vi/KqO-4fv2Qsw/mqdefault.jpg)](https://youtu.be/KqO-4fv2Qsw)

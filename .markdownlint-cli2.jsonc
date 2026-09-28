@@ -1,0 +1,8 @@
+{
+  "globs": ["**/*.{md,markdown}"],
+  "ignores": ["node_modules/**", ".output/**", ".wxt/**", "test-results/**"],
+  "config": {
+    // 日本語の段落は文字数で改行せず、表示側で折り返す。
+    "MD013": false
+  }
+}

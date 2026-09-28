@@ -53,6 +53,12 @@ jobs:
       # postinstall の `wxt prepare` がビルドに必要な設定を生成する。
       - run: npm ci
 
+      - name: スペル検査とtyposの準備
+        uses: crate-ci/typos@5e183518f8764162ed2841339af896246fccbcfd # v1.49.0
+
+      - name: ローカルと同じtyposコマンドを使う
+        run: echo "$RUNNER_TEMP" >> "$GITHUB_PATH"
+
       - run: npm run check
 
       # `wxt build` のあとに verify:manifest＝生成された release の manifest

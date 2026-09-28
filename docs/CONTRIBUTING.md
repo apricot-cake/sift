@@ -14,6 +14,12 @@ npm ci
 
 `scripts/` の TypeScript は、Node.js の型除去機能を使って直接実行します。
 
+スペル検査には [typos](https://github.com/crate-ci/typos) 1.49.0 を使います。公式リリースの実行ファイルを PATH に追加するか、Rust の Cargo でインストールしてください。CI も同じバージョンを使います。
+
+```powershell
+cargo install typos-cli --version 1.49.0 --locked
+```
+
 ## コードを確認する
 
 一通りの変更が終わったら、次のコマンドを実行します。
@@ -22,17 +28,24 @@ npm ci
 npm run check
 ```
 
-このコマンドは Biome、TypeScript、Vitest を順番に実行します。
+このコマンドは Biome、markdownlint、typos、TypeScript、Vitest を順番に実行します。
 
 個別に実行する場合は、次のコマンドを使います。
 
 ```powershell
 npm run lint
+npm run lint:code
+npm run lint:markdown
+npm run lint:typos
 npm run typecheck
 npm run test
 ```
 
 Biome で自動修正する場合は `npm run lint:fix` を実行します。
+
+Markdown の自動修正には `npm run lint:markdown:fix` を使います。設定は `.markdownlint-cli2.jsonc` にあり、日本語の段落を機械的に改行しないため、行長制限を無効にしています。文書固有の例外は、その文書のコメントに理由を記載します。
+
+typos の設定は `_typos.toml` にあります。生成物・依存ファイルを除外し、誤検知は識別子や単語単位で許可します。検査の対象となる文章やコードを、警告を消す目的で丸ごと除外しないでください。
 
 自動テストでは、保存した HTML fixture を使って、各対応サイトのセレクター、対象判定、投稿情報の読み取りを検証します。fixture は `test/fixtures/adapters` にあります。実サイトで DOM 変更を見つけた場合は、必要な構造だけを fixture に追加して失敗するテストを作り、それからアダプターを修正します。
 
