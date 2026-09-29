@@ -544,7 +544,7 @@ describe("タイムラインのフィルター", () => {
     runtime.dispose();
   });
 
-  it("Blueskyで連続読み込みの警告が出ても次ページ判定を止めない", async () => {
+  it("連続するBlueskyの次ページ判定を3回で止める", async () => {
     history.replaceState({}, "", "/profile/alice.test");
     document.body.innerHTML = `
       <div data-testid="homeScreenFeedTabs-selector-Following">
@@ -560,31 +560,34 @@ describe("タイムラインのフィルター", () => {
       new ContentScriptContext("sift-test"),
       blueskyAdapter,
     );
-    await setFiltering(true);
+    try {
+      await setFiltering(true);
 
-    for (const id of ["1", "2", "3"]) {
-      document.body.insertAdjacentHTML(
-        "beforeend",
-        `<div data-testid="feedItem-by-${id}.test">
-          <a href="/profile/${id}.test/post/${id}"></a>
-          <button data-testid="likeBtn" aria-label="0 likes"></button>
-        </div>`,
-      );
-      await new Promise((resolve) => window.setTimeout(resolve, 900));
+      for (const id of ["1", "2", "3"]) {
+        document.body.insertAdjacentHTML(
+          "beforeend",
+          `<div data-testid="feedItem-by-${id}.test">
+            <a href="/profile/${id}.test/post/${id}"></a>
+            <button data-testid="likeBtn" aria-label="0 likes"></button>
+          </div>`,
+        );
+        await new Promise((resolve) => window.setTimeout(resolve, 900));
+      }
+
+      await vi.waitFor(() => expect(scrollTo).toHaveBeenCalledTimes(6), {
+        timeout: 8_000,
+      });
+      scrollTo.mockClear();
+      await new Promise((resolve) => window.setTimeout(resolve, 2_500));
+
+      expect(scrollTo).not.toHaveBeenCalled();
+      expect(
+        document.documentElement.hasAttribute("data-sift-layout-probe"),
+      ).toBe(false);
+    } finally {
+      runtime.dispose();
     }
-
-    expect((await getFilterContext()).continuousLoadingWarning).toBe(true);
-    scrollTo.mockClear();
-    await new Promise((resolve) => window.setTimeout(resolve, 2_500));
-
-    expect((await getFilterContext()).continuousLoadingWarning).toBe(true);
-    expect(scrollTo).toHaveBeenCalled();
-    expect(
-      document.documentElement.hasAttribute("data-sift-layout-probe"),
-    ).toBe(true);
-
-    runtime.dispose();
-  }, 10_000);
+  }, 12_000);
 
   it("Blueskyがフィードの終端を示した後は読み込み判定を再開しない", async () => {
     history.replaceState({}, "", "/profile/alice.test");
