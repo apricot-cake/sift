@@ -469,6 +469,10 @@ export function startContentRuntime(
         update.state === "matched" &&
         update.cell.getBoundingClientRect().bottom > window.innerHeight + 4,
     );
+    // 一時的に全投稿を展開している間の座標では回数を戻さない。
+    if (hasMatchedPostBelowViewport && scrollTopBeforeLayoutProbe === null) {
+      automaticLayoutProbeCount = 0;
+    }
     if (
       filteringEnabled() &&
       adapter.needsLayoutProbeForPagination &&
@@ -698,6 +702,15 @@ export function startContentRuntime(
         (event instanceof KeyboardEvent &&
           (["ArrowDown", "End", "PageDown"].includes(event.key) ||
             (event.key === " " && !event.shiftKey)));
+      // scroll は自動移動でも発生するため、閲覧操作でだけ回数を戻す。
+      if (
+        movesTowardEnd ||
+        event.type === "touchstart" ||
+        event.type === "pointerdown"
+      ) {
+        automaticLayoutProbeCount = 0;
+        if (isAtPageBottom() && !layoutProbePausedByUser) scheduleFilter();
+      }
       const layoutProbeRunning =
         layoutProbeFrame !== null ||
         layoutProbeTimer !== null ||
