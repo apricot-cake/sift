@@ -287,7 +287,9 @@ describe("YouTube の動画情報を読む", () => {
   });
 
   it("バッジ以外の動画タイトルはメンバー限定として扱わない", () => {
-    const video = renderVideo('<a id="video-title">Members only Q&A</a>');
+    const video = renderVideo(`
+      <div><a id="video-title">Members only</a></div>
+    `);
 
     expect(youtubeAdapter.readIsMembersOnly?.(video)).toBe(false);
   });
