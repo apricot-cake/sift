@@ -544,7 +544,7 @@ describe("タイムラインのフィルター", () => {
     runtime.dispose();
   });
 
-  it("Blueskyで連続読み込みの警告が出ても次ページ判定を止めない", async () => {
+  it("連続するBlueskyの次ページ判定を3回で止める", async () => {
     history.replaceState({}, "", "/profile/alice.test");
     document.body.innerHTML = `
       <div data-testid="homeScreenFeedTabs-selector-Following">
@@ -560,31 +560,100 @@ describe("タイムラインのフィルター", () => {
       new ContentScriptContext("sift-test"),
       blueskyAdapter,
     );
-    await setFiltering(true);
+    try {
+      await setFiltering(true);
 
-    for (const id of ["1", "2", "3"]) {
-      document.body.insertAdjacentHTML(
-        "beforeend",
-        `<div data-testid="feedItem-by-${id}.test">
-          <a href="/profile/${id}.test/post/${id}"></a>
-          <button data-testid="likeBtn" aria-label="0 likes"></button>
-        </div>`,
-      );
-      await new Promise((resolve) => window.setTimeout(resolve, 900));
+      for (const id of ["1", "2", "3"]) {
+        document.body.insertAdjacentHTML(
+          "beforeend",
+          `<div data-testid="feedItem-by-${id}.test">
+            <a href="/profile/${id}.test/post/${id}"></a>
+            <button data-testid="likeBtn" aria-label="0 likes"></button>
+          </div>`,
+        );
+        await new Promise((resolve) => window.setTimeout(resolve, 900));
+      }
+
+      await vi.waitFor(() => expect(scrollTo).toHaveBeenCalledTimes(6), {
+        timeout: 8_000,
+      });
+      scrollTo.mockClear();
+      await new Promise((resolve) => window.setTimeout(resolve, 2_500));
+
+      expect(scrollTo).not.toHaveBeenCalled();
+      expect(
+        document.documentElement.hasAttribute("data-sift-layout-probe"),
+      ).toBe(false);
+    } finally {
+      runtime.dispose();
     }
+  }, 12_000);
 
-    expect((await getFilterContext()).continuousLoadingWarning).toBe(true);
-    scrollTo.mockClear();
-    await new Promise((resolve) => window.setTimeout(resolve, 2_500));
+  it.each(["wheel", "keyboard", "touch", "pointer", "matched"])(
+    "Blueskyの上限到達後に%sで再開し、再び3回で止まる",
+    async (action) => {
+      vi.useFakeTimers();
+      history.replaceState({}, "", "/profile/alice.test");
+      document.body.innerHTML = `
+        <div data-testid="feedItem-by-alice.test">
+          <a href="/profile/alice.test/post/abc"></a>
+          <button data-testid="likeBtn" aria-label="0 likes"></button>
+        </div>
+      `;
+      const scrollTo = vi
+        .spyOn(window, "scrollTo")
+        .mockImplementation(() => {});
+      scrollTo.mockClear();
+      const runtime = startContentRuntime(undefined, blueskyAdapter);
+      try {
+        await setFiltering(true);
+        await vi.advanceTimersByTimeAsync(9_000);
+        expect(scrollTo).toHaveBeenCalledTimes(6);
+        scrollTo.mockClear();
 
-    expect((await getFilterContext()).continuousLoadingWarning).toBe(true);
-    expect(scrollTo).toHaveBeenCalled();
-    expect(
-      document.documentElement.hasAttribute("data-sift-layout-probe"),
-    ).toBe(true);
+        // 自動スクロールの通知やサイトが発火した入力では上限を解除しない。
+        window.dispatchEvent(new Event("scroll"));
+        window.dispatchEvent(new WheelEvent("wheel", { deltaY: 100 }));
+        await vi.advanceTimersByTimeAsync(3_000);
+        expect(scrollTo).not.toHaveBeenCalled();
 
-    runtime.dispose();
-  }, 10_000);
+        if (action === "matched") {
+          const card = document.querySelector<HTMLElement>(
+            "[data-testid^='feedItem']",
+          );
+          const metric = card?.querySelector("button");
+          if (!card || !metric) throw new Error("投稿カードがありません。");
+          vi.spyOn(card, "getBoundingClientRect").mockReturnValue({
+            bottom: window.innerHeight + 100,
+          } as DOMRect);
+          metric.setAttribute("aria-label", "1,100 likes");
+          await vi.advanceTimersByTimeAsync(100);
+          expect(scrollTo).not.toHaveBeenCalled();
+          metric.setAttribute("aria-label", "0 likes");
+        } else {
+          const event =
+            action === "wheel"
+              ? new WheelEvent("wheel", { deltaY: 100 })
+              : action === "keyboard"
+                ? new KeyboardEvent("keydown", { key: "PageDown" })
+                : new Event(action === "touch" ? "touchstart" : "pointerdown");
+          Object.defineProperty(event, "isTrusted", { value: true });
+          window.dispatchEvent(event);
+        }
+        await vi.advanceTimersByTimeAsync(100);
+        expect(scrollTo).toHaveBeenCalledTimes(1);
+        await vi.advanceTimersByTimeAsync(9_000);
+        expect(scrollTo).toHaveBeenCalledTimes(6);
+        expect(
+          document.documentElement.hasAttribute("data-sift-layout-probe"),
+        ).toBe(false);
+      } finally {
+        runtime.dispose();
+        vi.useRealTimers();
+        vi.restoreAllMocks();
+      }
+    },
+  );
 
   it("Blueskyがフィードの終端を示した後は読み込み判定を再開しない", async () => {
     history.replaceState({}, "", "/profile/alice.test");
