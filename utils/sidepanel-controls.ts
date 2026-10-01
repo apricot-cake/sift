@@ -8,6 +8,20 @@ export const SIDE_PANEL_CONTROL = {
 // session storage にも置き、パネル自身が起動後に読み取れるようにする。
 export const SIDE_PANEL_TAB_STORAGE_KEY = "sift:sidepanel-tab-id";
 
+export const sidePanelOriginKey = (tabId: number): string =>
+  `sift:sidepanel-origin:${tabId}`;
+
+// activeTab の許可と同じ境界で判定する。パス・クエリの変更は同じサイト。
+export function sidePanelOrigin(url: string | undefined): string | null {
+  if (!url) return null;
+  try {
+    const parsed = new URL(url);
+    return parsed.origin === "null" ? parsed.href : parsed.origin;
+  } catch {
+    return null;
+  }
+}
+
 export function isSidePanelTabId(value: unknown): value is number {
   return Number.isInteger(value) && (value as number) >= 0;
 }
