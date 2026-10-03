@@ -5,14 +5,13 @@ import { readDevBrowserEndpoint } from "./dev-browser-endpoint.ts";
 
 if (process.argv.includes("--help")) {
   console.log(
-    "使い方: npm run smoke:connection\n開発用ChromeでX→YouTubeの権限喪失、再接続、再読込、タブ切替を検証します。作成したタブを閉じ、設定を復元します。結果: test-results/connection-smoke.json。失敗時は終了コード1。",
+    "使い方: npm run smoke:connection\n開発用Chromeで別サイト移動時の自動閉鎖、再接続、同一サイトの移動・再読込、タブ切替を検証します。作成したタブを閉じ、設定を復元します。結果: test-results/connection-smoke.json。失敗時は終了コード1。",
   );
   process.exit(0);
 }
 if (process.argv.length > 2) throw Error("引数は不要です");
 const endpoint = await readDevBrowserEndpoint(
   process.env.SIFT_DEV_PROFILE || path.join(homedir(), ".sift-ext-profile"),
-  9224,
 );
 if (!endpoint)
   throw Error("npm run browser:open で開発用Chromeを起動してください");
@@ -144,11 +143,12 @@ try {
     }
     return {
       url: await evaluate(page.client, "location.href"),
+      width: await evaluate(page.client, "innerWidth"),
       tabId: page.tabId,
       panels,
     };
   }
-  async function check(label, page, predicate) {
+  async function check(label, page, predicate, closedWidth) {
     let observation,
       stable = 0;
     for (let i = 0; i < 40; i++) {
@@ -163,8 +163,9 @@ try {
       );
       stable =
         observation.url === page.url &&
-        visible.length === 1 &&
-        predicate(visible[0])
+        (closedWidth === undefined
+          ? visible.length === 1 && predicate(visible[0])
+          : visible.length === 0 && observation.width >= closedWidth - 2)
           ? stable + 1
           : 0;
       if (stable >= 3) {
@@ -180,23 +181,24 @@ try {
     p.controls > 0 && /最低再生回数|Minimum views/.test(p.text);
   const first = await newPage("https://x.com/uowata94");
   await delay(2000);
+  const closedWidth = await evaluate(first.client, "innerWidth");
   await action(first);
   await check("Xプロフィールに接続", first, x);
   first.url = "https://www.youtube.com/@Google/videos";
   await first.client.call("Page.navigate", { url: first.url });
   await check(
-    "権限喪失時は対象外ではなく接続案内",
+    "別サイトへの移動でパネルが閉じ、ページ幅が戻る",
     first,
-    (p) =>
-      p.controls === 0 &&
-      /接続できていません|Not connected to this page/.test(p.text) &&
-      /ツールバー|toolbar/.test(p.text) &&
-      !/このページではフィルターを使えません/.test(p.text),
+    undefined,
+    closedWidth,
   );
   await action(first);
   await check("アクション後にYouTubeへ再接続", first, youtube);
   await first.client.call("Page.reload");
   await check("再読込後に復旧", first, youtube);
+  first.url = "https://www.youtube.com/@Google/streams";
+  await first.client.call("Page.navigate", { url: first.url });
+  await check("同じサイト内のページ移動では維持", first, youtube);
   const second = await newPage("https://x.com/AdamasMC");
   await delay(2000);
   await action(second);

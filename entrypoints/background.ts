@@ -10,6 +10,8 @@ import {
   isSidePanelTabId,
   SIDE_PANEL_CONTROL,
   SIDE_PANEL_TAB_STORAGE_KEY,
+  sidePanelOrigin,
+  sidePanelOriginKey,
 } from "../utils/sidepanel-controls.ts";
 import { isSupportedSiteUrl } from "../utils/site-matches.ts";
 import { TIMELINE_CONTROL } from "../utils/timeline-controls.ts";
@@ -69,6 +71,7 @@ export default defineBackground(() => {
     // 全サイトで最初の await より前に開く。
     const savedTab = browser.storage.session.set({
       [SIDE_PANEL_TAB_STORAGE_KEY]: tab.id,
+      [sidePanelOriginKey(tab.id)]: sidePanelOrigin(tab.url),
     });
     const configured = sidePanel?.setOptions({
       tabId: tab.id,
@@ -135,6 +138,24 @@ export default defineBackground(() => {
       .catch(() => {});
   }
 
+  async function handleNavigation(tabId: number): Promise<void> {
+    // 非アクティブなタブの遷移も検査する。タブ単位の記録は worker の休止を
+    // またいで保持し、別タブのパネルには影響させない。
+    const key = sidePanelOriginKey(tabId);
+    const stored = await browser.storage.session.get(key);
+    if (!Object.hasOwn(stored, key)) return;
+    const tab = await browser.tabs.get(tabId).catch(() => null);
+    if (!tab) return;
+    const origin = sidePanelOrigin(tab.url);
+    // 別 origin への遷移で activeTab が失効すると URL 自体が取得できない。
+    // 読み込み完了時にも URL がない場合は、接続を維持できないので閉じる。
+    if (origin !== stored[key] || origin === null) {
+      await sidePanel?.setOptions({ tabId, enabled: false });
+      return;
+    }
+    await refreshOpenPanelForNavigation(tabId, tab);
+  }
+
   browser.action.onClicked.addListener((tab) => {
     void openPanelForActiveTab(tab).catch((error: unknown) => {
       console.error("Sift のサイドパネルを開けなかった。", error);
@@ -171,10 +192,14 @@ export default defineBackground(() => {
     })().catch(() => false);
   });
 
-  browser.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+  browser.tabs.onUpdated.addListener((tabId, changeInfo) => {
     if (changeInfo.url !== undefined || changeInfo.status === "complete") {
-      void refreshOpenPanelForNavigation(tabId, tab).catch(() => {});
+      void handleNavigation(tabId).catch(() => {});
     }
+  });
+
+  browser.tabs.onRemoved.addListener((tabId) => {
+    void browser.storage.session.remove(sidePanelOriginKey(tabId));
   });
 
   sidePanel?.onOpened.addListener((panel) => {
@@ -195,11 +220,23 @@ export default defineBackground(() => {
         .catch(() => {});
     }
   });
-  sidePanel?.onClosed?.addListener(() => {
-    void browser.storage.session.remove(SIDE_PANEL_TAB_STORAGE_KEY);
+  sidePanel?.onClosed?.addListener((panel) => {
+    void browser.storage.session
+      .get(SIDE_PANEL_TAB_STORAGE_KEY)
+      .then((stored) => {
+        if (
+          panel.tabId === undefined ||
+          stored[SIDE_PANEL_TAB_STORAGE_KEY] === panel.tabId
+        ) {
+          void browser.storage.session.remove(SIDE_PANEL_TAB_STORAGE_KEY);
+        }
+      });
     void browser.tabs.query({}).then((tabs) => {
       for (const tab of tabs) {
-        if (tab.id !== undefined) {
+        if (
+          tab.id !== undefined &&
+          (panel.tabId === undefined || panel.tabId === tab.id)
+        ) {
           void browser.tabs
             .sendMessage(tab.id, {
               type: TIMELINE_CONTROL.setFiltering,
