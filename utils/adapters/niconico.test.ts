@@ -123,7 +123,7 @@ describe("ニコニコ動画", () => {
     expect(isNiconicoFilterPage("/watch/sm123")).toBe(false);
   });
 
-  it("現行の検索カードから重複せず動画情報を読む", () => {
+  it("再生数と確認できない指標は読み飛ばす", () => {
     const page = render(`
       <div>
         <div data-decoration-video-id="sm456">
@@ -142,6 +142,20 @@ describe("ニコニコ動画", () => {
 
     expect(niconicoAdapter.getPostCards(page)).toHaveLength(1);
     expect(niconicoAdapter.readPostId?.(card)).toBe("sm456");
+    expect(niconicoAdapter.readMetricCount(card)).toBeNaN();
+  });
+
+  it("先頭に別の指標があっても再生数の表示を優先する", () => {
+    const card = render(`
+      <article data-video-id="sm789">
+        <a href="/watch/sm789">動画タイトル</a>
+        <time datetime="2026-08-21T15:00:00.000Z">2026/8/22</time>
+        <p><span>12</span></p>
+        <p><span title="7.9万 再生">7.9万</span></p>
+      </article>
+    `).firstElementChild;
+    if (!card) throw new Error("動画カードが無い");
+
     expect(niconicoAdapter.readMetricCount(card)).toBe(79000);
   });
 
