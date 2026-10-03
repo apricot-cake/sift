@@ -1,0 +1,51 @@
+{
+  "schema": 1,
+  "caseId": "youtube-channel-search",
+  "route": "/@zunda_drop/search",
+  "regions": {
+    "navigation": [
+      {
+        "tag": "input"
+      }
+    ],
+    "card": [
+      {
+        "tag": "ytd-video-renderer",
+        "children": [
+          {
+            "tag": "div",
+            "children": [
+              {
+                "tag": "ytd-thumbnail"
+              },
+              {
+                "tag": "div"
+              }
+            ]
+          },
+          {
+            "tag": "div"
+          },
+          {
+            "tag": "yt-interaction",
+            "children": [
+              {
+                "tag": "div"
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "metric": [
+      {
+        "tag": "span"
+      }
+    ],
+    "date": [
+      {
+        "tag": "span"
+      }
+    ]
+  }
+}

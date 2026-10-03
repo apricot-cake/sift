@@ -679,6 +679,8 @@ export function SidepanelApp(): React.JSX.Element {
                             </ItemLabel>
                           </h2>
                           {selectedSite === "youtube" &&
+                            activeContext?.sortOrder !== "relevance" &&
+                            activeContext?.sortOrder !== "default" &&
                             activeContext?.supportsPublicationAge !== false && (
                               <p className="m-0 mb-5 text-xs text-muted-foreground">
                                 {t("sidepanelSortFilterHint")}

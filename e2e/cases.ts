@@ -7,10 +7,11 @@ export interface CompatibilityCase {
   linkLabel?: string;
   linkHref?: string;
   list?: boolean;
-  sort?: "newest" | "popular";
+  sort?: "newest" | "popular" | "default";
   period: boolean;
   niconicoSort?: "投稿日時が新しい順" | "再生数が多い順";
   membersOnly?: boolean;
+  channelSearch?: string;
 }
 
 export const lifecycleCases = [
@@ -32,7 +33,10 @@ export const lifecycleCases = [
   },
 ] as const;
 
-export const emptyCases = [{ id: "empty-x-search" }] as const;
+export const emptyCases = [
+  { id: "empty-x-search" },
+  { id: "empty-youtube-channel-search" },
+] as const;
 
 export const unsupportedCases = [
   {
@@ -129,6 +133,22 @@ export function requiredFilterEvidence(target: CompatibilityCase): string[] {
 
 // 期待値は対応仕様から定義する。Siftの判定結果から作らない。
 export const cases: CompatibilityCase[] = [
+  {
+    id: "youtube-videos-without-sort",
+    site: "youtube",
+    start: "https://www.youtube.com/@SAYOSAYOCh/videos",
+    destination: "/@SAYOSAYOCh/videos",
+    sort: "default",
+    period: false,
+  },
+  {
+    id: "youtube-channel-search",
+    site: "youtube",
+    start: "https://www.youtube.com/@zunda_drop/videos",
+    destination: "/@zunda_drop/search",
+    channelSearch: "WARDOGS",
+    period: false,
+  },
   {
     id: "youtube-members-representative",
     site: "youtube",

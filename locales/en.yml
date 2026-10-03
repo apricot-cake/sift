@@ -16,7 +16,7 @@ sidepanelPartialData: "Some post information could not be read. Filters may not 
 sidepanelSupportedSitesHint: "Supported sites: YouTube, Niconico, X, and Bluesky"
 sidepanelYouTubeUnsupportedTitle: "This page cannot be filtered."
 sidepanelYouTubeSupportedPagesTitle: "Pages you can filter"
-sidepanelYouTubeSupportedChannelVideos: "A channel's Videos, Shorts, or Live tab (Latest or Popular)"
+sidepanelYouTubeSupportedChannelVideos: "A channel's Videos, Shorts, or Live tab (Latest or Popular), and channel search"
 sidepanelSupportedFollowing: "Following"
 sidepanelSupportedLists: "Pinned lists and list pages"
 sidepanelSupportedLatestSearch: "Search results sorted by Latest"

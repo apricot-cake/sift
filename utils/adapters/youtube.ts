@@ -38,7 +38,26 @@ const AGE_IN_MILLISECONDS: Readonly<Record<string, number>> = Object.freeze({
 });
 
 const CHANNEL_FILTER_PATH =
-  /^\/(?:@[^/]+|channel\/[^/]+|c\/[^/]+|user\/[^/]+)\/(?:videos|shorts|streams)\/?$/;
+  /^\/(?:@[^/]+|channel\/[^/]+|c\/[^/]+|user\/[^/]+)\/(?:videos|shorts|streams|search)\/?$/;
+
+function isChannelSearch(pathname: string): boolean {
+  return CHANNEL_FILTER_PATH.test(pathname) && /\/search\/?$/.test(pathname);
+}
+
+function youtubePageKey(
+  root: ParentNode,
+  page: Pick<Location, "pathname" | "search">,
+): string {
+  if (!isChannelSearch(page.pathname)) return `${page.pathname}${page.search}`;
+  // YouTube は検索後に query を URL から消すことがある。
+  const query =
+    root.querySelector<HTMLInputElement>(
+      "ytd-browse:not([hidden]) ytd-expandable-tab-renderer input",
+    )?.value ??
+    new URLSearchParams(page.search).get("query") ??
+    "";
+  return `${page.pathname}?${new URLSearchParams({ query })}`;
+}
 
 export function isYouTubeFilterPage(pathname: string): boolean {
   return CHANNEL_FILTER_PATH.test(pathname);
@@ -47,8 +66,9 @@ export function isYouTubeFilterPage(pathname: string): boolean {
 export function readYouTubeSortOrder(
   root: ParentNode,
   page: Pick<Location, "pathname">,
-): "newest" | "popular" | "unknown" {
+): "newest" | "popular" | "relevance" | "default" | "unknown" {
   if (!CHANNEL_FILTER_PATH.test(page.pathname)) return "unknown";
+  if (isChannelSearch(page.pathname)) return "relevance";
   const selected = root.querySelectorAll(
     'ytd-browse:not([hidden]) [role="combobox"], ytd-browse:not([hidden]) [role="tab"][aria-selected="true"], ytd-browse:not([hidden]) yt-chip-cloud-chip-renderer[selected]',
   );
@@ -62,6 +82,22 @@ export function readYouTubeSortOrder(
       return "popular";
     if (/^(新しい順|Latest|Newest)$/i.test(label)) return "newest";
   }
+  // 動画数の少ないチャンネルでは、並び順の欄自体がない。
+  // 読み込み途中や未知の選択欄と区別し、空のヘッダーと動画を確認する。
+  const grid = root.querySelector(
+    "ytd-browse:not([hidden]) ytd-rich-grid-renderer",
+  );
+  const header = grid?.querySelector("#header");
+  if (
+    header &&
+    header.children.length === 0 &&
+    !header.textContent?.trim() &&
+    grid?.querySelector(YOUTUBE_SELECTORS.videoCard) &&
+    !root.querySelector(
+      "ytd-browse:not([hidden]) [role='combobox'], ytd-browse:not([hidden]) yt-chip-cloud-renderer",
+    )
+  )
+    return "default";
   return "unknown";
 }
 
@@ -262,6 +298,7 @@ export const youtubeAdapter = Object.freeze({
   id: "youtube",
   matches: Object.freeze(["https://www.youtube.com/*"]),
   settingsKey: "youtube",
+  readPageKey: youtubePageKey,
   readSortOrder: readYouTubeSortOrder,
   supportsPublicationAge(page: Pick<Location, "pathname">) {
     return !/\/shorts\/?$/.test(page.pathname);
@@ -284,7 +321,7 @@ export const youtubeAdapter = Object.freeze({
     return [
       ...root.querySelectorAll("ytd-browse:not([hidden]) ytd-message-renderer"),
     ].some((e) =>
-      /^(このチャンネルには動画がありません。?|このチャンネルにはコンテンツがありません。?|This channel (?:has no|doesn't have any) (?:videos|content)\.?)$/i.test(
+      /^(このチャンネルには動画がありません。?|このチャンネルにはコンテンツがありません。?|このチャンネルには「.*」に一致するコンテンツはありません。?|This channel (?:has no|doesn't have any) (?:videos|content)(?: that matches .*)?\.?)$/i.test(
         e.textContent?.trim() ?? "",
       ),
     );
@@ -295,7 +332,7 @@ export const youtubeAdapter = Object.freeze({
     page: Pick<Location, "pathname" | "search">,
   ) {
     return this.isTimelineAvailable(root, page)
-      ? `${page.pathname}${page.search}`
+      ? youtubePageKey(root, page)
       : null;
   },
 
@@ -359,7 +396,16 @@ export const youtubeAdapter = Object.freeze({
     const text = metadataTexts(postCard).find((entry) =>
       VIEW_LABEL.test(entry),
     );
-    return text === undefined ? Number.NaN : parseMetric(text);
+    if (text !== undefined) return parseMetric(text);
+    // 検索結果の横長カードには「回視聴」を省いた数値だけの表示もある。
+    // 日付や動画の長さを拾わないよう、再生数用の先頭項目に限定する。
+    const compact = postCard
+      .querySelector("#metadata-line > span:first-of-type")
+      ?.textContent?.trim();
+    return compact &&
+      /^[\d.,\s]+(?:[KMB]|[千천万萬만億亿억])?$/i.test(normalizeDigits(compact))
+      ? parseMetric(compact)
+      : Number.NaN;
   },
 
   readCreatedAt(postCard: Element) {

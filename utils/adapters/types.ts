@@ -17,11 +17,15 @@ export interface ServiceAdapter {
     page: Pick<Location, "pathname"> & Partial<Pick<Location, "search">>,
   ): PageSupport;
   hasEmptyTimeline?(root: ParentNode): boolean;
+  readPageKey?(
+    root: ParentNode,
+    page: Pick<Location, "pathname" | "search">,
+  ): string;
   supportsPublicationAge?(page: Pick<Location, "pathname">): boolean;
   readSortOrder?(
     root: ParentNode,
     page: Pick<Location, "pathname" | "search">,
-  ): "newest" | "popular" | "unknown";
+  ): "newest" | "popular" | "relevance" | "default" | "unknown";
   readonly id: string;
   // このサービス向けに manifest が登録する match パターン。
   readonly matches: readonly string[];

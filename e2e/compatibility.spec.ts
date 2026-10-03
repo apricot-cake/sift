@@ -35,7 +35,7 @@ test.afterAll(async () => {
 
 const regions = {
   youtube: {
-    card: "ytd-browse:not([hidden]) ytd-rich-item-renderer",
+    card: "ytd-browse:not([hidden]) ytd-rich-item-renderer, ytd-browse:not([hidden]) ytd-video-renderer",
     metric:
       "#metadata-line span, .ytContentMetadataViewModelMetadataText, [class*='MetadataSubhead']",
     sort: 'ytd-browse:not([hidden]) [role="combobox"], ytd-browse:not([hidden]) button[role="tab"], ytd-browse:not([hidden]) yt-chip-cloud-chip-renderer',
@@ -93,6 +93,12 @@ async function navigate(page: Page, target: CompatibilityCase) {
     await link.click();
   }
   await selectTab(page, target);
+  if (target.channelSearch) {
+    await page.locator("ytd-expandable-tab-renderer button").click();
+    const input = page.locator("ytd-expandable-tab-renderer input");
+    await input.fill(target.channelSearch);
+    await input.press("Enter");
+  }
   await expect
     .poll(() => new URL(page.url()).pathname)
     .toBe(target.destination);
@@ -110,7 +116,7 @@ async function navigate(page: Page, target: CompatibilityCase) {
     );
     expect(query.get("sortOrder") ?? "desc").toBe("desc");
   }
-  if (target.sort) {
+  if (target.sort && target.sort !== "default") {
     const label =
       target.sort === "popular"
         ? /^(人気の動画|Popular|Most popular)$/
@@ -156,16 +162,25 @@ async function snapshot(
     regions: {},
   };
   const selections: [string, Locator][] = [
-    target.list
-      ? [
-          "navigation",
-          target.site === "bluesky"
-            ? page.locator(
-                '[data-testid="profileListScreen"] [data-testid="headerTitle"]',
-              )
-            : page.getByRole("heading"),
-        ]
-      : ["sort", page.locator(selection.sort)],
+    target.channelSearch
+      ? ["navigation", page.locator("ytd-expandable-tab-renderer input")]
+      : target.list
+        ? [
+            "navigation",
+            target.site === "bluesky"
+              ? page.locator(
+                  '[data-testid="profileListScreen"] [data-testid="headerTitle"]',
+                )
+              : page.getByRole("heading"),
+          ]
+        : [
+            "sort",
+            page.locator(
+              target.sort === "default"
+                ? "ytd-browse:not([hidden]) ytd-rich-grid-renderer #header"
+                : selection.sort,
+            ),
+          ],
     ["card", page.locator(selection.card)],
     target.membersOnly
       ? [
@@ -200,6 +215,7 @@ async function snapshot(
       // 先頭がメンバー限定などで再生数を持たない場合も、表示中のカードを調べる。
       if (
         target.site === "youtube" &&
+        !target.channelSearch &&
         name === "metric" &&
         !(await element.evaluate((node) =>
           /views?|回視聴|回再生|조회수|次觀看|次观看|visualizaciones?|visualiza(?:ç|c)[õo]es?/i.test(
@@ -332,6 +348,9 @@ async function observations(page: Page, target: CompatibilityCase) {
             metrics: [...card.querySelectorAll(metric)].map(
               (e) => e.getAttribute("aria-label") || e.textContent || "",
             ),
+            compactViews: card
+              .querySelector("#metadata-line > span:first-of-type")
+              ?.textContent?.trim(),
             display: getComputedStyle(cell).display,
             visibility: getComputedStyle(cell).visibility,
             filterReason: cell.getAttribute("data-sift-filter-reason"),
@@ -392,11 +411,15 @@ async function observations(page: Page, target: CompatibilityCase) {
   );
   return rows.map((row) => ({
     ...row,
-    count: parseMetric(
+    count:
       target.site === "youtube"
-        ? (row.metrics.find((t) => /回視聴|views/i.test(t)) ?? "")
-        : (row.metrics[0] ?? ""),
-    ),
+        ? (() => {
+            const views =
+              row.metrics.find((t) => /回視聴|views/i.test(t)) ??
+              (target.channelSearch ? row.compactViews : undefined);
+            return views ? parseMetric(views) : Number.NaN;
+          })()
+        : parseMetric(row.metrics[0] ?? ""),
     ageDays:
       target.site === "niconico"
         ? (Date.now() - Date.parse(row.date)) / 86400000
@@ -907,6 +930,37 @@ for (const target of cases) {
         body: JSON.stringify(session.candidate),
         contentType: "application/json",
       });
+      if (target.channelSearch) {
+        const previousKey = (await readContext(session, page)).pageKey;
+        expect(previousKey).toContain("query=WARDOGS");
+        const input = page.locator("ytd-expandable-tab-renderer input");
+        await input.fill("Billion Egg Farm");
+        await input.press("Enter");
+        await expect(page.locator(regions.youtube.card).first()).toContainText(
+          "Billion Egg Farm",
+        );
+        await expect
+          .poll(async () => (await readContext(session, page)).pageKey)
+          .toContain("query=Billion+Egg+Farm");
+        const nextCounts = (await observations(page, target))
+          .map((row) => row.count)
+          .filter(Number.isFinite)
+          .sort((a, b) => a - b);
+        expect(nextCounts.length).toBeGreaterThan(0);
+        await expect
+          .poll(async () =>
+            (await readContext(session, page)).metricCounts.toSorted(
+              (a, b) => a - b,
+            ),
+          )
+          .toEqual(nextCounts);
+        await expect
+          .poll(async () => (await readContext(session, page)).health?.state)
+          .toBe("ready");
+        await expect(
+          panel.getByRole("heading", { name: "最低再生回数", exact: true }),
+        ).toBeVisible();
+      }
     } finally {
       try {
         await closePanel(session, page);

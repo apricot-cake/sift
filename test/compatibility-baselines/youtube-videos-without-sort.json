@@ -1,0 +1,53 @@
+{
+  "schema": 1,
+  "caseId": "youtube-videos-without-sort",
+  "route": "/@SAYOSAYOCh/videos",
+  "regions": {
+    "sort": [
+      {
+        "tag": "div"
+      }
+    ],
+    "card": [
+      {
+        "tag": "ytd-rich-item-renderer",
+        "children": [
+          {
+            "tag": "div",
+            "children": [
+              {
+                "tag": "yt-lockup-view-model"
+              }
+            ]
+          },
+          {
+            "tag": "yt-interaction",
+            "children": [
+              {
+                "tag": "div"
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "metric": [
+      {
+        "tag": "span",
+        "role": "text",
+        "attributes": [
+          "aria-label"
+        ]
+      }
+    ],
+    "date": [
+      {
+        "tag": "span",
+        "role": "text",
+        "attributes": [
+          "aria-label"
+        ]
+      }
+    ]
+  }
+}

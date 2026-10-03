@@ -12,7 +12,7 @@ sidepanelPartialData: "一部の投稿の情報を取得できないため、す
 sidepanelSupportedSitesHint: "対応サイトは YouTube、ニコニコ動画、X、Bluesky です"
 sidepanelYouTubeUnsupportedTitle: "このページはフィルター対象外です"
 sidepanelYouTubeSupportedPagesTitle: "フィルターを使えるページ"
-sidepanelYouTubeSupportedChannelVideos: "チャンネルの「動画」「ショート」「配信」（新しい順・人気の動画）"
+sidepanelYouTubeSupportedChannelVideos: "チャンネルの「動画」「ショート」「配信」（新しい順・人気の動画）、チャンネル内検索"
 sidepanelSupportedFollowing: "フォロー中"
 sidepanelSupportedLists: "固定リスト・リスト専用ページ"
 sidepanelSupportedLatestSearch: "検索結果の「最新」"

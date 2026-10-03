@@ -98,8 +98,6 @@ describe("YouTube の対象ページを選ぶ", () => {
     "/",
     "/results",
     "/feed/subscriptions",
-    "/@sift/search",
-    "/user/sift/search/",
     "/@sift/live",
     "/@sift",
     "/@sift/featured",

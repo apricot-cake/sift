@@ -11,6 +11,27 @@ const cards = `<article data-testid="tweet"></article>
   <article data-video-id="sm123"><a href="/watch/sm123">動画</a></article>`;
 
 describe.each(["videos", "shorts", "streams"])("YouTube %s の並び順", (tab) => {
+  it("並び順欄のない読み込み済みグリッドは通常表示として扱う", () => {
+    const root = render(
+      `<ytd-browse><button role="tab" aria-selected="true">動画</button><ytd-rich-grid-renderer><div id="header"></div><ytd-rich-item-renderer><yt-lockup-view-model></yt-lockup-view-model></ytd-rich-item-renderer></ytd-rich-grid-renderer></ytd-browse>`,
+    );
+    const page = { pathname: `/@example/${tab}` };
+    expect(readYouTubeSortOrder(root, page)).toBe("default");
+    expect(youtubeAdapter.isTimelineAvailable(root, page)).toBe(true);
+  });
+  it.each([
+    '<div id="header"></div>',
+    "<ytd-rich-item-renderer><yt-lockup-view-model></yt-lockup-view-model></ytd-rich-item-renderer>",
+    '<div id="header"><button role="combobox">不明</button></div><ytd-rich-item-renderer><yt-lockup-view-model></yt-lockup-view-model></ytd-rich-item-renderer>',
+    '<div id="header"><yt-chip-cloud-renderer></yt-chip-cloud-renderer></div><ytd-rich-item-renderer><yt-lockup-view-model></yt-lockup-view-model></ytd-rich-item-renderer>',
+  ])("読み込み途中や未知の並び順を通常表示にしない", (html) => {
+    const root = render(
+      `<ytd-browse><ytd-rich-grid-renderer>${html}</ytd-rich-grid-renderer></ytd-browse>`,
+    );
+    expect(readYouTubeSortOrder(root, { pathname: `/@example/${tab}` })).toBe(
+      "unknown",
+    );
+  });
   it.each([
     ["新しい順", "newest", true],
     ["人気の動画", "popular", true],
@@ -104,14 +125,18 @@ describe.each([
   },
   {
     adapter: youtubeAdapter,
-    accepted: ["/@example/videos", "/@example/shorts", "/@example/streams"],
+    accepted: [
+      "/@example/videos",
+      "/@example/shorts",
+      "/@example/streams",
+      "/@example/search?query=test",
+    ],
     rejected: [
       "/",
       "/@example",
       "/@example/featured",
       "/results?search_query=test",
       "/feed/subscriptions",
-      "/@example/search?query=test",
       "/watch?v=test",
       "/@example/live",
     ],

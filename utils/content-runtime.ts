@@ -146,7 +146,7 @@ export function startContentRuntime(
   }
 
   function pageKey(): string {
-    return `${location.origin}${location.pathname}${location.search}`;
+    return `${location.origin}${adapter.readPageKey?.(document, location) ?? `${location.pathname}${location.search}`}`;
   }
 
   // 画像と動画のどちらを絞り込むかは読み手の設定なので、2つはアダプターから

@@ -1,12 +1,15 @@
-<ytd-rich-grid-renderer>
-  <ytd-rich-item-renderer>
-    <ytd-rich-grid-media>
+<ytd-browse>
+  <ytd-expandable-tab-renderer><input value="test" /></ytd-expandable-tab-renderer>
+  <ytd-item-section-renderer>
+    <ytd-video-renderer>
       <a id="video-title" href="/watch?v=abc123">動画タイトル</a>
       <div id="metadata-line">
-        <span class="inline-metadata-item">1.4万回視聴</span>
+        <ytd-badge-supported-renderer hidden></ytd-badge-supported-renderer>
+        <div id="separator" hidden>•</div>
+        <span class="inline-metadata-item">1.4万</span>
         <span class="inline-metadata-item">12時間前</span>
       </div>
       <yt-badge-shape aria-label="Members only"></yt-badge-shape>
-    </ytd-rich-grid-media>
-  </ytd-rich-item-renderer>
-</ytd-rich-grid-renderer>
+    </ytd-video-renderer>
+  </ytd-item-section-renderer>
+</ytd-browse>

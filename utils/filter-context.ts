@@ -11,7 +11,12 @@ export interface FilterContextRequest {
 export interface FilterContextResponse {
   readonly health?: PageHealth;
   readonly supportsPublicationAge?: boolean;
-  readonly sortOrder?: "newest" | "popular" | "unknown";
+  readonly sortOrder?:
+    | "newest"
+    | "popular"
+    | "relevance"
+    | "default"
+    | "unknown";
   readonly site: SiteSettingsKey;
   readonly pageTitle: string;
   readonly pageKey: string;
@@ -51,6 +56,8 @@ export function isFilterContextResponse(
     (response.sortOrder === undefined ||
       response.sortOrder === "newest" ||
       response.sortOrder === "popular" ||
+      response.sortOrder === "relevance" ||
+      response.sortOrder === "default" ||
       response.sortOrder === "unknown") &&
     (response.site === "x" ||
       response.site === "bluesky" ||
