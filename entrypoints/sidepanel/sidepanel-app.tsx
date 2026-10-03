@@ -153,16 +153,17 @@ export function SidepanelApp(): React.JSX.Element {
   };
 
   useEffect(() => {
-    let refreshing = false;
+    let refreshGeneration = 0;
     let connectionAttempt: string | null = null;
     const refreshActiveHost = async (forceSelection = false): Promise<void> => {
-      if (refreshing || document.visibilityState === "hidden") return;
-      refreshing = true;
+      const generation = ++refreshGeneration;
+      if (document.visibilityState === "hidden") return;
       try {
         const [tab] = await browser.tabs.query({
           active: true,
           currentWindow: true,
         });
+        if (generation !== refreshGeneration) return;
         setKnownUnsupportedSite(isKnownUnsupportedSite(tab?.url));
         if (panelTabId.current === null && tab?.id !== undefined) {
           panelTabId.current = tab.id;
@@ -217,6 +218,13 @@ export function SidepanelApp(): React.JSX.Element {
           }
           if (context !== null) connectionAttempt = null;
         }
+        const [currentTab] = await browser.tabs.query({
+          active: true,
+          currentWindow: true,
+        });
+        if (generation !== refreshGeneration || currentTab?.id !== tab?.id) {
+          return;
+        }
         const nextPage =
           tab?.id !== undefined && context?.timelineAvailable
             ? { tabId: tab.id, pageKey: context.pageKey }
@@ -249,6 +257,14 @@ export function SidepanelApp(): React.JSX.Element {
           initializedMinimums.current.add(context.site);
           try {
             const stored = normalizeSettings(await settingsItem.getValue());
+            const [activeTab] = await browser.tabs.query({
+              active: true,
+              currentWindow: true,
+            });
+            if (generation !== refreshGeneration || activeTab?.id !== tab?.id) {
+              initializedMinimums.current.delete(context.site);
+              return;
+            }
             const siteSettings = settingsFor(stored, context.site);
             const next = withSiteSettings(
               stored,
@@ -262,6 +278,7 @@ export function SidepanelApp(): React.JSX.Element {
                   },
             );
             await settingsItem.setValue(next);
+            if (generation !== refreshGeneration) return;
             setSettings(next);
           } catch (error) {
             initializedMinimums.current.delete(context.site);
@@ -302,10 +319,7 @@ export function SidepanelApp(): React.JSX.Element {
           followActiveContext.current = true;
           setSelectedSite(site);
         }
-      } catch {
-      } finally {
-        refreshing = false;
-      }
+      } catch {}
     };
 
     const handleTabActivated = () => void refreshActiveHost(true);
