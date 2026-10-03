@@ -102,9 +102,7 @@ export const niconicoAdapter = Object.freeze({
         `${titledCount.getAttribute("title") ?? ""} ${titledCount.textContent ?? ""}`,
       );
     }
-    const metadata = card.querySelector("time[datetime]")?.parentElement;
-    const firstMetric = metadata?.querySelector("p span")?.textContent;
-    return firstMetric ? parseMetric(firstMetric) : Number.NaN;
+    return Number.NaN;
   },
   readCreatedAt(card: Element) {
     const datetime = card
