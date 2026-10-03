@@ -1,4 +1,5 @@
 import { expect, type Locator, type Page, test } from "@playwright/test";
+import { retryNameResolution } from "../scripts/compatibility/navigation.ts";
 import {
   captureRoute,
   captureStructure,
@@ -73,14 +74,24 @@ async function selectTab(page: Page, target: CompatibilityCase) {
 }
 
 async function navigate(page: Page, target: CompatibilityCase) {
-  await page.goto(target.start, { waitUntil: "domcontentloaded" });
+  await retryNameResolution(
+    () => page.goto(target.start, { waitUntil: "domcontentloaded" }),
+    (message) =>
+      test.info().attach("navigation-dns-retry", {
+        body: JSON.stringify({ url: target.start, message, retries: 1 }),
+        contentType: "application/json",
+      }),
+  );
   if (target.linkHref)
     await page.locator(`a[href="${target.linkHref}"]`).click();
-  if (target.linkLabel)
-    await page
+  if (target.linkLabel) {
+    const link = page
       .getByRole("link")
-      .filter({ has: page.getByText(target.linkLabel, { exact: true }) })
-      .click();
+      .filter({ has: page.getByText(target.linkLabel, { exact: true }) });
+    // 一覧内容の取得はページ読み込みと同じ上限で待ち、操作時間と分ける。
+    await expect(link).toBeVisible({ timeout: 30_000 });
+    await link.click();
+  }
   await selectTab(page, target);
   await expect
     .poll(() => new URL(page.url()).pathname)
@@ -156,14 +167,21 @@ async function snapshot(
         ]
       : ["sort", page.locator(selection.sort)],
     ["card", page.locator(selection.card)],
-    [
-      "metric",
-      page
-        .locator(selection.card)
-        .filter({ visible: true })
-        .first()
-        .locator(selection.metric),
-    ],
+    target.membersOnly
+      ? [
+          "members",
+          page
+            .locator(selection.card)
+            .filter({ visible: true })
+            .getByText(/^(メンバー限定|Members only)$/i),
+        ]
+      : [
+          "metric",
+          (target.site === "youtube"
+            ? page.locator(selection.card).filter({ visible: true })
+            : page.locator(selection.card).filter({ visible: true }).first()
+          ).locator(selection.metric),
+        ],
   ];
   if (target.site === "youtube" && !target.destination.endsWith("/shorts")) {
     selections.push([
@@ -178,6 +196,18 @@ async function snapshot(
   for (const [name, locator] of selections) {
     const shapes: StructureNode[] = [];
     for (const element of await locator.all()) {
+      // 共同投稿者名や投稿日は再生数の構造に含めない。
+      // 先頭がメンバー限定などで再生数を持たない場合も、表示中のカードを調べる。
+      if (
+        target.site === "youtube" &&
+        name === "metric" &&
+        !(await element.evaluate((node) =>
+          /views?|回視聴|回再生|조회수|次觀看|次观看|visualizaciones?|visualiza(?:ç|c)[õo]es?/i.test(
+            node.getAttribute("aria-label") || node.textContent || "",
+          ),
+        ))
+      )
+        continue;
       if (
         await element.evaluate((node) => {
           for (
@@ -340,7 +370,7 @@ async function observations(page: Page, target: CompatibilityCase) {
             height: cell.getBoundingClientRect().height,
             media: Boolean(
               card.querySelector(
-                '[data-testid="tweetPhoto"], [data-testid="videoPlayer"], [data-testid="nestedQuotePreviewMedia"], button img[src*="/img/feed_thumbnail/"], [style*="video.bsky.app"], video[src*="t.gifs.bsky.app"]',
+                '[data-testid="tweetPhoto"], a[href*="/photo/"] img[src*="pbs.twimg.com/media/"], [data-testid="videoPlayer"], [data-testid="nestedQuotePreviewMedia"], button img[src*="/img/feed_thumbnail/"], [style*="video.bsky.app"], video[src*="t.gifs.bsky.app"]',
               ),
             ),
             members: [

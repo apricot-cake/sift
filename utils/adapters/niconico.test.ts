@@ -123,6 +123,24 @@ describe("ニコニコ動画", () => {
     expect(isNiconicoFilterPage("/watch/sm123")).toBe(false);
   });
 
+  it("動画タイトルを再生数や公開日のメタデータとして扱わない", () => {
+    const card = render(`
+      <article data-video-id="sm123">
+        <a href="/watch/sm123" title="999999 views 2026-08-23">
+          999999 views 2026-08-23
+        </a>
+        <span title="12 再生">12</span>
+        <span class="NC-VideoRegisteredAtText-text">2020/1/2 03:04</span>
+      </article>
+    `).firstElementChild;
+    if (!card) throw new Error("動画カードが無い");
+
+    expect(niconicoAdapter.readMetricCount(card)).toBe(12);
+    expect(niconicoAdapter.readCreatedAt?.(card)).toBe(
+      Date.parse("2020/1/2 03:04"),
+    );
+  });
+
   it("再生数と確認できない指標は読み飛ばす", () => {
     const page = render(`
       <div>

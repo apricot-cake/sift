@@ -11,7 +11,12 @@ const api = vi.hoisted(() => ({
   storage: {
     session: {
       set: vi.fn(async () => undefined),
-      get: vi.fn(async () => ({ "sift:sidepanel-tab-id": 7 })),
+      get: vi.fn(
+        async (): Promise<Record<string, unknown>> => ({
+          "sift:sidepanel-tab-id": 7,
+          "sift:sidepanel-origin:7": "https://x.com",
+        }),
+      ),
       remove: vi.fn(async () => undefined),
     },
   },
@@ -23,6 +28,7 @@ const api = vi.hoisted(() => ({
   },
   tabs: {
     onUpdated: { addListener: vi.fn() },
+    onRemoved: { addListener: vi.fn() },
     sendMessage: vi.fn(async () => ({
       site: "youtube",
       timelineAvailable: false,
@@ -131,15 +137,85 @@ it("対応サイトは開いてから注入する", async () => {
   expect(api.runtime.sendMessage).toHaveBeenCalled();
 });
 
-it("開いたまま対象外サイトへ移動しても注入せずパネルへ通知する", async () => {
+it("別サイトへ移動すると注入せずパネルを無効化する", async () => {
   api.tabs.onUpdated.addListener.mock.calls[0]?.[0](
     7,
     { url: "https://example.com/" },
     { id: 7, url: "https://example.com/" },
   );
-  await vi.waitFor(() => expect(api.runtime.sendMessage).toHaveBeenCalled());
+  await vi.waitFor(() =>
+    expect(api.sidePanel.setOptions).toHaveBeenCalledWith({
+      tabId: 7,
+      enabled: false,
+    }),
+  );
+  expect(api.runtime.sendMessage).not.toHaveBeenCalled();
   expect(api.scripting.executeScript).not.toHaveBeenCalled();
   expect(api.sidePanel.open).not.toHaveBeenCalled();
+});
+
+it("アクセス権を失いURLが読めないときも読み込み完了で閉じる", async () => {
+  api.tabs.get.mockResolvedValueOnce({ id: 7, active: true, url: "" });
+  api.tabs.onUpdated.addListener.mock.calls[0]?.[0](7, { status: "complete" });
+  await vi.waitFor(() =>
+    expect(api.sidePanel.setOptions).toHaveBeenCalledWith({
+      tabId: 7,
+      enabled: false,
+    }),
+  );
+});
+
+it.each(["https://x.com/home", "https://x.com/uowata94?test=1"])(
+  "同じサイトの移動・再読み込みではパネルを維持する: %s",
+  async (url) => {
+    api.tabs.get.mockResolvedValueOnce({ id: 7, active: true, url });
+    api.tabs.onUpdated.addListener.mock.calls[0]?.[0](7, {
+      status: "complete",
+    });
+    await vi.waitFor(() => expect(api.runtime.sendMessage).toHaveBeenCalled());
+    expect(api.sidePanel.setOptions).not.toHaveBeenCalled();
+  },
+);
+
+it("読み込み開始だけでは閉じない", async () => {
+  api.tabs.onUpdated.addListener.mock.calls[0]?.[0](7, { status: "loading" });
+  await Promise.resolve();
+  expect(api.sidePanel.setOptions).not.toHaveBeenCalled();
+  expect(api.tabs.get).not.toHaveBeenCalled();
+});
+
+it("パネルを開いた記録がないタブには触れない", async () => {
+  api.storage.session.get.mockResolvedValueOnce({});
+  api.tabs.onUpdated.addListener.mock.calls[0]?.[0](8, { status: "complete" });
+  await Promise.resolve();
+  expect(api.tabs.get).not.toHaveBeenCalled();
+});
+
+it("別タブのパネルが選択中でも元のタブの別サイト遷移を閉じる", async () => {
+  api.storage.session.get.mockResolvedValueOnce({
+    "sift:sidepanel-tab-id": 8,
+    "sift:sidepanel-origin:7": "https://x.com",
+  });
+  api.tabs.onUpdated.addListener.mock.calls[0]?.[0](7, { status: "complete" });
+  await vi.waitFor(() =>
+    expect(api.sidePanel.setOptions).toHaveBeenCalledWith({
+      tabId: 7,
+      enabled: false,
+    }),
+  );
+});
+
+it("閉じたタブのサイト記録を削除する", () => {
+  api.tabs.onRemoved.addListener.mock.calls[0]?.[0](7);
+  expect(api.storage.session.remove).toHaveBeenCalledWith(
+    "sift:sidepanel-origin:7",
+  );
+});
+
+it("別タブのパネル閉鎖で現在の接続先を消さない", async () => {
+  api.sidePanel.onClosed.addListener.mock.calls[0]?.[0]({ tabId: 8 });
+  await Promise.resolve();
+  expect(api.storage.session.remove).not.toHaveBeenCalled();
 });
 
 it("可視パネルから現在の許可済みタブへ再接続する", async () => {
