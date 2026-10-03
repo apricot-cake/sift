@@ -2,6 +2,7 @@
 // 要素が投稿で、判定の入力がそれぞれどこに書かれているか。判定そのものは
 // filter-core.ts にあり、全サービスで共有している。
 import { parseMetric } from "../filter-core.ts";
+import { collectMetricCards } from "./metric-cards.ts";
 import type { ServiceAdapter } from "./types.ts";
 
 // Bluesky の画面の作りを1箇所に集めてあるので、Bluesky 側の描き直しはここ1箇所
@@ -190,6 +191,28 @@ export const blueskyAdapter = Object.freeze({
 
     return Array.from(feed.querySelectorAll('div[dir="auto"]')).some((item) =>
       BLUESKY_FEED_END_TEXT.test(item.textContent?.trim() ?? ""),
+    );
+  },
+
+  getMetricPostCards(root: ParentNode, limit?: number) {
+    return collectMetricCards(
+      root,
+      (element) => {
+        const candidate =
+          element.matches(BLUESKY_SELECTORS.postCard) ||
+          (element.matches('[data-testid="searchScreen"] div[role="link"]') &&
+            !element.parentElement?.closest('div[role="link"]') &&
+            element.querySelector(BLUESKY_SELECTORS.postLink));
+        return candidate &&
+          !hasHiddenAncestor(element) &&
+          (element.querySelector(BLUESKY_SELECTORS.reactionButton) ||
+            element.querySelector(BLUESKY_SELECTORS.postLink))
+          ? element
+          : null;
+      },
+      undefined,
+      100_000,
+      limit,
     );
   },
 

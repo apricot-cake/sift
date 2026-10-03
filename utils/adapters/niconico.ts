@@ -1,4 +1,5 @@
 import { parseMetric } from "../filter-core.ts";
+import { collectMetricCards } from "./metric-cards.ts";
 import type { ServiceAdapter } from "./types.ts";
 
 const WATCH_LINK = 'a[href*="/watch/"]';
@@ -69,6 +70,19 @@ export const niconicoAdapter = Object.freeze({
     );
   },
   getPostCards: cards,
+  getMetricPostCards(root: ParentNode, limit?: number) {
+    return collectMetricCards(
+      root,
+      (element) =>
+        element.matches(WATCH_LINK) && videoId(element) !== null
+          ? element.closest(CARD_CANDIDATES)
+          : null,
+      undefined,
+      100_000,
+      limit,
+    );
+  },
+
   hasPostCards(root: ParentNode) {
     return cards(root).length > 0;
   },

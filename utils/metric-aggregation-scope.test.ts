@@ -18,4 +18,11 @@ describe("再生回数候補の集計範囲", () => {
   it("日付を取得できない動画だけなら範囲を出さない", () => {
     expect(metricAggregationScope([], nowMs)).toBeNull();
   });
+
+  it("大量の日付も引数展開せずに集計する", () => {
+    const dates = Array.from({ length: 130_000 }, (_, index) => nowMs - index);
+    expect(metricAggregationScope(dates, nowMs)).toEqual({
+      oldest: { value: 0, unit: "day" },
+    });
+  });
 });

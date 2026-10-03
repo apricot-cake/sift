@@ -32,11 +32,15 @@ export function metricAggregationScope(
   createdAtMs: readonly number[],
   nowMs: number,
 ): MetricAggregationScope | null {
-  const dates = createdAtMs.filter((value) => Number.isSafeInteger(value));
-  if (dates.length === 0) {
+  let oldest = Number.POSITIVE_INFINITY;
+  for (const value of createdAtMs) {
+    if (Number.isSafeInteger(value) && value < oldest) {
+      oldest = value;
+    }
+  }
+  if (!Number.isFinite(oldest)) {
     return null;
   }
-  const oldest = Math.min(...dates);
   return {
     oldest: ageFrom(nowMs, oldest),
   };

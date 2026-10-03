@@ -7,6 +7,7 @@ import { xAdapter } from "../../utils/adapters/x.ts";
 import { youtubeAdapter } from "../../utils/adapters/youtube.ts";
 import { startContentRuntime } from "../../utils/content-runtime.ts";
 import {
+  FILTER_CONTEXT_METRIC_LIMIT,
   FILTER_CONTEXT_REQUEST,
   type FilterContextResponse,
 } from "../../utils/filter-context.ts";
@@ -169,6 +170,28 @@ describe("タイムラインのフィルター", () => {
       document.body.insertAdjacentHTML("beforeend", xPostMarkup("new", 2000));
       await vi.waitFor(async () =>
         expect((await getFilterContext()).metricCounts).toEqual([900, 2000]),
+      );
+    } finally {
+      runtime.dispose();
+    }
+  });
+  it("パネル用の投稿走査と応答件数を上限内に収める", async () => {
+    const cards = Array.from(
+      { length: FILTER_CONTEXT_METRIC_LIMIT + 1 },
+      (_, index) => xPostMarkup(String(index), index),
+    ).join("");
+    document.body.innerHTML = cards;
+    const readMetricCount = vi.fn(xAdapter.readMetricCount);
+    const runtime = startContentRuntime(new ContentScriptContext("sift-test"), {
+      ...xAdapter,
+      readMetricCount,
+    });
+    try {
+      const context = await getFilterContext();
+      expect(context.metricCounts).toHaveLength(FILTER_CONTEXT_METRIC_LIMIT);
+      expect(context.metricContextTruncated).toBe(true);
+      expect(readMetricCount).toHaveBeenCalledTimes(
+        FILTER_CONTEXT_METRIC_LIMIT + 64,
       );
     } finally {
       runtime.dispose();

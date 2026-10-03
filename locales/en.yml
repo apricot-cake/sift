@@ -84,3 +84,5 @@ optionsResetCancel: "Cancel"
 optionsResetAction: "Reset"
 optionsErrorLoadFailed: "Could not load settings."
 optionsErrorSaveFailed: "Could not save settings."
+
+sidepanelSampleScope: "Counts cover a sample of loaded posts ({count} matching posts), not the full total. Filters still apply to the entire list."

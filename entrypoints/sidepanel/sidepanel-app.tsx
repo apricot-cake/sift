@@ -658,6 +658,9 @@ export function SidepanelApp(): React.JSX.Element {
                           settings={selectedSettings}
                           dates={activeContext.metricCreatedAtMs}
                           total={activeContext.metricCounts.length}
+                          truncated={
+                            activeContext.metricContextTruncated === true
+                          }
                           onChange={(patch) =>
                             saveSiteSettings(selectedSite, {
                               ...selectedSettings,
@@ -679,6 +682,9 @@ export function SidepanelApp(): React.JSX.Element {
                               </p>
                             )}
                           <MetricThresholdSuggestions
+                            truncated={
+                              activeContext?.metricContextTruncated === true
+                            }
                             minimumEnabled={selectedSettings.minCountEnabled}
                             onManual={() => toggleManualMinimum(true)}
                             onClear={() => toggleManualMinimum(false)}
@@ -772,6 +778,9 @@ export function SidepanelApp(): React.JSX.Element {
                           </ItemLabel>
                         </h2>
                         <MetricThresholdSuggestions
+                          truncated={
+                            activeContext?.metricContextTruncated === true
+                          }
                           minimumEnabled={selectedSettings.minReactionsEnabled}
                           onManual={() => toggleManualMinimum(true)}
                           onClear={() => toggleManualMinimum(false)}
@@ -1007,11 +1016,13 @@ function PublicationPeriodPicker({
   settings,
   dates,
   total,
+  truncated = false,
   onChange,
 }: {
   settings: MetricSiteSettings;
   dates: readonly number[];
   total: number;
+  truncated?: boolean;
   onChange: (patch: Partial<MetricSiteSettings>) => void;
 }): React.JSX.Element {
   const [manual, setManual] = useState(false);
@@ -1103,7 +1114,9 @@ function PublicationPeriodPicker({
         </SelectContent>
       </Select>
       <p className="mb-0 mt-4 text-xs leading-5 text-muted-foreground">
-        {t("sidepanelPeriodScope", { count: total })}
+        {t(truncated ? "sidepanelSampleScope" : "sidepanelPeriodScope", {
+          count: total,
+        })}
       </p>
       {dates.length < total && (
         <p className="mb-0 mt-2 text-xs leading-5 text-muted-foreground">
@@ -1152,6 +1165,7 @@ function MetricThresholdSuggestions({
   currentMinimum,
   metricCounts,
   metricCreatedAtMs,
+  truncated = false,
   onSelect,
 }: {
   minimumEnabled: boolean;
@@ -1161,6 +1175,7 @@ function MetricThresholdSuggestions({
   selectionEnabled: boolean;
   kind?: "metric" | "reactions";
   currentMinimum: number;
+  truncated?: boolean;
   metricCounts: readonly number[];
   metricCreatedAtMs: readonly number[];
   onSelect: (minimum: number) => void;
@@ -1195,24 +1210,26 @@ function MetricThresholdSuggestions({
     return t(key, { count: formatter.format(age.value) });
   }
 
-  const scopeText = scope
-    ? t(
-        kind === "reactions"
-          ? "sidepanelLikeSuggestionScope"
-          : "sidepanelMinimumSuggestionScope",
-        {
-          count: formatter.format(metricCounts.length),
-          oldest: formatAge(scope.oldest),
-        },
-      )
-    : t(
-        kind === "reactions"
-          ? "sidepanelLikeSuggestionScopeWithoutDates"
-          : "sidepanelMinimumSuggestionScopeWithoutDates",
-        {
-          count: formatter.format(metricCounts.length),
-        },
-      );
+  const scopeText = truncated
+    ? t("sidepanelSampleScope", { count: metricCounts.length })
+    : scope
+      ? t(
+          kind === "reactions"
+            ? "sidepanelLikeSuggestionScope"
+            : "sidepanelMinimumSuggestionScope",
+          {
+            count: formatter.format(metricCounts.length),
+            oldest: formatAge(scope.oldest),
+          },
+        )
+      : t(
+          kind === "reactions"
+            ? "sidepanelLikeSuggestionScopeWithoutDates"
+            : "sidepanelMinimumSuggestionScopeWithoutDates",
+          {
+            count: formatter.format(metricCounts.length),
+          },
+        );
 
   return (
     <div data-threshold-suggestions="">
@@ -1289,7 +1306,7 @@ function MetricThresholdSuggestions({
           <SelectItem value="custom">{t("optionsManualMinimum")}</SelectItem>
         </SelectContent>
       </Select>
-      {suggestions.length > 0 && (
+      {(truncated || suggestions.length > 0) && (
         <p className="mb-0 mt-3 text-xs leading-5 text-muted-foreground">
           {scopeText}
         </p>
