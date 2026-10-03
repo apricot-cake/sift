@@ -245,7 +245,10 @@ function hasMembersOnlyBadge(container: Element): boolean {
   // YouTube の新しい一覧では、バッジが動画本体ではなく一覧セルの兄弟要素に
   // なることがある。ラベルだけを持つ要素も対象にするが、動画タイトルは除く。
   return Array.from(container.querySelectorAll("*")).some((element) => {
-    if (element.closest(YOUTUBE_SELECTORS.title)) {
+    if (
+      element.closest(YOUTUBE_SELECTORS.title) ||
+      element.querySelector(YOUTUBE_SELECTORS.title)
+    ) {
       return false;
     }
     return MEMBERS_ONLY_BADGE_LABEL.test(

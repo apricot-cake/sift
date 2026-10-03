@@ -23,7 +23,10 @@ for (const target of unsupportedCases) {
     const page = await session.context.newPage();
     try {
       await page.bringToFront();
-      await page.goto(target.url, { waitUntil: "domcontentloaded" });
+      const response = await page.goto(target.url, {
+        waitUntil: "domcontentloaded",
+      });
+      expect(response?.ok(), "対象ページのHTTP応答が正常であること").toBe(true);
       if ("profileMedia" in target) {
         await page.locator('a[role="tab"][href="/AdamasMC/media"]').click();
         await expect(page).toHaveURL("https://x.com/AdamasMC/media");
@@ -87,7 +90,7 @@ for (const target of unsupportedCases) {
       }
       if (target.site === "none")
         await expect(
-          page.getByRole("heading", { name: "Example Domain" }),
+          page.getByRole("heading", { name: "@apricot-cake", exact: true }),
         ).toBeVisible();
       const panel = await openPanel(session, page);
       await expect(

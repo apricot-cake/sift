@@ -45,6 +45,26 @@ afterEach(() => {
 });
 
 describe("X の一覧の位置復元", () => {
+  it.each(["/i/lists/add_member", "/example/status/123/photo/1"])(
+    "メニュー表示中の一時スクロールで %s からの復帰位置を上書きしない",
+    (path) => {
+      const menu = document.createElement("div");
+      menu.setAttribute("role", "menu");
+      document.body.append(menu);
+      top = 470;
+      viewport.update();
+      vi.advanceTimersByTime(32);
+      expect(window.scrollBy).not.toHaveBeenCalled();
+      history.replaceState({}, "", path);
+      menu.remove();
+      viewport.syncRoute();
+      history.replaceState({}, "", "/i/lists/42");
+      viewport.update();
+      vi.advanceTimersByTime(32);
+      expect(top).toBe(-30);
+    },
+  );
+
   it("幅変更で DOM が作り直されても同じ投稿を同じ位置へ戻す", () => {
     viewport.resize();
     top = 270;
@@ -85,6 +105,71 @@ describe("X の一覧の位置復元", () => {
     viewport.update();
     vi.advanceTimersByTime(32);
     expect(window.scrollBy).not.toHaveBeenCalled();
+  });
+
+  it("二つのリストを往復しても、それぞれの投稿位置を復元する", () => {
+    history.replaceState({}, "", "/i/lists/43");
+    top = 200;
+    renderPost();
+    viewport.update();
+    history.replaceState({}, "", "/i/lists/42");
+    top = 400;
+    renderPost();
+    viewport.update();
+    vi.advanceTimersByTime(32);
+    expect(top).toBe(-30);
+    history.replaceState({}, "", "/i/lists/43");
+    top = 500;
+    renderPost();
+    viewport.update();
+    vi.advanceTimersByTime(32);
+    expect(top).toBe(200);
+  });
+
+  it("明示的な停止で、他のリストの保存位置も破棄する", () => {
+    history.replaceState({}, "", "/i/lists/43");
+    top = 200;
+    renderPost();
+    viewport.update();
+    viewport.reset();
+    history.replaceState({}, "", "/i/lists/42");
+    top = 400;
+    renderPost();
+    viewport.update();
+    vi.advanceTimersByTime(32);
+    expect(window.scrollBy).not.toHaveBeenCalled();
+  });
+
+  it("ホーム内の固定リストをURLが変わらなくても区別して復元する", () => {
+    viewport.reset();
+    history.replaceState({}, "", "/home");
+    const tabs = document.createElement("div");
+    tabs.setAttribute("role", "tablist");
+    tabs.dataset.testid = "ScrollSnap-List";
+    tabs.innerHTML = `<button role="tab">おすすめ</button>
+      <button role="tab">フォロー中</button>
+      <button role="tab" aria-selected="true">リストA</button>
+      <button role="tab" aria-selected="false">リストB</button>`;
+    document.body.prepend(tabs);
+    const select = (index: number) => {
+      for (const [i, tab] of Array.from(tabs.children).entries()) {
+        tab.setAttribute("aria-selected", String(i === index));
+      }
+    };
+    viewport.update();
+    select(3);
+    top = 120;
+    viewport.update();
+    select(2);
+    top = 450;
+    viewport.update();
+    vi.advanceTimersByTime(32);
+    expect(top).toBe(-30);
+    select(3);
+    top = 500;
+    viewport.update();
+    vi.advanceTimersByTime(32);
+    expect(top).toBe(120);
   });
 
   it("投稿が戻るのを待ち、フィルター適用前の座標を使わない", () => {

@@ -97,7 +97,7 @@ export const unsupportedCases = [
   {
     id: "unsupported-site",
     site: "none",
-    url: "https://example.com/",
+    url: "https://apricot-cake.com/",
   },
 ] as const;
 

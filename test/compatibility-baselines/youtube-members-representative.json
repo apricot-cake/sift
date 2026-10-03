@@ -53,13 +53,9 @@
         ]
       }
     ],
-    "metric": [
+    "members": [
       {
-        "tag": "span",
-        "role": "text",
-        "attributes": [
-          "aria-label"
-        ]
+        "tag": "div"
       }
     ],
     "date": [

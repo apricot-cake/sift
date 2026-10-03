@@ -1,4 +1,4 @@
-// 開発用 Chrome プロファイルを固定の CDP ポートで起動する。Sift はこの
+// 開発用 Chrome プロファイルを Chrome が選ぶ CDP ポートで起動する。Sift はこの
 // プロファイルであらかじめ展開済み拡張機能として登録する。
 import { spawn } from "node:child_process";
 import fs from "node:fs";
@@ -14,7 +14,6 @@ const PROFILE =
   process.env.SIFT_DEV_PROFILE || path.join(homedir(), ".sift-ext-profile");
 const PROFILE_DIRECTORY = "Default";
 const CDP_HOST = "127.0.0.1";
-const CDP_PORT = 9224;
 const cliArguments = process.argv.slice(2);
 
 if (
@@ -27,7 +26,7 @@ if (
 async function waitForCdp(): Promise<DevBrowserEndpoint | null> {
   // 起動済みかどうかは固定時間ではなく、実際の CDP endpoint で判定する。
   for (let attempt = 0; attempt < 240; attempt += 1) {
-    const version = await readDevBrowserEndpoint(PROFILE, CDP_PORT);
+    const version = await readDevBrowserEndpoint(PROFILE);
     if (version) return version;
     await new Promise((resolve) => setTimeout(resolve, 250));
   }
@@ -40,16 +39,16 @@ const chromeLogPath = path.join(PROFILE, "chrome-stderr.log");
 if (cliArguments.includes("--print")) {
   console.log(`chrome:      ${chrome}`);
   console.log(`プロファイル: ${PROFILE}`);
-  const endpoint = await readDevBrowserEndpoint(PROFILE, CDP_PORT);
+  const endpoint = await readDevBrowserEndpoint(PROFILE);
   console.log(
-    `CDP:         ${endpoint?.url ?? `未起動（起動時は ${CDP_HOST}:${CDP_PORT}）`}`,
+    `CDP:         ${endpoint?.url ?? "未起動（起動時にポートを自動選択）"}`,
   );
   process.exit(0);
 }
 
-fs.mkdirSync(PROFILE, { recursive: true });
+fs.mkdirSync(PROFILE, { recursive: true, mode: 0o700 });
 
-let version = await readDevBrowserEndpoint(PROFILE, CDP_PORT);
+let version = await readDevBrowserEndpoint(PROFILE);
 if (!version) {
   const chromeLog = fs.openSync(chromeLogPath, "w");
   const child = spawn(
@@ -58,7 +57,7 @@ if (!version) {
       `--user-data-dir=${PROFILE}`,
       `--profile-directory=${PROFILE_DIRECTORY}`,
       `--remote-debugging-address=${CDP_HOST}`,
-      `--remote-debugging-port=${CDP_PORT}`,
+      "--remote-debugging-port=0",
       "--no-first-run",
       "--no-default-browser-check",
       "--disable-backgrounding-occluded-windows",
