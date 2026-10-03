@@ -11,6 +11,7 @@ export class TimelineViewport {
   private key: string | null = null;
   private away = false;
   private anchors: Anchor[] = [];
+  private readonly savedAnchors = new Map<string, Anchor[]>();
   private width = window.innerWidth;
   private restoringUntil = 0;
   private frame: number | null = null;
@@ -34,8 +35,9 @@ export class TimelineViewport {
     }
     if (key !== this.key) {
       this.cancel();
-      this.anchors = [];
+      this.anchors = this.savedAnchors.get(key) ?? [];
       this.key = key;
+      this.beginRestore();
     } else if (this.away) {
       this.beginRestore();
     }
@@ -55,7 +57,10 @@ export class TimelineViewport {
       }
     }
     // 再描画中の空の一覧で直前の位置を消さない。
-    if (anchors.length > 0) this.anchors = anchors;
+    if (anchors.length > 0) {
+      this.anchors = anchors;
+      if (this.key !== null) this.savedAnchors.set(this.key, anchors);
+    }
     this.width = window.innerWidth;
   }
 
@@ -128,6 +133,7 @@ export class TimelineViewport {
     this.cancel();
     this.key = null;
     this.anchors = [];
+    this.savedAnchors.clear();
     this.away = false;
     this.width = window.innerWidth;
   }

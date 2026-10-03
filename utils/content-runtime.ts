@@ -30,6 +30,7 @@ import {
 import { TimelineViewport } from "./timeline-viewport.ts";
 
 const HIDDEN_THREAD_CONNECTOR = "data-sift-thread-connector-hidden";
+const MAX_AUTOMATIC_LAYOUT_PROBES = 3;
 
 export function startContentRuntime(
   _ctx: ContentScriptContext | undefined,
@@ -56,6 +57,7 @@ export function startContentRuntime(
   let layoutProbeTimer: number | null = null;
   let scrollTopBeforeLayoutProbe: number | null = null;
   let layoutProbePausedByUser = false;
+  let automaticLayoutProbeCount = 0;
   let keepViewportOnNextFilter = false;
   let disposed = false;
   let pageFilteringEnabled = false;
@@ -335,6 +337,7 @@ export function startContentRuntime(
       !adapter.needsLayoutProbeForPagination ||
       adapter.hasReachedTimelineEnd?.(document) ||
       layoutProbePausedByUser ||
+      automaticLayoutProbeCount >= MAX_AUTOMATIC_LAYOUT_PROBES ||
       layoutProbeFrame !== null ||
       layoutProbeTimer !== null
     ) {
@@ -344,6 +347,7 @@ export function startContentRuntime(
     const scrollingElement =
       document.scrollingElement ?? document.documentElement;
     scrollTopBeforeLayoutProbe = scrollingElement.scrollTop;
+    automaticLayoutProbeCount += 1;
     document.documentElement.setAttribute("data-sift-layout-probe", "");
     layoutProbeFrame = window.requestAnimationFrame(() => {
       layoutProbeFrame = null;
@@ -465,6 +469,10 @@ export function startContentRuntime(
         update.state === "matched" &&
         update.cell.getBoundingClientRect().bottom > window.innerHeight + 4,
     );
+    // 一時的に全投稿を展開している間の座標では回数を戻さない。
+    if (hasMatchedPostBelowViewport && scrollTopBeforeLayoutProbe === null) {
+      automaticLayoutProbeCount = 0;
+    }
     if (
       filteringEnabled() &&
       adapter.needsLayoutProbeForPagination &&
@@ -519,6 +527,7 @@ export function startContentRuntime(
       stopLayoutProbe(false);
       observedPageKey = nextPageKey;
       layoutProbePausedByUser = false;
+      automaticLayoutProbeCount = 0;
       loadWarningTracker?.reset(readCurrentPostIds());
     }
     const available = timelineAvailable();
@@ -538,6 +547,7 @@ export function startContentRuntime(
     pageFilteringEnabled = enabled;
     if (enabled) {
       layoutProbePausedByUser = false;
+      automaticLayoutProbeCount = 0;
     } else {
       stopLayoutProbe();
       // パネルは対象外画面への遷移でも停止通知を送る。戻り先の位置は残す。
@@ -595,6 +605,7 @@ export function startContentRuntime(
 
     settings = normalizeSettings(storedSettings);
     timelineViewport?.reset();
+    automaticLayoutProbeCount = 0;
     loadWarningTracker?.reset(readCurrentPostIds());
     scheduleFilter();
   }
@@ -691,6 +702,15 @@ export function startContentRuntime(
         (event instanceof KeyboardEvent &&
           (["ArrowDown", "End", "PageDown"].includes(event.key) ||
             (event.key === " " && !event.shiftKey)));
+      // scroll は自動移動でも発生するため、閲覧操作でだけ回数を戻す。
+      if (
+        movesTowardEnd ||
+        event.type === "touchstart" ||
+        event.type === "pointerdown"
+      ) {
+        automaticLayoutProbeCount = 0;
+        if (isAtPageBottom() && !layoutProbePausedByUser) scheduleFilter();
+      }
       const layoutProbeRunning =
         layoutProbeFrame !== null ||
         layoutProbeTimer !== null ||

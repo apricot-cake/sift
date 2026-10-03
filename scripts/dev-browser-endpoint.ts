@@ -10,15 +10,7 @@ export interface DevBrowserEndpoint {
 // ブラウザごとに変わる WebSocket のパスが一致しなければ接続先として採用しない。
 export async function readDevBrowserEndpoint(
   profile: string,
-  fixedPort?: number,
 ): Promise<DevBrowserEndpoint | null> {
-  if (fixedPort !== undefined) {
-    if (!Number.isInteger(fixedPort) || fixedPort < 1 || fixedPort > 65535) {
-      return null;
-    }
-    return await readEndpoint(`http://127.0.0.1:${fixedPort}`);
-  }
-
   let contents: string;
   try {
     contents = fs.readFileSync(

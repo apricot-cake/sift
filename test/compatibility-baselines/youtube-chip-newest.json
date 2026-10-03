@@ -48,10 +48,6 @@
         "attributes": [
           "aria-label"
         ]
-      },
-      {
-        "tag": "span",
-        "role": "text"
       }
     ],
     "date": [

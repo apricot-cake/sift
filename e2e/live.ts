@@ -33,7 +33,6 @@ export interface LiveSession {
 export async function connectLive(): Promise<LiveSession> {
   const endpoint = await readDevBrowserEndpoint(
     process.env.SIFT_DEV_PROFILE || path.join(homedir(), ".sift-ext-profile"),
-    9224,
   );
   if (!endpoint) throw new Error("環境不備: 開発用Chromeが未起動です");
   const candidate: Candidate = JSON.parse(

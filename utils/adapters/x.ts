@@ -136,6 +136,9 @@ export const xAdapter = Object.freeze({
     page: Pick<Location, "pathname" | "search">,
   ) {
     if (!this.isTimelineAvailable(root, page)) return null;
+    // 投稿メニューから遷移する際、X は URL の変更前に背景をスクロールする。
+    // メニュー操作中の座標で、元の一覧の位置を上書きしない。
+    if (root.querySelector('[role="menu"]')) return null;
     const tabs = Array.from(root.querySelectorAll('[role="tab"]'));
     const selected = tabs.findIndex(
       (tab) => tab.getAttribute("aria-selected") === "true",
