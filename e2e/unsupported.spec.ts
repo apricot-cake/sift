@@ -90,7 +90,9 @@ for (const target of unsupportedCases) {
       }
       if (target.site === "none")
         await expect(
-          page.getByRole("heading", { name: "@apricot-cake", exact: true }),
+          page
+            .getByRole("banner")
+            .getByRole("link", { name: "@apricot-cake", exact: true }),
         ).toBeVisible();
       const panel = await openPanel(session, page);
       await expect(
