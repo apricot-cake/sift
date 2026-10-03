@@ -251,14 +251,12 @@ export function startContentRuntime(
     }
   }
 
-  function readCurrentPostIds(): string[] {
-    if (!adapter.readPostId) {
-      return [];
+  function* readCurrentPostIds(): Iterable<string> {
+    if (!adapter.readPostId) return;
+    for (const postCard of adapter.getPostCards(document)) {
+      const id = adapter.readPostId(postCard);
+      if (id !== null) yield id;
     }
-    return adapter
-      .getPostCards(document)
-      .map((postCard) => adapter.readPostId?.(postCard) ?? null)
-      .filter((id): id is string => id !== null);
   }
 
   // CSS の scroll anchoring はページ側がどの投稿をアンカーにするかで結果が変わる。
