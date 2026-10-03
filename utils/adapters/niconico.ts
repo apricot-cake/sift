@@ -4,8 +4,8 @@ import type { ServiceAdapter } from "./types.ts";
 const WATCH_LINK = 'a[href*="/watch/"]';
 const CARD_CANDIDATES =
   "[data-decoration-video-id], [data-video-id], .NC-VideoMediaObject, article, li, [class*='VideoItem']";
-const VIEW_TEXT = /(?:再生|視聴|views?)/i;
-const DATE_TEXT = /\d{4}[/.年-]\d{1,2}[/.月-]\d{1,2}/;
+const VIEW_COUNT_TITLE =
+  'span[title*="再生"], span[title*="視聴"], span[title*="view" i]';
 
 function videoId(link: Element): string | null {
   try {
@@ -32,14 +32,6 @@ function cards(root: ParentNode): Element[] {
     }
   }
   return [...result];
-}
-
-function texts(card: Element): string[] {
-  return Array.from(card.querySelectorAll("span, small, time, [title]"))
-    .map((item) =>
-      `${item.getAttribute("title") ?? ""} ${item.textContent ?? ""}`.trim(),
-    )
-    .filter(Boolean);
 }
 
 export function isNiconicoFilterPage(pathname: string): boolean {
@@ -104,9 +96,11 @@ export const niconicoAdapter = Object.freeze({
   readMetricCount(card: Element) {
     const views = card.querySelector(".NC-VideoMetaCount_view");
     if (views) return parseMetric(views.textContent ?? "");
-    const text = texts(card).find((item) => VIEW_TEXT.test(item));
-    if (text !== undefined) {
-      return parseMetric(text);
+    const titledCount = card.querySelector(VIEW_COUNT_TITLE);
+    if (titledCount) {
+      return parseMetric(
+        `${titledCount.getAttribute("title") ?? ""} ${titledCount.textContent ?? ""}`,
+      );
     }
     const metadata = card.querySelector("time[datetime]")?.parentElement;
     const firstMetric = metadata?.querySelector("p span")?.textContent;
@@ -122,9 +116,9 @@ export const niconicoAdapter = Object.freeze({
         return parsed;
       }
     }
-    const text =
-      card.querySelector(".NC-VideoRegisteredAtText-text")?.textContent ??
-      texts(card).find((item) => DATE_TEXT.test(item));
+    const text = card.querySelector(
+      ".NC-VideoRegisteredAtText-text",
+    )?.textContent;
     return text === undefined
       ? Number.NaN
       : Date.parse(text.replace(/年|月/g, "/").replace("日", ""));
