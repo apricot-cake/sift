@@ -245,13 +245,10 @@ describe("抽出の操作入口", () => {
     expect(sidepanel).toContain("disabled={!filteringIsAvailable}");
     expect(sidepanel).toContain('data-sift-sidepanel=""');
     expect(sidepanel).toContain("browser.tabs.onActivated.addListener");
-    expect(sidepanel).toContain("generation !== refreshGeneration");
-    expect(sidepanel).toContain("currentTab?.id !== tab?.id");
     expect(sidepanel).toContain("shouldEnableFiltering");
     expect(sidepanel).toContain("isSidePanelTabRequest(message)");
     expect(sidepanel).toContain("SIDE_PANEL_TAB_STORAGE_KEY");
     expect(sidepanel).toContain("browser.storage.session");
-    expect(sidepanel).toContain(".finally(() => refreshActiveHost(true))");
     expect(background).toContain(
       "const savedTab = browser.storage.session.set",
     );

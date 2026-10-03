@@ -154,16 +154,25 @@ export function SidepanelApp(): React.JSX.Element {
 
   useEffect(() => {
     let refreshGeneration = 0;
+    let activeRefresh: number | null = null;
+    let disposed = false;
     let connectionAttempt: string | null = null;
     const refreshActiveHost = async (forceSelection = false): Promise<void> => {
+      if (disposed || document.visibilityState === "hidden") return;
+      // 定期取得は進行中の応答を待つ。接続先の変更だけが古い取得を無効にする。
+      if (!forceSelection && activeRefresh !== null) return;
       const generation = ++refreshGeneration;
-      if (document.visibilityState === "hidden") return;
+      activeRefresh = generation;
+      const isCurrent = () =>
+        !disposed &&
+        generation === refreshGeneration &&
+        document.visibilityState !== "hidden";
       try {
         const [tab] = await browser.tabs.query({
           active: true,
           currentWindow: true,
         });
-        if (generation !== refreshGeneration) return;
+        if (!isCurrent()) return;
         setKnownUnsupportedSite(isKnownUnsupportedSite(tab?.url));
         if (panelTabId.current === null && tab?.id !== undefined) {
           panelTabId.current = tab.id;
@@ -196,6 +205,7 @@ export function SidepanelApp(): React.JSX.Element {
               isFilterContextResponse(response) ? response : null,
             )
             .catch(() => null);
+          if (!isCurrent()) return;
           const attemptKey = `${tab.id}:${tab.url ?? ""}`;
           if (
             context === null &&
@@ -209,6 +219,7 @@ export function SidepanelApp(): React.JSX.Element {
                 tabId: tab.id,
               })
               .catch(() => {});
+            if (!isCurrent()) return;
             context = await browser.tabs
               .sendMessage(tab.id, { type: FILTER_CONTEXT_REQUEST })
               .then((response) =>
@@ -216,13 +227,18 @@ export function SidepanelApp(): React.JSX.Element {
               )
               .catch(() => null);
           }
+          if (!isCurrent()) return;
           if (context !== null) connectionAttempt = null;
         }
         const [currentTab] = await browser.tabs.query({
           active: true,
           currentWindow: true,
         });
-        if (generation !== refreshGeneration || currentTab?.id !== tab?.id) {
+        if (
+          !isCurrent() ||
+          currentTab?.id !== tab?.id ||
+          currentTab?.url !== tab?.url
+        ) {
           return;
         }
         const nextPage =
@@ -254,15 +270,17 @@ export function SidepanelApp(): React.JSX.Element {
           context !== null &&
           !initializedMinimums.current.has(context.site)
         ) {
-          initializedMinimums.current.add(context.site);
           try {
             const stored = normalizeSettings(await settingsItem.getValue());
             const [activeTab] = await browser.tabs.query({
               active: true,
               currentWindow: true,
             });
-            if (generation !== refreshGeneration || activeTab?.id !== tab?.id) {
-              initializedMinimums.current.delete(context.site);
+            if (
+              !isCurrent() ||
+              activeTab?.id !== tab?.id ||
+              activeTab?.url !== tab?.url
+            ) {
               return;
             }
             const siteSettings = settingsFor(stored, context.site);
@@ -277,11 +295,12 @@ export function SidepanelApp(): React.JSX.Element {
                     postedWithinDays: 0,
                   },
             );
+            initializedMinimums.current.add(context.site);
             await settingsItem.setValue(next);
-            if (generation !== refreshGeneration) return;
+            if (!isCurrent()) return;
             setSettings(next);
           } catch (error) {
-            initializedMinimums.current.delete(context.site);
+            if (isCurrent()) initializedMinimums.current.delete(context.site);
             throw error;
           }
         }
@@ -319,7 +338,10 @@ export function SidepanelApp(): React.JSX.Element {
           followActiveContext.current = true;
           setSelectedSite(site);
         }
-      } catch {}
+      } catch {
+      } finally {
+        if (activeRefresh === generation) activeRefresh = null;
+      }
     };
 
     const handleTabActivated = () => void refreshActiveHost(true);
@@ -327,14 +349,11 @@ export function SidepanelApp(): React.JSX.Element {
       tabId: number,
       changeInfo: Browser.tabs.OnUpdatedInfo,
     ): void => {
-      if (changeInfo.url !== undefined) {
-        void browser.tabs
-          .query({ active: true, currentWindow: true })
-          .then(([tab]) => {
-            if (tab?.id === tabId) {
-              void refreshActiveHost(true);
-            }
-          });
+      if (
+        tabId === panelTabId.current &&
+        (changeInfo.url !== undefined || changeInfo.status === "loading")
+      ) {
+        void refreshActiveHost(true);
       }
     };
     const handlePanelTab = (message: unknown): void => {
@@ -366,12 +385,14 @@ export function SidepanelApp(): React.JSX.Element {
       .get(SIDE_PANEL_TAB_STORAGE_KEY)
       .then((stored) => {
         const tabId = stored[SIDE_PANEL_TAB_STORAGE_KEY];
-        if (isSidePanelTabId(tabId)) {
+        if (refreshGeneration === 0 && !disposed && isSidePanelTabId(tabId)) {
           panelTabId.current = tabId;
         }
       })
       .catch(() => {})
-      .finally(() => refreshActiveHost(true));
+      .finally(() => {
+        if (refreshGeneration === 0) void refreshActiveHost(true);
+      });
     const contextTimer = window.setInterval(() => {
       void refreshActiveHost();
     }, 750);
@@ -379,6 +400,8 @@ export function SidepanelApp(): React.JSX.Element {
     browser.tabs.onUpdated.addListener(handleTabUpdated);
     browser.runtime.onMessage.addListener(handlePanelTab);
     return () => {
+      disposed = true;
+      refreshGeneration += 1;
       browser.tabs.onActivated.removeListener(handleTabActivated);
       browser.tabs.onUpdated.removeListener(handleTabUpdated);
       browser.runtime.onMessage.removeListener(handlePanelTab);
