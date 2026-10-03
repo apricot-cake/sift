@@ -3,6 +3,7 @@ import { spawn } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { readDevBrowserEndpoint } from "./dev-browser-endpoint.ts";
+import { secureDevBrowserProfile } from "./dev-browser-profile.ts";
 import { devBrowserProfile } from "./managed-dev-browser.ts";
 
 const profile = devBrowserProfile();
@@ -16,7 +17,7 @@ if (args[0] === "--print") {
 } else {
   if (endpoint)
     throw new Error("CDP が有効な開発用 Chrome を先に閉じてください。");
-  fs.mkdirSync(profile, { recursive: true });
+  secureDevBrowserProfile(profile);
   const log = fs.openSync(path.join(profile, "chrome-stderr.log"), "a");
   try {
     const child = spawn(

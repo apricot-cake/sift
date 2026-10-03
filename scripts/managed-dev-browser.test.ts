@@ -3,6 +3,7 @@
 import { chromium } from "@playwright/test";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { readDevBrowserEndpoint } from "./dev-browser-endpoint.ts";
+import { secureDevBrowserProfile } from "./dev-browser-profile.ts";
 import {
   devBrowserProfile,
   readManagedDevBrowserEndpoint,
@@ -14,6 +15,9 @@ vi.mock("@playwright/test", () => ({
 }));
 vi.mock("./dev-browser-endpoint.ts", () => ({
   readDevBrowserEndpoint: vi.fn(),
+}));
+vi.mock("./dev-browser-profile.ts", () => ({
+  secureDevBrowserProfile: vi.fn(),
 }));
 vi.mock("./chrome-path.ts", () => ({ findChromePath: () => "chrome" }));
 
@@ -50,6 +54,7 @@ describe("検証中だけ有効な開発用 Chrome", () => {
       devBrowserProfile(),
       expect.objectContaining({ chromiumSandbox: true, viewport: null }),
     );
+    expect(secureDevBrowserProfile).toHaveBeenCalledWith(devBrowserProfile());
   });
 
   test("検証が失敗してもブラウザを閉じる", async () => {

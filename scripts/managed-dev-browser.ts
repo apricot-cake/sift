@@ -6,6 +6,7 @@ import {
   type DevBrowserEndpoint,
   readDevBrowserEndpoint,
 } from "./dev-browser-endpoint.ts";
+import { secureDevBrowserProfile } from "./dev-browser-profile.ts";
 
 const sessionKey = "SIFT_DEV_BROWSER_SESSION";
 
@@ -30,6 +31,7 @@ export function devBrowserArgs(profile: string): string[] {
 
 export async function launchDevBrowser(debug: boolean) {
   const profile = devBrowserProfile();
+  secureDevBrowserProfile(profile);
   return await chromium.launchPersistentContext(profile, {
     executablePath: process.env.SIFT_CHROME || findChromePath(),
     headless: false,
