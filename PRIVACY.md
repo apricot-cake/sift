@@ -12,7 +12,11 @@ Sift は、絞り込みに必要な範囲で、対応サイトの投稿や動画
 
 Bluesky では、サイトがブラウザー内に保存したデータを読み取り、現在のアカウント識別子（DID）と選択フィードを使って、絞り込み対象の一覧を判別します。Sift は、このアカウント識別子を独自の保存先へ保存しません。
 
+この保存データには、メールアドレスや認証トークンが含まれる場合があります。Sift は保存データ全体を読み取って解析しますが、一覧の判別に使うのは DID と選択フィードだけです。読み取った保存データを独自の保存先へ保存したり、認証に利用したり、外部へ送信したりしません。
+
 対応ページの判定と接続維持のために、対象タブの URL を参照します。また、タブ識別子とサイトの origin（プロトコルとドメインなど）を、ブラウザーのセッション中だけ保存します。この接続情報は Chrome の同期対象にはしません。閲覧した投稿や動画の内容を永続保存せず、閲覧履歴を蓄積しません。
+
+絞り込み後の表示位置の維持と連続読み込みのために、スクロール位置やページ内の操作を参照します。操作履歴は保存・送信しません。
 
 サイトごとの絞り込み条件は Chrome の同期ストレージに保存します。Chrome にログインして同期を有効にしている場合、設定は Chrome の機能によって同じアカウントのブラウザー間で同期されることがあります。開発者がこの設定を受信することはありません。
 
@@ -44,7 +48,11 @@ Sift reads the information needed to filter posts and videos on supported websit
 
 On Bluesky, Sift reads data the website has stored in the browser. It uses the current account identifier (DID) and selected feed to identify the list to filter. Sift does not save this account identifier in its own storage.
 
+This stored data may include email addresses and authentication tokens. Sift reads and parses the entire stored data object, but uses only the DID and selected feed to identify the list. Sift does not save this stored data in its own storage, use it for authentication, or transmit it externally.
+
 Sift reads the target tab's URL to identify supported pages and maintain its connection. It also stores the tab identifier and website origin (including the protocol and domain) for the browser session only. This connection information is not synchronized through Chrome. Sift does not persist viewed post or video content or accumulate browsing history.
+
+Sift reads the scroll position and interactions within the page to maintain the viewing position after filtering and continue loading items. It does not store or transmit an interaction history.
 
 Filtering preferences for each website are stored in Chrome sync storage. If Chrome sync is enabled, Chrome may synchronize these preferences between browsers signed in to the same account. The developer does not receive these preferences.
 
