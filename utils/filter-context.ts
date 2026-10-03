@@ -24,6 +24,9 @@ export interface FilterContextResponse {
   readonly filteringEnabled: boolean;
   readonly continuousLoadingWarning: boolean;
   readonly metricContextTruncated?: boolean;
+  /** 最低値を除いた現在の条件に合う、パネル集計用サンプルの投稿数。 */
+  readonly metricSampleCount: number;
+  /** 上記サンプルのうち、指標を読めた投稿の指標値。 */
   readonly metricCounts: readonly number[];
   /**
    * 最低値を除いた現在の条件に合う投稿の公開日時。日付を読めない投稿は
@@ -70,12 +73,18 @@ export function isFilterContextResponse(
     typeof response.continuousLoadingWarning === "boolean" &&
     (response.metricContextTruncated === undefined ||
       typeof response.metricContextTruncated === "boolean") &&
+    typeof response.metricSampleCount === "number" &&
+    Number.isSafeInteger(response.metricSampleCount) &&
+    response.metricSampleCount >= 0 &&
+    response.metricSampleCount <= FILTER_CONTEXT_METRIC_LIMIT &&
     Array.isArray(response.metricCounts) &&
+    response.metricCounts.length <= response.metricSampleCount &&
     response.metricCounts.length <= FILTER_CONTEXT_METRIC_LIMIT &&
     response.metricCounts.every(
       (count) => Number.isSafeInteger(count) && count >= 0,
     ) &&
     Array.isArray(response.metricCreatedAtMs) &&
+    response.metricCreatedAtMs.length <= response.metricSampleCount &&
     response.metricCreatedAtMs.length <= FILTER_CONTEXT_METRIC_LIMIT &&
     response.metricCreatedAtMs.every((createdAtMs) =>
       Number.isSafeInteger(createdAtMs),
