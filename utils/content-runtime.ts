@@ -6,6 +6,7 @@ import {
   ContinuousLoadWarningTracker,
 } from "./continuous-load-warning.ts";
 import {
+  FILTER_CONTEXT_METRIC_LIMIT,
   type FilterContextResponse,
   isFilterContextRequest,
 } from "./filter-context.ts";
@@ -194,7 +195,11 @@ export function startContentRuntime(
 
     const metricCounts: number[] = [];
     const metricCreatedAtMs: number[] = [];
-    for (const postCard of adapter.getPostCards(document)) {
+    // パネルを開いたままでも、巨大なページを問い合わせのたびに全走査しない。
+    // 先頭から同じ上限で切ることで、応答配列だけでなく読み取り処理も制限する。
+    for (const postCard of adapter
+      .getPostCards(document)
+      .slice(0, FILTER_CONTEXT_METRIC_LIMIT)) {
       const metricCount = adapter.readMetricCount(postCard);
       if (!Number.isSafeInteger(metricCount) || metricCount < 0) {
         continue;

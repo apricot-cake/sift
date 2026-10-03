@@ -2,6 +2,7 @@ import { isPageHealth, type PageHealth } from "./page-health.ts";
 import type { SiteSettingsKey } from "./settings.ts";
 
 export const FILTER_CONTEXT_REQUEST = "sift:get-filter-context";
+export const FILTER_CONTEXT_METRIC_LIMIT = 1_000;
 
 export interface FilterContextRequest {
   readonly type: typeof FILTER_CONTEXT_REQUEST;
@@ -60,10 +61,12 @@ export function isFilterContextResponse(
     typeof response.filteringEnabled === "boolean" &&
     typeof response.continuousLoadingWarning === "boolean" &&
     Array.isArray(response.metricCounts) &&
+    response.metricCounts.length <= FILTER_CONTEXT_METRIC_LIMIT &&
     response.metricCounts.every(
       (count) => Number.isSafeInteger(count) && count >= 0,
     ) &&
     Array.isArray(response.metricCreatedAtMs) &&
+    response.metricCreatedAtMs.length <= FILTER_CONTEXT_METRIC_LIMIT &&
     response.metricCreatedAtMs.every((createdAtMs) =>
       Number.isSafeInteger(createdAtMs),
     )
