@@ -15,7 +15,6 @@ if (!url || rest.length)
 new URL(url);
 const endpoint = await readDevBrowserEndpoint(
   process.env.SIFT_DEV_PROFILE || path.join(homedir(), ".sift-ext-profile"),
-  9224,
 );
 if (!endpoint)
   throw Error(

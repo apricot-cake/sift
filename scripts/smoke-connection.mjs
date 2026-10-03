@@ -12,7 +12,6 @@ if (process.argv.includes("--help")) {
 if (process.argv.length > 2) throw Error("引数は不要です");
 const endpoint = await readDevBrowserEndpoint(
   process.env.SIFT_DEV_PROFILE || path.join(homedir(), ".sift-ext-profile"),
-  9224,
 );
 if (!endpoint)
   throw Error("npm run browser:open で開発用Chromeを起動してください");
