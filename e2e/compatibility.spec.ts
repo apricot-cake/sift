@@ -141,7 +141,11 @@ async function navigate(page: Page, target: CompatibilityCase) {
     await expect
       .poll(
         async () =>
-          await page.locator(regions.youtube.card).first().innerText(),
+          await page
+            .locator(regions.youtube.card)
+            .filter({ visible: true })
+            .first()
+            .innerText(),
       )
       .toContain("メンバー限定");
   }
@@ -455,8 +459,8 @@ function youtubeAge(text: string): number {
           : /^(週間|week)/.test(unit)
             ? 7
             : /^(か月|ヶ月|month)/.test(unit)
-              ? 30
-              : 365;
+              ? 365.25 / 12
+              : 365.25;
   return Number(match[1]) * multiplier;
 }
 
