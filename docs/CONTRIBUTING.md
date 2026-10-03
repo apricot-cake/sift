@@ -119,6 +119,6 @@ React から使う場合は `t("name")` を呼びます。静的 HTML では `da
 
 ## シークレットスキャン
 
-シークレットは GitHub Actions で検査します。Gitleaks は CI 内でのみ実行します。
+コミット前に秘密情報を検査するには、[Gitleaks のリリース](https://github.com/gitleaks/gitleaks/releases)から Gitleaks 8.30.1 を導入し、`gitleaks` を PATH に追加します。依存関係のインストール時に設定される `.githooks/pre-commit` がステージ済みの差分を検査します。Gitleaks が見つからない場合は警告してローカル検査をスキップしますが、GitHub Actions では検査を強制します。
 
 `.gitleaksignore` では、過去の `wxt.config.js` と `wxt.config.ts` に含まれる Chrome マニフェストの公開鍵について、検出されたコミットと行を指定して除外しています。この値は秘密鍵や認証情報ではありません。
