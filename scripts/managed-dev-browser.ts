@@ -6,6 +6,7 @@ import {
   type DevBrowserEndpoint,
   readDevBrowserEndpoint,
 } from "./dev-browser-endpoint.ts";
+import { secureDevBrowserProfile } from "./dev-browser-profile.ts";
 
 const sessionKey = "SIFT_DEV_BROWSER_SESSION";
 
@@ -30,6 +31,7 @@ export function devBrowserArgs(profile: string): string[] {
 
 export async function launchDevBrowser(debug: boolean) {
   const profile = devBrowserProfile();
+  secureDevBrowserProfile(profile);
   return await chromium.launchPersistentContext(profile, {
     executablePath: process.env.SIFT_CHROME || findChromePath(),
     headless: false,
@@ -74,11 +76,12 @@ export async function withDevBrowser<T>(
   signal?: AbortSignal,
 ): Promise<T> {
   signal?.throwIfAborted();
+  const profile = devBrowserProfile();
+  secureDevBrowserProfile(profile);
   if (process.env[sessionKey]) {
     await readManagedDevBrowserEndpoint();
     return await run(false);
   }
-  const profile = devBrowserProfile();
   if (await readDevBrowserEndpoint(profile))
     throw new Error("CDP が有効な開発用 Chrome を先に閉じてください。");
   const context = await launchDevBrowser(true).catch((cause) => {

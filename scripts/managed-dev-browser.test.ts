@@ -3,6 +3,7 @@
 import { chromium } from "@playwright/test";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { readDevBrowserEndpoint } from "./dev-browser-endpoint.ts";
+import { secureDevBrowserProfile } from "./dev-browser-profile.ts";
 import {
   devBrowserProfile,
   readManagedDevBrowserEndpoint,
@@ -14,6 +15,9 @@ vi.mock("@playwright/test", () => ({
 }));
 vi.mock("./dev-browser-endpoint.ts", () => ({
   readDevBrowserEndpoint: vi.fn(),
+}));
+vi.mock("./dev-browser-profile.ts", () => ({
+  secureDevBrowserProfile: vi.fn(),
 }));
 vi.mock("./chrome-path.ts", () => ({ findChromePath: () => "chrome" }));
 
@@ -50,6 +54,13 @@ describe("検証中だけ有効な開発用 Chrome", () => {
       devBrowserProfile(),
       expect.objectContaining({ chromiumSandbox: true, viewport: null }),
     );
+    expect(secureDevBrowserProfile).toHaveBeenCalledWith(devBrowserProfile());
+    const secureOrder = vi.mocked(secureDevBrowserProfile).mock
+      .invocationCallOrder[0];
+    const probeOrder = read.mock.invocationCallOrder[0];
+    if (secureOrder === undefined || probeOrder === undefined)
+      throw new Error("権限補正と endpoint probe が実行されていません。");
+    expect(secureOrder).toBeLessThan(probeOrder);
   });
 
   test("検証が失敗してもブラウザを閉じる", async () => {

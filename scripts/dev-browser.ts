@@ -3,20 +3,22 @@ import { spawn } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { readDevBrowserEndpoint } from "./dev-browser-endpoint.ts";
+import { secureDevBrowserProfile } from "./dev-browser-profile.ts";
 import { devBrowserProfile } from "./managed-dev-browser.ts";
 
 const profile = devBrowserProfile();
 const args = process.argv.slice(2);
 if (args.length > 1 || (args[0] && args[0] !== "--print"))
   throw new Error("利用できる引数は --print だけです。");
-const endpoint = await readDevBrowserEndpoint(profile);
 if (args[0] === "--print") {
+  const endpoint = await readDevBrowserEndpoint(profile);
   console.log(`プロファイル: ${profile}`);
   console.log(`CDP ポート:  ${endpoint?.url ?? "無効（自動検証中だけ有効）"}`);
 } else {
+  secureDevBrowserProfile(profile);
+  const endpoint = await readDevBrowserEndpoint(profile);
   if (endpoint)
     throw new Error("CDP が有効な開発用 Chrome を先に閉じてください。");
-  fs.mkdirSync(profile, { recursive: true });
   const log = fs.openSync(path.join(profile, "chrome-stderr.log"), "a");
   try {
     const child = spawn(
