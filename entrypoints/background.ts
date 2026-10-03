@@ -54,6 +54,11 @@ export default defineBackground(() => {
   const sidePanel = (browser as { sidePanel?: typeof browser.sidePanel })
     .sidePanel;
 
+  // 旧版の自動開閉設定は Chrome のプロファイルに残る。有効なままだと
+  // ツールバーのクリックが onClicked に届かず、activeTab の接続処理も
+  // 実行されない。更新・再読み込みのいずれでも現在の起動方式に揃える。
+  void sidePanel?.setPanelBehavior({ openPanelOnActionClick: false });
+
   // default_path は WXT が manifest に生成する。パネルはユーザーが action を
   // 実行したタブで開き、対象外のサイト・ページはパネル内で案内する。worker の
   // 起動ごとに無効化すると、action 後に worker が再起動しただけで開いたパネルが

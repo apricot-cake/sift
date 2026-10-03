@@ -21,6 +21,7 @@ const api = vi.hoisted(() => ({
     },
   },
   sidePanel: {
+    setPanelBehavior: vi.fn(async () => undefined),
     setOptions: vi.fn(async () => undefined),
     open: vi.fn(async () => undefined),
     onOpened: { addListener: vi.fn() },
@@ -57,6 +58,14 @@ beforeEach(async () => {
   vi.stubGlobal("__SIFT_LOCAL_DEPLOY__", false);
   const background = await import("../entrypoints/background.ts");
   background.default.main();
+});
+
+it("旧版で保存された自動開閉を起動時に解除する", () => {
+  expect(api.sidePanel.setPanelBehavior).toHaveBeenCalledExactlyOnceWith({
+    openPanelOnActionClick: false,
+  });
+  // onInstalled を待たず、worker の起動でも旧設定を移行する。
+  expect(api.sidePanel.setOptions).not.toHaveBeenCalled();
 });
 
 it("ローカルビルドIDはサイドパネルからの診断にだけ返す", async () => {
