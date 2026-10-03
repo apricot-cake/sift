@@ -79,7 +79,13 @@ export function SidepanelApp(): React.JSX.Element {
   const [selectedSite, setSelectedSite] = useState<SiteSettingsKey>("x");
   const followActiveContext = useRef(true);
   const settingsRef = useRef(settings);
-  const activePageRef = useRef<{ tabId: number; pageKey: string } | null>(null);
+  const activePageRef = useRef<{
+    tabId: number;
+    pageKey: string;
+    url?: string;
+  } | null>(null);
+  const connectionEpoch = useRef(0);
+  const panelMounted = useRef(true);
   const panelTabId = useRef<number | null>(null);
   const panelInitialized = useRef(false);
   const initializedMinimums = useRef(new Set<SiteSettingsKey>());
@@ -107,8 +113,11 @@ export function SidepanelApp(): React.JSX.Element {
     return settingsItem.watch(updateSettings);
   }, []);
 
-  useEffect(
-    () => () => {
+  useEffect(() => {
+    panelMounted.current = true;
+    return () => {
+      panelMounted.current = false;
+      connectionEpoch.current += 1;
       const activePage = activePageRef.current;
       if (activePage !== null) {
         void browser.tabs
@@ -118,17 +127,40 @@ export function SidepanelApp(): React.JSX.Element {
           })
           .catch(() => {});
       }
-    },
-    [],
-  );
+    };
+  }, []);
 
   const saveSettings = (next: Settings): void => {
+    const epoch = connectionEpoch.current;
+    const page = activePageRef.current;
     const normalized = normalizeSettings(next);
     setSettings(normalized);
     void settingsItem
       .setValue(normalized)
-      .then(() => {
-        updateFiltering(true);
+      .then(async () => {
+        if (
+          !panelMounted.current ||
+          epoch !== connectionEpoch.current ||
+          document.visibilityState === "hidden" ||
+          page === null
+        )
+          return;
+        const [tab] = await browser.tabs.query({
+          active: true,
+          currentWindow: true,
+        });
+        const activePage = activePageRef.current;
+        if (
+          panelMounted.current &&
+          epoch === connectionEpoch.current &&
+          document.visibilityState === "visible" &&
+          tab?.id === page.tabId &&
+          tab.url === page.url &&
+          activePage?.tabId === page.tabId &&
+          activePage.pageKey === page.pageKey
+        ) {
+          updateFiltering(true);
+        }
       })
       .catch(() => setStatus(t("optionsErrorSaveFailed")));
   };
@@ -158,7 +190,15 @@ export function SidepanelApp(): React.JSX.Element {
     let disposed = false;
     let connectionAttempt: string | null = null;
     const refreshActiveHost = async (forceSelection = false): Promise<void> => {
-      if (disposed || document.visibilityState === "hidden") return;
+      if (disposed) return;
+      if (forceSelection) connectionEpoch.current += 1;
+      if (document.visibilityState === "hidden") {
+        if (forceSelection) {
+          refreshGeneration += 1;
+          activeRefresh = null;
+        }
+        return;
+      }
       // 定期取得は進行中の応答を待つ。接続先の変更だけが古い取得を無効にする。
       if (!forceSelection && activeRefresh !== null) return;
       const generation = ++refreshGeneration;
@@ -243,7 +283,7 @@ export function SidepanelApp(): React.JSX.Element {
         }
         const nextPage =
           tab?.id !== undefined && context?.timelineAvailable
-            ? { tabId: tab.id, pageKey: context.pageKey }
+            ? { tabId: tab.id, pageKey: context.pageKey, url: tab.url }
             : null;
         const previousPage = activePageRef.current;
         const pageChanged =
@@ -297,7 +337,16 @@ export function SidepanelApp(): React.JSX.Element {
             );
             initializedMinimums.current.add(context.site);
             await settingsItem.setValue(next);
-            if (!isCurrent()) return;
+            const [savedTab] = await browser.tabs.query({
+              active: true,
+              currentWindow: true,
+            });
+            if (
+              !isCurrent() ||
+              savedTab?.id !== tab?.id ||
+              savedTab?.url !== tab?.url
+            )
+              return;
             setSettings(next);
           } catch (error) {
             if (isCurrent()) initializedMinimums.current.delete(context.site);
@@ -419,6 +468,7 @@ export function SidepanelApp(): React.JSX.Element {
   const filteringEnabled = pageFilteringEnabled;
 
   const updateFiltering = (enabled: boolean): void => {
+    const epoch = connectionEpoch.current;
     const activePage = activePageRef.current;
     if (activePage === null) {
       return;
@@ -431,6 +481,12 @@ export function SidepanelApp(): React.JSX.Element {
         enabled,
       })
       .catch(() => {
+        if (
+          !panelMounted.current ||
+          epoch !== connectionEpoch.current ||
+          activePageRef.current?.pageKey !== activePage.pageKey
+        )
+          return;
         pageFilteringExpected.current = false;
         setPageFilteringEnabled(false);
       });

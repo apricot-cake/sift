@@ -6,6 +6,7 @@ import {
   FILTER_CONTEXT_REQUEST,
   type FilterContextResponse,
 } from "../../utils/filter-context.ts";
+import { t } from "../../utils/i18n.ts";
 import { defaults, type Settings } from "../../utils/settings.ts";
 import { settingsItem } from "../../utils/settings-storage.ts";
 import { TIMELINE_CONTROL } from "../../utils/timeline-controls.ts";
@@ -156,17 +157,64 @@ describe("接続先と非同期応答", () => {
       .mockResolvedValue(context("youtube"));
     request = read;
     await mount();
-    await fakeBrowser.tabs.onUpdated.trigger(
-      1,
-      { status: "loading" },
-      { ...tab },
-    );
+    await fakeBrowser.tabs.onUpdated.trigger(1, { status: "loading" }, {
+      ...tab,
+    } as never);
     await flush();
     old.resolve(context("niconico"));
     await flush();
     expect(writes).toHaveLength(1);
     expect(writes[0]?.siteSettings.niconico.minCountEnabled).toBe(true);
   });
+  it("非表示中のタブ変更でも保存待ちの初期化を無効にする", async () => {
+    const write = deferred<void>();
+    vi.mocked(settingsItem.setValue).mockImplementationOnce(
+      () => write.promise,
+    );
+    await mount();
+    const visibility = vi.spyOn(document, "visibilityState", "get");
+    visibility.mockReturnValue("hidden");
+    tab = { id: 2, url: "https://x.com/example" };
+    await fakeBrowser.tabs.onActivated.trigger({ tabId: 2, windowId: 1 });
+    visibility.mockReturnValue("visible");
+    write.resolve(undefined);
+    await flush();
+    expect(fakeBrowser.tabs.sendMessage).not.toHaveBeenCalledWith(1, {
+      type: TIMELINE_CONTROL.setFiltering,
+      enabled: true,
+    });
+  });
+  it.each(["unmount", "switch"])(
+    "ユーザー設定の保存待ちで%sしても有効化を再送しない",
+    async (change) => {
+      await mount();
+      const write = deferred<void>();
+      vi.mocked(settingsItem.setValue).mockImplementationOnce(
+        () => write.promise,
+      );
+      const toggle = container.querySelector<HTMLButtonElement>(
+        `button[aria-label="${t("optionsHideMembersOnly")}"]`,
+      );
+      expect(toggle).not.toBeNull();
+      await act(async () => toggle?.click());
+      if (change === "unmount") {
+        await act(async () => root.unmount());
+        root = createRoot(container);
+      } else {
+        tab = { id: 2, url: "https://x.com/example" };
+        request = async () => context("x");
+        await fakeBrowser.tabs.onActivated.trigger({ tabId: 2, windowId: 1 });
+        await flush();
+      }
+      vi.mocked(fakeBrowser.tabs.sendMessage).mockClear();
+      write.resolve(undefined);
+      await flush();
+      expect(fakeBrowser.tabs.sendMessage).not.toHaveBeenCalledWith(
+        expect.any(Number),
+        { type: TIMELINE_CONTROL.setFiltering, enabled: true },
+      );
+    },
+  );
   it("破棄後の遅い応答で設定を書き換えない", async () => {
     const old = deferred<FilterContextResponse>();
     request = () => old.promise;
