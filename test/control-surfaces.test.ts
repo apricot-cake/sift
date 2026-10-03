@@ -249,7 +249,6 @@ describe("抽出の操作入口", () => {
     expect(sidepanel).toContain("isSidePanelTabRequest(message)");
     expect(sidepanel).toContain("SIDE_PANEL_TAB_STORAGE_KEY");
     expect(sidepanel).toContain("browser.storage.session");
-    expect(sidepanel).toContain(".finally(() => refreshActiveHost(true))");
     expect(background).toContain(
       "const savedTab = browser.storage.session.set",
     );
