@@ -1,4 +1,4 @@
-extensionDescription: "SNSや動画サイトの投稿を反応数などで絞り込む拡張機能です。"
+extensionDescription: "X・Bluesky・YouTube・ニコニコ動画の投稿や動画を、いいね数・再生数・公開からの期間・画像や動画の有無などで絞り込めます。"
 
 sidepanelSite: "設定するサイト"
 sidepanelSettingLocation: "設定する場所"

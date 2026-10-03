@@ -8,7 +8,7 @@ Sift
 
 ### 概要
 
-X、Bluesky、YouTube、ニコニコ動画の投稿や動画を、反応数、再生数、公開からの期間、コンテンツタイプで絞り込みます。
+X・Bluesky・YouTube・ニコニコ動画の投稿や動画を、いいね数・再生数・公開からの期間・画像や動画の有無などで絞り込めます。
 
 ### 詳細説明
 
@@ -34,7 +34,7 @@ Sift
 
 ### Summary
 
-Filter posts and videos on X, Bluesky, YouTube, and Niconico by reactions, views, publication time, and content type.
+Filter posts and videos on X, Bluesky, YouTube, and Niconico by likes, views, age, and image or video content.
 
 ### Detailed description
 
