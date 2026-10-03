@@ -122,4 +122,63 @@ describe("連続読み込みの警告", () => {
 
     expect(tracker.warning).toBe(false);
   });
+
+  it("上限超過後は同じ一覧を新規取得として数えない", () => {
+    const tracker = new ContinuousLoadWarningTracker({ maxTrackedIds: 2 });
+    tracker.reset(["1", "2", "3"]);
+    for (let i = 0; i < 4; i++) {
+      tracker.observe([hidden("1"), hidden("2"), hidden("3")]);
+      vi.advanceTimersByTime(800);
+    }
+    expect(tracker.warning).toBe(false);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+  it("上限を超える一群の表示投稿を捨てて誤警告しない", () => {
+    const tracker = new ContinuousLoadWarningTracker({ maxTrackedIds: 2 });
+    tracker.observe([hidden("1")]);
+    vi.advanceTimersByTime(800);
+    tracker.observe([hidden("2")]);
+    vi.advanceTimersByTime(800);
+    tracker.observe([matched("visible"), hidden("3"), hidden("4")]);
+    vi.advanceTimersByTime(800);
+    expect(tracker.warning).toBe(false);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+  it("IDの初期化も上限で読み取りを止める", () => {
+    const tracker = new ContinuousLoadWarningTracker({ maxTrackedIds: 2 });
+    let reads = 0;
+    function* ids() {
+      for (let i = 0; i < 100; i++) {
+        reads++;
+        yield String(i);
+      }
+    }
+    tracker.reset(ids());
+    expect(reads).toBe(3);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+  it("上限超過の警告停止はreset後に解除する", () => {
+    const tracker = new ContinuousLoadWarningTracker({ maxTrackedIds: 3 });
+    tracker.reset(["1", "2", "3", "4"]);
+    tracker.reset();
+    for (const id of ["5", "6", "7"]) {
+      tracker.observe([hidden(id)]);
+      vi.advanceTimersByTime(800);
+    }
+    expect(tracker.warning).toBe(true);
+  });
+  it("設定の上限を無限大や不正値で無効化できない", () => {
+    for (const maxTrackedIds of [
+      0,
+      -1,
+      1.5,
+      Number.NaN,
+      Number.POSITIVE_INFINITY,
+      10001,
+    ]) {
+      expect(() => new ContinuousLoadWarningTracker({ maxTrackedIds })).toThrow(
+        RangeError,
+      );
+    }
+  });
 });

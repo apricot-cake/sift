@@ -10,6 +10,7 @@ interface ContinuousLoadWarningOptions {
   readonly maxBatchMs?: number;
   readonly maxGapMs?: number;
   readonly requiredHiddenBatches?: number;
+  readonly maxTrackedIds?: number;
 }
 
 export class ContinuousLoadWarningTracker {
@@ -17,6 +18,7 @@ export class ContinuousLoadWarningTracker {
   readonly #maxBatchMs: number;
   readonly #maxGapMs: number;
   readonly #requiredHiddenBatches: number;
+  readonly #maxTrackedIds: number;
   #knownIds = new Set<string>();
   #pending = new Map<string, ClassifyState>();
   #settleTimer: number | null = null;
@@ -25,12 +27,21 @@ export class ContinuousLoadWarningTracker {
   #hiddenBatchCount = 0;
   #lastHiddenBatchAt: number | null = null;
   #warning = false;
+  #capacityExceeded = false;
 
   constructor(options: ContinuousLoadWarningOptions = {}) {
     this.#settleMs = options.settleMs ?? 800;
     this.#maxBatchMs = options.maxBatchMs ?? 2_000;
     this.#maxGapMs = options.maxGapMs ?? 5_000;
     this.#requiredHiddenBatches = options.requiredHiddenBatches ?? 3;
+    this.#maxTrackedIds = options.maxTrackedIds ?? 10_000;
+    if (
+      !Number.isSafeInteger(this.#maxTrackedIds) ||
+      this.#maxTrackedIds < 1 ||
+      this.#maxTrackedIds > 10_000
+    ) {
+      throw new RangeError("maxTrackedIds must be between 1 and 10000");
+    }
   }
 
   get warning(): boolean {
@@ -39,14 +50,22 @@ export class ContinuousLoadWarningTracker {
 
   reset(currentIds: Iterable<string> = []): void {
     this.#clearTimers();
-    this.#knownIds = new Set(currentIds);
+    this.#knownIds.clear();
     this.#pending.clear();
-    this.#hiddenBatchCount = 0;
-    this.#lastHiddenBatchAt = null;
-    this.#warning = false;
+    this.#clearChain();
+    this.#capacityExceeded = false;
+    for (const id of currentIds) {
+      if (this.#knownIds.has(id)) continue;
+      if (this.#knownIds.size === this.#maxTrackedIds) {
+        this.#exceedCapacity();
+        break;
+      }
+      this.#knownIds.add(id);
+    }
   }
 
   observe(observations: readonly ContinuousLoadObservation[]): void {
+    if (this.#capacityExceeded) return;
     let added = false;
     for (const observation of observations) {
       if (this.#knownIds.has(observation.id)) {
@@ -54,6 +73,13 @@ export class ContinuousLoadWarningTracker {
       }
       if (this.#pending.get(observation.id) === observation.state) {
         continue;
+      }
+      if (
+        !this.#pending.has(observation.id) &&
+        this.#knownIds.size + this.#pending.size === this.#maxTrackedIds
+      ) {
+        this.#exceedCapacity();
+        return;
       }
       this.#pending.set(observation.id, observation.state);
       added = true;
@@ -145,5 +171,15 @@ export class ContinuousLoadWarningTracker {
       window.clearTimeout(this.#expiryTimer);
       this.#expiryTimer = null;
     }
+  }
+
+  #exceedCapacity(): void {
+    // IDを捨てて追跡を続けると再描画を新規取得と誤認する。上限を超えた一覧では
+    // 警告だけを停止し、次のresetまで投稿のフィルターは通常どおり続ける。
+    this.#capacityExceeded = true;
+    this.#clearTimers();
+    this.#knownIds.clear();
+    this.#pending.clear();
+    this.#clearChain();
   }
 }
