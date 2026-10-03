@@ -10,6 +10,7 @@ interface ContinuousLoadWarningOptions {
   readonly maxBatchMs?: number;
   readonly maxGapMs?: number;
   readonly requiredHiddenBatches?: number;
+  readonly maxTrackedIds?: number;
 }
 
 export class ContinuousLoadWarningTracker {
@@ -17,6 +18,7 @@ export class ContinuousLoadWarningTracker {
   readonly #maxBatchMs: number;
   readonly #maxGapMs: number;
   readonly #requiredHiddenBatches: number;
+  readonly #maxTrackedIds: number;
   #knownIds = new Set<string>();
   #pending = new Map<string, ClassifyState>();
   #settleTimer: number | null = null;
@@ -31,6 +33,7 @@ export class ContinuousLoadWarningTracker {
     this.#maxBatchMs = options.maxBatchMs ?? 2_000;
     this.#maxGapMs = options.maxGapMs ?? 5_000;
     this.#requiredHiddenBatches = options.requiredHiddenBatches ?? 3;
+    this.#maxTrackedIds = options.maxTrackedIds ?? 10_000;
   }
 
   get warning(): boolean {
@@ -39,7 +42,10 @@ export class ContinuousLoadWarningTracker {
 
   reset(currentIds: Iterable<string> = []): void {
     this.#clearTimers();
-    this.#knownIds = new Set(currentIds);
+    this.#knownIds.clear();
+    for (const id of currentIds) {
+      this.#addKnownId(id);
+    }
     this.#pending.clear();
     this.#hiddenBatchCount = 0;
     this.#lastHiddenBatchAt = null;
@@ -56,6 +62,7 @@ export class ContinuousLoadWarningTracker {
         continue;
       }
       this.#pending.set(observation.id, observation.state);
+      this.#trimOldest(this.#pending);
       added = true;
     }
     if (!added) {
@@ -96,7 +103,7 @@ export class ContinuousLoadWarningTracker {
       (state) => state === "hidden",
     );
     for (const id of this.#pending.keys()) {
-      this.#knownIds.add(id);
+      this.#addKnownId(id);
     }
     this.#pending.clear();
     if (!allHidden) {
@@ -144,6 +151,21 @@ export class ContinuousLoadWarningTracker {
     if (this.#expiryTimer !== null) {
       window.clearTimeout(this.#expiryTimer);
       this.#expiryTimer = null;
+    }
+  }
+
+  #addKnownId(id: string): void {
+    this.#knownIds.add(id);
+    this.#trimOldest(this.#knownIds);
+  }
+
+  #trimOldest(collection: Set<string> | Map<string, ClassifyState>): void {
+    while (collection.size > this.#maxTrackedIds) {
+      const oldestId = collection.keys().next().value;
+      if (oldestId === undefined) {
+        return;
+      }
+      collection.delete(oldestId);
     }
   }
 }

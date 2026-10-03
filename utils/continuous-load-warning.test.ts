@@ -122,4 +122,22 @@ describe("連続読み込みの警告", () => {
 
     expect(tracker.warning).toBe(false);
   });
+
+  it("追跡する投稿IDを上限数に保つ", () => {
+    const tracker = new ContinuousLoadWarningTracker({
+      maxTrackedIds: 2,
+      requiredHiddenBatches: 4,
+    });
+
+    for (const id of ["1", "2", "3"]) {
+      tracker.observe([hidden(id)]);
+      vi.advanceTimersByTime(800);
+    }
+    expect(tracker.warning).toBe(false);
+
+    tracker.observe([hidden("1")]);
+    vi.advanceTimersByTime(800);
+
+    expect(tracker.warning).toBe(true);
+  });
 });
