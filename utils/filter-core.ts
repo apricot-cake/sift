@@ -120,6 +120,7 @@ export interface Post {
 }
 
 export interface InclusionThreshold {
+  maximum?: number | null;
   maximumAgeHours?: number | null;
   minimum: number | null;
   minimumAgeHours: number | null;
@@ -147,6 +148,7 @@ export type ClassifyReason =
   | "older-than-period"
   | "no-inclusion-filter"
   | "filter-match"
+  | "above-threshold"
   | "below-threshold";
 
 export interface ClassifyResult {
@@ -181,13 +183,17 @@ export function classifyPost(
 
   if (
     settings.inclusion.minimum === null &&
+    settings.inclusion.maximum == null &&
     settings.inclusion.minimumAgeHours === null &&
     settings.inclusion.maximumAgeHours == null
   ) {
     return { state: "visible", reason: "no-inclusion-filter" };
   }
 
-  if (settings.inclusion.minimum !== null) {
+  if (
+    settings.inclusion.minimum !== null ||
+    settings.inclusion.maximum != null
+  ) {
     // `parseMetric` が判定不能（`Number.NaN`）を返した投稿。誤って隠すと
     // 利用者からは見えず回復できないが、誤って残すのは目に入るだけなので、
     // ここでは線を付けずに残す（#82）。
@@ -195,8 +201,17 @@ export function classifyPost(
       return { state: "visible", reason: "indeterminate-metric" };
     }
 
-    if (post.metricCount < settings.inclusion.minimum) {
+    if (
+      settings.inclusion.minimum !== null &&
+      post.metricCount < settings.inclusion.minimum
+    ) {
       return { state: "hidden", reason: "below-threshold" };
+    }
+    if (
+      settings.inclusion.maximum != null &&
+      post.metricCount > settings.inclusion.maximum
+    ) {
+      return { state: "hidden", reason: "above-threshold" };
     }
   }
 

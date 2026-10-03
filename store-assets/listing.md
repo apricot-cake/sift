@@ -15,8 +15,8 @@ X、Bluesky、YouTube、ニコニコ動画の投稿や動画を、反応数、�
 Sift は、対応サイトの一覧に表示された投稿や動画を、その場で絞り込む Chrome 拡張機能です。拡張機能のボタンからサイドパネルを開き、現在のサイトに適用する条件を設定します。
 
 - X と Bluesky: 最低いいね数、画像・動画の有無、返信・引用・リポストの除外
-- YouTube: 最低再生回数、公開からの期間、メンバー限定動画の除外
-- ニコニコ動画: 最低再生回数、公開からの期間
+- YouTube: 最低再生回数、人気の動画での再生回数の上限、公開からの期間、メンバー限定動画の除外
+- ニコニコ動画: 最低再生回数、再生数が多い順での再生回数の上限、公開からの期間
 - 新しく読み込まれた投稿や動画にも同じ条件を適用
 - サイトごとに条件を保存
 
@@ -41,8 +41,8 @@ Filter posts and videos on X, Bluesky, YouTube, and Niconico by reactions, views
 Sift filters posts and videos in supported website lists as you browse. Open the side panel from the extension button and choose the conditions for the current website.
 
 - X and Bluesky: minimum likes, image or video content, and exclusions for replies, quote posts, and reposts
-- YouTube: minimum views, time since publication, and members-only video exclusion
-- Niconico: minimum views and time since publication
+- YouTube: minimum views, maximum views for popular videos, time since publication, and members-only video exclusion
+- Niconico: minimum views, maximum views when sorted by most views, and time since publication
 - Applies the same conditions to newly loaded posts and videos
 - Saves separate preferences for each website
 

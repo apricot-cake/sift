@@ -70,6 +70,73 @@ describe("parseMetric", () => {
 });
 
 describe("classifyPost", () => {
+  it.each([
+    [999, "matched", "filter-match"],
+    [1000, "matched", "filter-match"],
+    [1001, "hidden", "above-threshold"],
+    [Number.NaN, "visible", "indeterminate-metric"],
+  ])("上限1000に対する再生回数 %s の判定", (metricCount, state, reason) => {
+    expect(
+      classifyPost(
+        {
+          mediaMatches: true,
+          metricCount,
+          createdAtMs: Number.NaN,
+          isReply: false,
+          isQuote: false,
+          isRepost: false,
+        },
+        {
+          ...settings,
+          inclusion: { minimum: null, maximum: 1000, minimumAgeHours: null },
+        },
+      ),
+    ).toEqual({ state, reason });
+  });
+  it("最低値・上限・投稿期間を同時に満たす動画だけを残す", () => {
+    const now = 1800000000000;
+    const post = {
+      mediaMatches: true,
+      metricCount: 500,
+      createdAtMs: now - 86400000,
+      isReply: false,
+      isQuote: false,
+      isRepost: false,
+    };
+    const thresholds = {
+      ...settings,
+      inclusion: {
+        minimum: 500,
+        maximum: 1000,
+        minimumAgeHours: null,
+        maximumAgeHours: 48,
+      },
+    };
+    expect(classifyPost(post, thresholds, now).state).toBe("matched");
+    expect(
+      classifyPost({ ...post, metricCount: 499 }, thresholds, now).reason,
+    ).toBe("below-threshold");
+    expect(
+      classifyPost({ ...post, metricCount: 1001 }, thresholds, now).reason,
+    ).toBe("above-threshold");
+    expect(
+      classifyPost(
+        { ...post, createdAtMs: now - 49 * 3600000 },
+        thresholds,
+        now,
+      ).reason,
+    ).toBe("older-than-period");
+    expect(
+      classifyPost(
+        { ...post, metricCount: 1 },
+        {
+          ...thresholds,
+          inclusion: { ...thresholds.inclusion, minimum: null, maximum: 0 },
+        },
+        now,
+      ).reason,
+    ).toBe("above-threshold");
+  });
   it("最低値を満たす投稿を残す", () => {
     expect(
       classifyPost(

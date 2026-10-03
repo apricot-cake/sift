@@ -9,6 +9,34 @@ import {
 } from "./settings.ts";
 
 describe("normalizeSettings", () => {
+  it("旧設定では再生回数の上限を無効にし、保存値を正規化する", () => {
+    const base = normalizeSettings({});
+    expect(base.siteSettings.youtube.maxCountEnabled).toBe(false);
+    expect(base.siteSettings.niconico.maxCountEnabled).toBe(false);
+    const saved = normalizeSettings({
+      siteSettings: {
+        youtube: { maxCountEnabled: true, maxCount: "12345" },
+        niconico: { maxCountEnabled: "true", maxCount: -1 },
+      },
+    });
+    expect(saved.siteSettings.youtube).toMatchObject({
+      maxCountEnabled: true,
+      maxCount: 12345,
+    });
+    expect(saved.siteSettings.niconico).toMatchObject({
+      maxCountEnabled: false,
+      maxCount: 0,
+    });
+    expect(normalizeSettings(saved)).toEqual(saved);
+    expect(
+      normalizeSettings({ siteSettings: { youtube: { maxCount: Infinity } } })
+        .siteSettings.youtube.maxCount,
+    ).toBe(1000000);
+    expect(
+      normalizeSettings({ siteSettings: { youtube: { maxCount: 2000000000 } } })
+        .siteSettings.youtube.maxCount,
+    ).toBe(1000000000);
+  });
   it.each(["x", "bluesky", "youtube", "niconico"] as const)(
     "%s の手動値を候補の適用値と別に保持する",
     (site) => {
@@ -198,6 +226,42 @@ describe("publicationAgeInHours", () => {
 });
 
 describe("thresholdsFor", () => {
+  it.each(["youtube", "niconico"] as const)(
+    "%s の上限は再生数順でだけ適用する",
+    (site) => {
+      const settings = normalizeSettings({
+        siteSettings: {
+          [site]: {
+            maxCountEnabled: true,
+            maxCount: 12345,
+            minCountEnabled: false,
+            hidePublishedWithinEnabled: true,
+            hidePublishedWithinValue: 2,
+            hidePublishedWithinUnit: "day",
+          },
+        },
+      }).siteSettings[site];
+      expect(thresholdsFor(settings, "popular").inclusion.maximum).toBe(12345);
+      expect(
+        thresholdsFor({ ...settings, maxCountEnabled: false }, "popular")
+          .inclusion.maximum,
+      ).toBeUndefined();
+      for (const sort of [
+        "newest",
+        "default",
+        "relevance",
+        "unknown",
+        undefined,
+      ])
+        expect(thresholdsFor(settings, sort).inclusion.maximum).toBeUndefined();
+      expect(thresholdsFor(settings, "popular").inclusion.minimumAgeHours).toBe(
+        site === "niconico" ? 48 : null,
+      );
+      expect(thresholdsFor(settings, "popular", false).inclusion.maximum).toBe(
+        12345,
+      );
+    },
+  );
   it("選択したサイトの設定から反応数の判定条件を作る", () => {
     const stored = normalizeSettings({
       siteSettings: {

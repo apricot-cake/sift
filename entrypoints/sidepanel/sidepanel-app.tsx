@@ -553,6 +553,10 @@ export function SidepanelApp(): React.JSX.Element {
   };
 
   const currentPageIsEditable = activeSite === selectedSite;
+  const usePublicationPeriod =
+    selectedSite === "youtube" &&
+    activeContext?.sortOrder === "popular" &&
+    activeContext.supportsPublicationAge !== false;
   const healthState = activeContext?.health?.state;
   const healthMessage =
     healthState === "unreadable"
@@ -652,14 +656,13 @@ export function SidepanelApp(): React.JSX.Element {
                 <div>
                   {selectedSettings.kind === "metric" ? (
                     <>
-                      {activeContext?.sortOrder === "popular" &&
-                      activeContext.supportsPublicationAge !== false ? (
+                      {usePublicationPeriod ? (
                         <PublicationPeriodPicker
                           settings={selectedSettings}
-                          dates={activeContext.metricCreatedAtMs}
-                          total={activeContext.metricCounts.length}
+                          dates={activeContext?.metricCreatedAtMs ?? []}
+                          total={activeContext?.metricCounts.length ?? 0}
                           truncated={
-                            activeContext.metricContextTruncated === true
+                            activeContext?.metricContextTruncated === true
                           }
                           onChange={(patch) =>
                             saveSiteSettings(selectedSite, {
@@ -729,7 +732,19 @@ export function SidepanelApp(): React.JSX.Element {
                             {t("optionsSectionExclude")}
                           </ItemLabel>
                         </h2>
-                        {activeContext?.sortOrder !== "popular" &&
+                        {activeContext?.sortOrder === "popular" && (
+                          <MaximumViewsSetting
+                            enabled={selectedSettings.maxCountEnabled}
+                            value={selectedSettings.maxCount}
+                            onEnabledChange={(value) =>
+                              updateMetricSetting("maxCountEnabled", value)
+                            }
+                            onValueChange={(value) =>
+                              updateMetricSetting("maxCount", value)
+                            }
+                          />
+                        )}
+                        {!usePublicationPeriod &&
                           activeContext?.supportsPublicationAge !== false && (
                             <NewerVideosSetting
                               enabled={
@@ -1320,6 +1335,7 @@ function EditableNumberInput({
   className = "w-24",
   disabled = false,
   min,
+  max = Number.MAX_SAFE_INTEGER,
   onValueChange,
   value,
 }: {
@@ -1327,6 +1343,7 @@ function EditableNumberInput({
   className?: string;
   disabled?: boolean;
   min: number;
+  max?: number;
   onValueChange: (value: number) => void;
   value: number;
 }): React.JSX.Element {
@@ -1350,7 +1367,7 @@ function EditableNumberInput({
       setDraft(String(value));
       return;
     }
-    const nextValue = Math.max(min, parsed);
+    const nextValue = Math.min(max, Math.max(min, parsed));
     setDraft(String(nextValue));
     if (nextValue !== value) {
       onValueChange(nextValue);
@@ -1365,6 +1382,7 @@ function EditableNumberInput({
       type="number"
       inputMode="numeric"
       min={min}
+      max={max}
       step={1}
       value={draft}
       onFocus={(event) => {
@@ -1375,7 +1393,11 @@ function EditableNumberInput({
         const rawValue = event.currentTarget.value;
         setDraft(rawValue);
         const nextValue = event.currentTarget.valueAsNumber;
-        if (Number.isSafeInteger(nextValue) && nextValue >= min) {
+        if (
+          Number.isSafeInteger(nextValue) &&
+          nextValue >= min &&
+          nextValue <= max
+        ) {
           onValueChange(nextValue);
         }
       }}
@@ -1386,6 +1408,48 @@ function EditableNumberInput({
         }
       }}
     />
+  );
+}
+
+function MaximumViewsSetting({
+  enabled,
+  value,
+  onEnabledChange,
+  onValueChange,
+}: {
+  enabled: boolean;
+  value: number;
+  onEnabledChange: (value: boolean) => void;
+  onValueChange: (value: number) => void;
+}): React.JSX.Element {
+  const label = t("optionsMaxViews");
+  return (
+    <fieldset
+      className="m-0 min-w-0 space-y-2 border-0 p-0"
+      data-maximum-views=""
+      aria-label={label}
+    >
+      <SettingRow icon={ListFilter} label={label}>
+        <Switch
+          aria-label={label}
+          checked={enabled}
+          onCheckedChange={onEnabledChange}
+        />
+      </SettingRow>
+      <div className="flex items-center gap-2">
+        <EditableNumberInput
+          ariaLabel={label}
+          className="w-32"
+          min={0}
+          max={1000000000}
+          value={value}
+          onValueChange={onValueChange}
+        />
+        <span className="text-sm text-muted-foreground">
+          {t("optionsUnitViews")}
+        </span>
+      </div>
+    </fieldset>
   );
 }
 

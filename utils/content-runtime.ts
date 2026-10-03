@@ -111,7 +111,9 @@ export function startContentRuntime(
         (timelineAvailable() ? "supported" : "unsupported"),
       empty: adapter.hasEmptyTimeline?.(document) ?? false,
       requiresMetrics:
-        filteringEnabled() && thresholds.inclusion.minimum !== null,
+        filteringEnabled() &&
+        (thresholds.inclusion.minimum !== null ||
+          thresholds.inclusion.maximum != null),
       requiresDates:
         filteringEnabled() &&
         (thresholds.inclusion.maximumAgeHours != null ||

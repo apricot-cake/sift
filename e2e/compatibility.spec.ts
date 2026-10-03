@@ -573,6 +573,77 @@ function periodDays(label: string): number {
     : Number.NaN;
 }
 
+async function maximumFilter(
+  page: Page,
+  panel: Page,
+  target: CompatibilityCase,
+) {
+  const before = await observations(page, target);
+  const counts = before.map((row) => row.count).filter(Number.isFinite);
+  expect(new Set(counts).size, "上限の内外に実動画が必要です").toBeGreaterThan(
+    1,
+  );
+  const maximum = Math.min(...counts);
+  const group = panel.getByRole("group", {
+    name: "再生回数の上限",
+    exact: true,
+  });
+  const input = group.getByRole("spinbutton");
+  const toggle = group.getByRole("switch");
+  await input.fill(String(maximum));
+  await input.press("Enter");
+  await expect(input).toHaveValue(String(maximum));
+  try {
+    await panelClick(toggle);
+    await expect(toggle).toHaveAttribute("aria-checked", "true");
+    await expect
+      .poll(async () => {
+        const rows = await observations(page, target);
+        return (
+          rows.length > 0 &&
+          rows.every((row) =>
+            Number.isFinite(row.count) && row.count > maximum
+              ? !row.visible
+              : row.visible,
+          )
+        );
+      })
+      .toBe(true);
+    const after = await observations(page, target);
+    expect(after.some((row) => row.visible && row.count <= maximum)).toBe(true);
+    expect(
+      before
+        .filter((row) => row.count > maximum)
+        .every(
+          (row) =>
+            row.id && !after.some((item) => item.id === row.id && item.visible),
+        ),
+    ).toBe(true);
+  } finally {
+    if ((await toggle.getAttribute("aria-checked")) === "true")
+      await panelClick(toggle);
+  }
+  await expect(toggle).toHaveAttribute("aria-checked", "false");
+  await expect
+    .poll(async () => {
+      const rows = await observations(page, target);
+      return (
+        rows.length > 0 && rows.every((row) => row.visible && row.height > 0)
+      );
+    })
+    .toBe(true);
+  await test.info().attach("maximum-filter", {
+    body: JSON.stringify({
+      maximum,
+      excluded: before.filter((row) => row.count > maximum).length,
+      applied: true,
+      cleared: true,
+      noOverfilter: true,
+    }),
+    contentType: "application/json",
+  });
+}
+
 async function newerFilter(page: Page, panel: Page, target: CompatibilityCase) {
   const before = await observations(page, target);
   const ages = [
@@ -799,6 +870,12 @@ for (const target of cases) {
       }
       if (target.site === "youtube")
         await categoricalFilter(page, panel, target, "members");
+      const hasMaximum =
+        target.sort === "popular" || target.niconicoSort === "再生数が多い順";
+      await expect(panel.locator("[data-maximum-views]")).toHaveCount(
+        hasMaximum ? 1 : 0,
+      );
+      if (hasMaximum) await maximumFilter(page, panel, target);
       if (target.site === "x" || target.site === "bluesky") {
         for (const kind of ["media", "reply", "quote", "repost"] as const)
           await categoricalFilter(page, panel, target, kind);

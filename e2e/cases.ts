@@ -111,10 +111,16 @@ export function requiredFilterEvidence(target: CompatibilityCase): string[] {
       "quote-filter",
       "repost-filter",
     ];
-  if (target.site === "niconico") return ["minimum-filter", "newer-filter"];
+  if (target.site === "niconico")
+    return [
+      "minimum-filter",
+      "newer-filter",
+      ...(target.niconicoSort === "再生数が多い順" ? ["maximum-filter"] : []),
+    ];
   return [
     target.period ? "period-filter" : "minimum-filter",
     "members-filter",
+    ...(target.sort === "popular" ? ["maximum-filter"] : []),
     ...(!target.period && !target.destination.endsWith("/shorts")
       ? ["newer-filter"]
       : []),

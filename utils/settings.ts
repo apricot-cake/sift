@@ -20,6 +20,8 @@ export interface ReactionSiteSettings {
 }
 
 export interface MetricSiteSettings {
+  readonly maxCountEnabled: boolean;
+  readonly maxCount: number;
   readonly postedWithinDays?: number;
   readonly manualPeriodDays?: number;
   readonly manualMinimum?: number;
@@ -68,6 +70,8 @@ function defaultMetricSiteSettings(
 ): Readonly<MetricSiteSettings> {
   return Object.freeze({
     kind: "metric",
+    maxCountEnabled: false,
+    maxCount: 1000000,
     minCountEnabled: true,
     minCount,
     hidePublishedWithinEnabled: false,
@@ -220,6 +224,11 @@ function normalizeMetricSiteSettings(
           ? false
           : fallback.minCountEnabled,
     minCount: clampInteger(source.minCount, fallback.minCount, 0, 1000000000),
+    maxCountEnabled:
+      typeof source.maxCountEnabled === "boolean"
+        ? source.maxCountEnabled
+        : fallback.maxCountEnabled,
+    maxCount: clampInteger(source.maxCount, fallback.maxCount, 0, 1000000000),
     hidePublishedWithinEnabled:
       typeof source.hidePublishedWithinEnabled === "boolean"
         ? source.hidePublishedWithinEnabled
@@ -319,7 +328,9 @@ export function thresholdsFor(
   supportsPublicationAge = true,
 ): ClassifyThresholds {
   const usePublicationPeriod =
-    supportsPublicationAge && sortOrder === "popular";
+    supportsPublicationAge &&
+    sortOrder === "popular" &&
+    "hideMembersOnly" in settings;
   if (settings.kind === "metric") {
     return {
       mediaEnabled: false,
@@ -327,6 +338,9 @@ export function thresholdsFor(
       hideQuotes: false,
       hideReposts: false,
       inclusion: {
+        ...(sortOrder === "popular" && settings.maxCountEnabled
+          ? { maximum: settings.maxCount }
+          : {}),
         ...(usePublicationPeriod
           ? {
               maximumAgeHours: settings.postedWithinDays

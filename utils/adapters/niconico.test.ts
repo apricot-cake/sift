@@ -4,6 +4,19 @@ import { isNiconicoFilterPage, niconicoAdapter } from "./niconico.ts";
 
 describe("ニコニコ動画", () => {
   it.each([
+    ["", "newest"],
+    ["?sortKey=viewCount&sortOrder=desc", "popular"],
+    ["?sortKey=viewCount&sortOrder=asc", "unknown"],
+    ["?sortKey=commentCount&sortOrder=desc", "unknown"],
+  ])("URLの並び順 %s を読む", (search, expected) => {
+    expect(
+      niconicoAdapter.readSortOrder(render(""), {
+        pathname: "/user/123/video",
+        search,
+      }),
+    ).toBe(expected);
+  });
+  it.each([
     ["?sortKey=registeredAt&sortOrder=desc", false],
     ["?sortKey=viewCount&sortOrder=desc", false],
     ["?sortKey=registeredAt&sortOrder=asc", false],

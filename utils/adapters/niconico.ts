@@ -56,6 +56,12 @@ export const niconicoAdapter = Object.freeze({
   id: "niconico",
   matches: Object.freeze(["https://www.nicovideo.jp/*"]),
   settingsKey: "niconico",
+  readSortOrder(root: ParentNode, page: Pick<Location, "pathname" | "search">) {
+    if (!isNiconicoSupportedSort(root, page)) return "unknown";
+    return new URLSearchParams(page.search).get("sortKey") === "viewCount"
+      ? "popular"
+      : "newest";
+  },
   readPageSupport(
     root: ParentNode,
     page: Pick<Location, "pathname"> & Partial<Pick<Location, "search">>,
