@@ -235,6 +235,14 @@ export const cases: CompatibilityCase[] = [
     period: false,
   },
   {
+    id: "x-reply-representative",
+    site: "x",
+    start: "https://x.com/search?q=cat%20filter%3Areplies",
+    destination: "/search",
+    tab: "最新",
+    period: false,
+  },
+  {
     id: "x-list",
     site: "x",
     start: "https://x.com/ruaje8/lists",

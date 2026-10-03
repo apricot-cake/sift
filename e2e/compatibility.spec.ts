@@ -276,9 +276,17 @@ async function observations(page: Page, target: CompatibilityCase) {
               '[data-testid="cellInnerDiv"], ytd-rich-item-renderer',
             ) ?? card;
           // 本文の語句ではなく、サイトが表示する投稿種別の案内を読む。
+          const quotedCards = [
+            ...card.querySelectorAll('div[role="link"]'),
+          ].filter((node) =>
+            node.querySelector('[data-testid="Tweet-User-Avatar"]'),
+          );
           const labels = [...card.querySelectorAll("a, span, div[dir]")]
             .filter(
               (node) =>
+                !quotedCards.some(
+                  (quoted) => quoted.contains(node) || node.contains(quoted),
+                ) &&
                 !node.closest(
                   '[data-testid="tweetText"], [data-testid="postText"]',
                 ),
