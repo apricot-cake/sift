@@ -6,7 +6,7 @@ import path from "node:path";
 import { afterEach, describe, expect, test, vi } from "vitest";
 import { secureDevBrowserProfile } from "./dev-browser-profile.ts";
 
-describe("開発専用プロファイルの権限", () => {
+describe("開発専用プロファイルの対象検査", () => {
   const temporaryDirectories: string[] = [];
   const temporaryDirectory = () => {
     const directory = fs.mkdtempSync(path.join(os.tmpdir(), "sift-profile-"));
@@ -20,11 +20,13 @@ describe("開発専用プロファイルの権限", () => {
       fs.rmSync(directory, { recursive: true, force: true });
   });
 
-  test.each([0o755, undefined])(
+  test
+    .runIf(process.platform !== "win32")
+    .each([0o755, 0o077, 0o000, undefined])(
     "POSIX の既存・新規プロファイルを 0700 にする: %s",
     (mode) => {
       const parent = temporaryDirectory();
-      const profile = path.join(parent, ".sift-ext-profile");
+      const profile = path.join(parent, "任意の専用プロファイル");
       if (mode !== undefined) fs.mkdirSync(profile, { mode });
 
       secureDevBrowserProfile(profile, "linux", path.join(parent, "home"));
@@ -33,10 +35,23 @@ describe("開発専用プロファイルの権限", () => {
     },
   );
 
+  test("完全パスで指定した専用 custom path を許可する", () => {
+    const parent = temporaryDirectory();
+    const profile = path.join(parent, "custom-browser-data");
+
+    secureDevBrowserProfile(
+      profile,
+      process.platform,
+      path.join(parent, "home"),
+    );
+
+    expect(fs.statSync(profile).isDirectory()).toBe(true);
+  });
+
   test("シンボリックリンクの参照先を chmod しない", () => {
     const parent = temporaryDirectory();
     const actual = path.join(parent, "actual");
-    const profile = path.join(parent, ".sift-ext-profile");
+    const profile = path.join(parent, "custom-browser-data");
     fs.mkdirSync(actual, { mode: 0o755 });
     fs.symlinkSync(actual, profile, "dir");
 
@@ -69,13 +84,17 @@ describe("開発専用プロファイルの権限", () => {
 
   test("Windows では既存 ACL に触れない", () => {
     const parent = temporaryDirectory();
-    const profile = path.join(parent, ".sift-ext-profile");
+    const profile = path.join(parent, "windows-custom-browser-data");
     const mkdir = vi.spyOn(fs, "mkdirSync");
     const chmod = vi.spyOn(fs, "chmodSync");
 
     secureDevBrowserProfile(profile, "win32", path.join(parent, "home"));
 
-    expect(mkdir).not.toHaveBeenCalled();
+    expect(mkdir).toHaveBeenCalledWith(profile, {
+      recursive: true,
+      mode: 0o700,
+    });
     expect(chmod).not.toHaveBeenCalled();
+    expect(fs.statSync(profile).isDirectory()).toBe(true);
   });
 });

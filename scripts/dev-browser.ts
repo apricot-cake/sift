@@ -10,14 +10,15 @@ const profile = devBrowserProfile();
 const args = process.argv.slice(2);
 if (args.length > 1 || (args[0] && args[0] !== "--print"))
   throw new Error("利用できる引数は --print だけです。");
-const endpoint = await readDevBrowserEndpoint(profile);
 if (args[0] === "--print") {
+  const endpoint = await readDevBrowserEndpoint(profile);
   console.log(`プロファイル: ${profile}`);
   console.log(`CDP ポート:  ${endpoint?.url ?? "無効（自動検証中だけ有効）"}`);
 } else {
+  secureDevBrowserProfile(profile);
+  const endpoint = await readDevBrowserEndpoint(profile);
   if (endpoint)
     throw new Error("CDP が有効な開発用 Chrome を先に閉じてください。");
-  secureDevBrowserProfile(profile);
   const log = fs.openSync(path.join(profile, "chrome-stderr.log"), "a");
   try {
     const child = spawn(

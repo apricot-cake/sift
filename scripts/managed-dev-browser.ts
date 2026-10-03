@@ -76,11 +76,12 @@ export async function withDevBrowser<T>(
   signal?: AbortSignal,
 ): Promise<T> {
   signal?.throwIfAborted();
+  const profile = devBrowserProfile();
+  secureDevBrowserProfile(profile);
   if (process.env[sessionKey]) {
     await readManagedDevBrowserEndpoint();
     return await run(false);
   }
-  const profile = devBrowserProfile();
   if (await readDevBrowserEndpoint(profile))
     throw new Error("CDP が有効な開発用 Chrome を先に閉じてください。");
   const context = await launchDevBrowser(true).catch((cause) => {

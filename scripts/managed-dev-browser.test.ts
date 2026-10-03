@@ -55,6 +55,12 @@ describe("検証中だけ有効な開発用 Chrome", () => {
       expect.objectContaining({ chromiumSandbox: true, viewport: null }),
     );
     expect(secureDevBrowserProfile).toHaveBeenCalledWith(devBrowserProfile());
+    const secureOrder = vi.mocked(secureDevBrowserProfile).mock
+      .invocationCallOrder[0];
+    const probeOrder = read.mock.invocationCallOrder[0];
+    if (secureOrder === undefined || probeOrder === undefined)
+      throw new Error("権限補正と endpoint probe が実行されていません。");
+    expect(secureOrder).toBeLessThan(probeOrder);
   });
 
   test("検証が失敗してもブラウザを閉じる", async () => {
