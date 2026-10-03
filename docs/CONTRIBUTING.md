@@ -67,33 +67,38 @@ Windows では、ローカル配備用のビルドを自動で再読み込みで
 
 ```powershell
 npm run build:candidate
-npm run browser:open
-npm run browser:candidate
 npm run verify:candidate
 npm run deploy:local
+npm run browser:open
 ```
 
-候補は `.output\candidate\chrome-mv3` に作成し、開発用Chromeに読み込んで検証します。全検証が成功した後、`deploy:local` が同じ成果物を `.output\chrome-mv3` へ配備します。検証後にソースや成果物が変更された場合は配備できません。
+候補は `.output\candidate\chrome-mv3` に作成します。各検証コマンドは専用プロファイルの Chrome を起動して候補を自動で読み込み、終了処理で Chrome を閉じます。手動確認用の開発用 Chrome が開いている場合は、先に閉じてください。全検証が成功した後、`deploy:local` が同じ成果物を `.output\chrome-mv3` へ配備します。検証後にソースや成果物が変更された場合は配備できません。
+
+候補の読み込みだけを確認する場合は、`npm run browser:candidate` を実行できます。全検証の前にこのコマンドを実行する必要はありません。
 
 配備時に再読み込み専用の[ネイティブメッセージングホスト](https://developer.chrome.com/docs/extensions/develop/concepts/native-messaging)を現在の Windows ユーザーへ登録します。サイドパネルが開いていれば、配備後に拡張機能を再読み込みします。閉じている場合は、次に開いたときに新しいビルドを読み込みます。
 
 登録先が `HKCU` のため、Chrome と同じ Windows ユーザーで実行する必要があります。
 
-専用の Chrome プロファイルは次のコマンドで起動します。
+手動確認には、次のコマンドで専用の Chrome プロファイルを開きます。
 
 ```powershell
 npm run browser:open
 ```
 
-このコマンドは通常利用する Chrome とは別のプロファイルを開きます。拡張機能の登録・候補の読み込みには `browser:candidate` を使います。専用プロファイルの `DevToolsActivePort` またはローカル接続先からブラウザを確認します。コマンドが終了した後も Chrome は開いたままになります。接続先を表示する場合は、ブラウザーを開かずに次のコマンドを実行します。
+`browser:open` は CDP ポートを開かずに Chrome を起動し、候補を読み込みます。事前に `build:candidate` を実行してください。コマンドが終了した後も Chrome は開いたままになります。候補を読み込むため、バックグラウンドの保持プロセスが Playwright の pipe 接続を維持します。Chrome のウィンドウを閉じると、保持プロセスも終了します。
+
+自動検証と同じプロファイルを使い、前回のタブを復元するので、ログイン状態を引き継げます。開発用 Chrome が既に開いている場合は、プロファイルの競合を避けるため起動をエラーにします。閉じてから再実行してください。
+
+`test:live`、`smoke:panel`、`smoke:connection`、`browser:candidate` は、実行中だけローカル CDP ポートを有効にします。`verify:candidate` は全検証を通して1つの Chrome を共有します。正常終了・検証失敗のどちらでも、終了処理で Chrome を閉じます。プロセスの強制終了で終了処理が実行されなかった場合は、残った開発用 Chrome を閉じてください。再検証するときは同じコマンドを実行し、終了後に手動確認する場合は `browser:open` で開き直してください。
+
+CDP ポートを有効にしたセッションが実行中の場合だけ、次のコマンドで TCP の接続先を表示できます。このコマンドは Chrome を起動しません。
 
 ```powershell
 npm run browser:status
 ```
 
-`npm run browser:open` を重ねて実行した場合も、起動済みなら二重起動せず終了します。
-
-接続には専用プロファイルとローカルの待受アドレスを使います。[Chrome のリモートデバッグ](https://developer.chrome.com/blog/remote-debugging-port)では、通常利用するプロファイルとは別のデータディレクトリが必要です。
+自動検証の接続には専用プロファイルとローカルの待受アドレスを使い、ポートは Chrome が選びます。[Chrome のリモートデバッグ](https://developer.chrome.com/blog/remote-debugging-port)では、通常利用するプロファイルとは別のデータディレクトリが必要です。検証中はローカルプロセスから CDP に接続できるため、この方式は接続の有効期間を限定する対策です。
 
 ## ストア提出用ZIPを作る
 

@@ -1,93 +1,51 @@
-// 開発用 Chrome プロファイルを Chrome が選ぶ CDP ポートで起動する。Sift はこの
-// プロファイルであらかじめ展開済み拡張機能として登録する。
+// 手動確認には、自動検証と同じプロファイルを CDP ポートなしで開く。
 import { spawn } from "node:child_process";
 import fs from "node:fs";
-import { homedir } from "node:os";
 import path from "node:path";
-import { findChromePath } from "./chrome-path.ts";
-import {
-  type DevBrowserEndpoint,
-  readDevBrowserEndpoint,
-} from "./dev-browser-endpoint.ts";
+import { readDevBrowserEndpoint } from "./dev-browser-endpoint.ts";
+import { devBrowserProfile } from "./managed-dev-browser.ts";
 
-const PROFILE =
-  process.env.SIFT_DEV_PROFILE || path.join(homedir(), ".sift-ext-profile");
-const PROFILE_DIRECTORY = "Default";
-const CDP_HOST = "127.0.0.1";
-const cliArguments = process.argv.slice(2);
-
-if (
-  cliArguments.length > 1 ||
-  (cliArguments[0] && cliArguments[0] !== "--print")
-) {
+const profile = devBrowserProfile();
+const args = process.argv.slice(2);
+if (args.length > 1 || (args[0] && args[0] !== "--print"))
   throw new Error("利用できる引数は --print だけです。");
-}
-
-async function waitForCdp(): Promise<DevBrowserEndpoint | null> {
-  // 起動済みかどうかは固定時間ではなく、実際の CDP endpoint で判定する。
-  for (let attempt = 0; attempt < 240; attempt += 1) {
-    const version = await readDevBrowserEndpoint(PROFILE);
-    if (version) return version;
-    await new Promise((resolve) => setTimeout(resolve, 250));
-  }
-  return null;
-}
-
-const chrome = process.env.SIFT_CHROME || findChromePath();
-const chromeLogPath = path.join(PROFILE, "chrome-stderr.log");
-
-if (cliArguments.includes("--print")) {
-  console.log(`chrome:      ${chrome}`);
-  console.log(`プロファイル: ${PROFILE}`);
-  const endpoint = await readDevBrowserEndpoint(PROFILE);
-  console.log(
-    `CDP:         ${endpoint?.url ?? "未起動（起動時にポートを自動選択）"}`,
-  );
-  process.exit(0);
-}
-
-fs.mkdirSync(PROFILE, { recursive: true, mode: 0o700 });
-
-let version = await readDevBrowserEndpoint(PROFILE);
-if (!version) {
-  const chromeLog = fs.openSync(chromeLogPath, "w");
-  const child = spawn(
-    chrome,
-    [
-      `--user-data-dir=${PROFILE}`,
-      `--profile-directory=${PROFILE_DIRECTORY}`,
-      `--remote-debugging-address=${CDP_HOST}`,
-      "--remote-debugging-port=0",
-      "--no-first-run",
-      "--no-default-browser-check",
-      "--disable-backgrounding-occluded-windows",
-      "--disable-background-timer-throttling",
-      "--disable-renderer-backgrounding",
-    ],
-    {
-      detached: true,
-      stdio: ["ignore", chromeLog, chromeLog],
-      windowsHide: true,
-    },
-  );
-  fs.closeSync(chromeLog);
-  const launchFailed = new Promise<never>((_, reject) => {
-    child.once("error", reject);
-  });
-  child.unref();
-  version = await Promise.race([waitForCdp(), launchFailed]);
-  if (!version) {
-    const chromeLogOutput = fs.existsSync(chromeLogPath)
-      ? fs.readFileSync(chromeLogPath, "utf8").trim().slice(-4_000)
-      : "";
-    throw new Error(
-      `[sift] 専用プロファイルの CDP 接続先を確認できない: ${PROFILE}。` +
-        (chromeLogOutput
-          ? ` Chrome の出力: ${chromeLogOutput}`
-          : " Chrome が起動中か、起動直後に終了した。"),
+const endpoint = await readDevBrowserEndpoint(profile);
+if (args[0] === "--print") {
+  console.log(`プロファイル: ${profile}`);
+  console.log(`CDP ポート:  ${endpoint?.url ?? "無効（自動検証中だけ有効）"}`);
+} else {
+  if (endpoint)
+    throw new Error("CDP が有効な開発用 Chrome を先に閉じてください。");
+  fs.mkdirSync(profile, { recursive: true });
+  const log = fs.openSync(path.join(profile, "chrome-stderr.log"), "a");
+  try {
+    const child = spawn(
+      process.execPath,
+      [path.join(import.meta.dirname, "manual-dev-browser.ts")],
+      {
+        detached: true,
+        stdio: ["ignore", log, log, "ipc"],
+        windowsHide: true,
+      },
     );
+    await new Promise<void>((resolve, reject) => {
+      child.once("message", (message) => {
+        if (message === "ready") resolve();
+        else reject(new Error("手動確認用 Chrome の起動応答が不正です。"));
+      });
+      child.once("error", reject);
+      child.once("exit", () =>
+        reject(
+          new Error(
+            "手動確認用 Chrome を起動できません。開発用 Chrome を閉じ、候補ビルドを準備してから再実行してください。",
+          ),
+        ),
+      );
+    });
+    child.disconnect();
+    child.unref();
+  } finally {
+    fs.closeSync(log);
   }
-  console.log(`[sift] CDP を有効にした開発用プロファイルを開いた: ${PROFILE}`);
+  console.log(`[sift] 手動確認用 Chrome を CDP ポートなしで開いた: ${profile}`);
 }
-
-console.log(`[sift] CDP 接続先: ${version.url}`);

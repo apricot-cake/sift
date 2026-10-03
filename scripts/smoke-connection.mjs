@@ -1,7 +1,5 @@
 import fs from "node:fs";
-import { homedir } from "node:os";
-import path from "node:path";
-import { readDevBrowserEndpoint } from "./dev-browser-endpoint.ts";
+import { readManagedDevBrowserEndpoint } from "./managed-dev-browser.ts";
 
 if (process.argv.includes("--help")) {
   console.log(
@@ -10,11 +8,7 @@ if (process.argv.includes("--help")) {
   process.exit(0);
 }
 if (process.argv.length > 2) throw Error("引数は不要です");
-const endpoint = await readDevBrowserEndpoint(
-  process.env.SIFT_DEV_PROFILE || path.join(homedir(), ".sift-ext-profile"),
-);
-if (!endpoint)
-  throw Error("npm run browser:open で開発用Chromeを起動してください");
+const endpoint = await readManagedDevBrowserEndpoint();
 const ext = "bohbpocokkfioejlabmeaimpkpmablkm";
 const connections = [],
   created = [],

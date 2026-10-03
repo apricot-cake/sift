@@ -1,7 +1,5 @@
-import { homedir } from "node:os";
-import path from "node:path";
 import { callFunction } from "./cdp-call.ts";
-import { readDevBrowserEndpoint } from "./dev-browser-endpoint.ts";
+import { readManagedDevBrowserEndpoint } from "./managed-dev-browser.ts";
 
 const [url, ...rest] = process.argv.slice(2);
 if (url === "--help") {
@@ -13,13 +11,7 @@ if (url === "--help") {
 if (!url || rest.length)
   throw Error("完全URLを1つ指定してください。--help で使い方を確認できます。");
 new URL(url);
-const endpoint = await readDevBrowserEndpoint(
-  process.env.SIFT_DEV_PROFILE || path.join(homedir(), ".sift-ext-profile"),
-);
-if (!endpoint)
-  throw Error(
-    "開発用Chromeが未起動です。npm run browser:open を実行してください。",
-  );
+const endpoint = await readManagedDevBrowserEndpoint();
 const base = endpoint.url,
   ext = "bohbpocokkfioejlabmeaimpkpmablkm";
 const connections = [];

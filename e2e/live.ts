@@ -1,5 +1,4 @@
 import fs from "node:fs";
-import { homedir } from "node:os";
 import path from "node:path";
 import {
   type Browser,
@@ -10,7 +9,7 @@ import {
   type Worker,
 } from "@playwright/test";
 import { artifactHash } from "../scripts/compatibility/artifact.ts";
-import { readDevBrowserEndpoint } from "../scripts/dev-browser-endpoint.ts";
+import { readManagedDevBrowserEndpoint } from "../scripts/managed-dev-browser.ts";
 import type { FilterContextResponse } from "../utils/filter-context.ts";
 
 export const extensionId = "bohbpocokkfioejlabmeaimpkpmablkm";
@@ -31,10 +30,7 @@ export interface LiveSession {
 }
 
 export async function connectLive(): Promise<LiveSession> {
-  const endpoint = await readDevBrowserEndpoint(
-    process.env.SIFT_DEV_PROFILE || path.join(homedir(), ".sift-ext-profile"),
-  );
-  if (!endpoint) throw new Error("環境不備: 開発用Chromeが未起動です");
+  const endpoint = await readManagedDevBrowserEndpoint();
   const candidate: Candidate = JSON.parse(
     fs.readFileSync(".output/candidate.json", "utf8"),
   );
