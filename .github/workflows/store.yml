@@ -7,6 +7,10 @@ on:
         description: 提出する package.json のバージョン
         required: true
         type: string
+      check_only:
+        description: 接続確認だけを行う（アップロード・審査提出なし）
+        type: boolean
+        default: false
   release:
     types: [published]
 
@@ -126,7 +130,29 @@ jobs:
           create_credentials_file: false
           export_environment_variables: false
 
+      - name: ストアへの接続を確認する
+        if: github.event_name == 'workflow_dispatch' && inputs.check_only
+        env:
+          CWS_ACCESS_TOKEN: ${{ steps.auth.outputs.access_token }}
+          CWS_PUBLISHER_ID: ${{ vars.CWS_PUBLISHER_ID }}
+          CWS_EXTENSION_ID: ${{ vars.CWS_EXTENSION_ID }}
+        run: |
+          node --input-type=module <<'JS'
+          const { CWS_ACCESS_TOKEN, CWS_PUBLISHER_ID, CWS_EXTENSION_ID } = process.env;
+          const url = `https://chromewebstore.googleapis.com/v2/publishers/${CWS_PUBLISHER_ID}/items/${CWS_EXTENSION_ID}:fetchStatus`;
+          const response = await fetch(url, {
+            headers: { Authorization: `Bearer ${CWS_ACCESS_TOKEN}` },
+            redirect: 'error',
+            signal: AbortSignal.timeout(30_000),
+          });
+          if (!response.ok) throw new Error(`ストアへの接続確認に失敗しました: HTTP ${response.status}`);
+          const status = await response.json();
+          if (!status.publishedItemRevisionStatus?.state) throw new Error('公開版の状態を確認できません。');
+          console.log(`ストアへの接続を確認しました。公開版の状態: ${status.publishedItemRevisionStatus.state}`);
+          JS
+
       - name: アップロードして審査へ提出する
+        if: github.event_name != 'workflow_dispatch' || !inputs.check_only
         env:
           CWS_ACCESS_TOKEN: ${{ steps.auth.outputs.access_token }}
           CWS_PUBLISHER_ID: ${{ vars.CWS_PUBLISHER_ID }}
