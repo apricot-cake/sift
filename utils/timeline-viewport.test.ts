@@ -205,14 +205,6 @@ describe("X の一覧の位置復元", () => {
 });
 
 it("Bluesky のホーム内で切り替えたリストを区別する", () => {
-  localStorage.setItem(
-    "BSKY_STORAGE",
-    JSON.stringify({ session: { currentAccount: { did: "did:plc:test" } } }),
-  );
-  localStorage.setItem(
-    "bsky_account\\did:plc:test:lastSelectedHomeFeed",
-    JSON.stringify({ data: "list|at://did:plc:test/app.bsky.graph.list/123" }),
-  );
   document.body.innerHTML =
     '<button data-testid="homeScreenFeedTabs-selector-1">リスト1<span style="background-color: blue"></span></button><button data-testid="homeScreenFeedTabs-selector-2">リスト2</button>';
   const page = { pathname: "/", search: "" };
@@ -221,7 +213,6 @@ it("Bluesky のホーム内で切り替えたリストを区別する", () => {
     document.querySelector("span") as HTMLElement,
   );
   expect(blueskyAdapter.readTimelineKey(document, page)).not.toBe(first);
-  localStorage.clear();
 });
 
 it("Bluesky の投稿詳細でスクロールしても、戻ったリストの位置を復元する", () => {

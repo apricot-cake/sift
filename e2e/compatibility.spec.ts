@@ -164,23 +164,25 @@ async function snapshot(
   const selections: [string, Locator][] = [
     target.channelSearch
       ? ["navigation", page.locator("ytd-expandable-tab-renderer input")]
-      : target.list
-        ? [
-            "navigation",
-            target.site === "bluesky"
-              ? page.locator(
-                  '[data-testid="profileListScreen"] [data-testid="headerTitle"]',
-                )
-              : page.getByRole("heading"),
-          ]
-        : [
-            "sort",
-            page.locator(
-              target.sort === "default"
-                ? "ytd-browse:not([hidden]) ytd-rich-grid-renderer #header"
-                : selection.sort,
-            ),
-          ],
+      : target.feed
+        ? ["navigation", page.locator('[data-testid="customFeedScreen"]')]
+        : target.list
+          ? [
+              "navigation",
+              target.site === "bluesky"
+                ? page.locator(
+                    '[data-testid="profileListScreen"] [data-testid="headerTitle"]',
+                  )
+                : page.getByRole("heading"),
+            ]
+          : [
+              "sort",
+              page.locator(
+                target.sort === "default"
+                  ? "ytd-browse:not([hidden]) ytd-rich-grid-renderer #header"
+                  : selection.sort,
+              ),
+            ],
     ["card", page.locator(selection.card)],
     target.membersOnly
       ? [

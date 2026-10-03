@@ -7,6 +7,7 @@ export interface CompatibilityCase {
   linkLabel?: string;
   linkHref?: string;
   list?: boolean;
+  feed?: boolean;
   sort?: "newest" | "popular" | "default";
   period: boolean;
   niconicoSort?: "投稿日時が新しい順" | "再生数が多い順";
@@ -281,6 +282,22 @@ export const cases: CompatibilityCase[] = [
     start: "https://bsky.app",
     destination: "/",
     tab: "e",
+    period: false,
+  },
+  {
+    id: "bluesky-pinned-feed",
+    site: "bluesky",
+    start: "https://bsky.app",
+    destination: "/",
+    tab: "みつけよう",
+    period: false,
+  },
+  {
+    id: "bluesky-feed",
+    site: "bluesky",
+    start: "https://bsky.app/profile/bsky.app/feed/whats-hot",
+    destination: "/profile/bsky.app/feed/whats-hot",
+    feed: true,
     period: false,
   },
   {

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { render } from "../../test/dom.ts";
 import { blueskyAdapter, isBlueskySupportedHomeTimeline } from "./bluesky.ts";
 
@@ -132,46 +132,51 @@ describe("Home の対象フィード", () => {
     );
   });
 
-  it("ピン留めリストは操作できるがカスタムフィードは対象外", () => {
-    const page = render(`
+  it.each(["固定リスト", "カスタムフィード"])(
+    "%s は保存データなしで操作できる",
+    (name) => {
+      const page = render(`
       <div data-testid="homeScreenFeedTabs-selector-0">Following</div>
       <div data-testid="homeScreenFeedTabs-selector-1">
-        開発
-        <div style="background-color: rgb(0, 96, 255)"></div>
+        ${name}<div style="background-color: blue"></div>
       </div>
+      <div data-testid="customFeedPage"></div>
     `);
+      const read = vi
+        .spyOn(Storage.prototype, "getItem")
+        .mockImplementation(() => {
+          throw new Error("サイトの保存データを読み取った");
+        });
+      try {
+        expect(blueskyAdapter.readPageSupport(page, { pathname: "/" })).toBe(
+          "supported",
+        );
+        expect(
+          blueskyAdapter.isTimelineAvailable(page, { pathname: "/" }),
+        ).toBe(true);
+        expect(read).not.toHaveBeenCalled();
+      } finally {
+        read.mockRestore();
+      }
+    },
+  );
 
-    const storage = localStorage;
-    storage.setItem(
-      "BSKY_STORAGE",
-      JSON.stringify({ session: { currentAccount: { did: "did:plc:test" } } }),
+  it("退避された画面の選択タブを使わない", () => {
+    const page = render(`
+      <div style="display: none"><div data-testid="homeScreenFeedTabs-selector-1" aria-selected="true">フィード</div></div>
+      <div data-testid="homeScreenFeedTabs-selector-0">Following</div>
+    `);
+    expect(blueskyAdapter.readPageSupport(page, { pathname: "/" })).toBe(
+      "unknown",
     );
-    const key = "bsky_account\\did:plc:test:lastSelectedHomeFeed";
-    try {
-      storage.setItem(
-        key,
-        JSON.stringify({
-          data: "list|at://did:plc:test/app.bsky.graph.list/123",
-        }),
-      );
-      expect(blueskyAdapter.isTimelineAvailable(page, { pathname: "/" })).toBe(
-        true,
-      );
-      storage.setItem(
-        key,
-        JSON.stringify({
-          data: "feedgen|at://did:plc:test/app.bsky.feed.generator/123",
-        }),
-      );
-      expect(blueskyAdapter.isTimelineAvailable(page, { pathname: "/" })).toBe(
-        false,
-      );
-      storage.setItem(key, "broken");
-      expect(isBlueskySupportedHomeTimeline(page)).toBe(false);
-    } finally {
-      storage.removeItem(key);
-      storage.removeItem("BSKY_STORAGE");
-    }
+  });
+
+  it.each(["lists", "feed"])("%s の専用ページを対象にする", (section) => {
+    expect(
+      blueskyAdapter.isTimelineAvailable(render(""), {
+        pathname: `/profile/example.bsky.social/${section}/123`,
+      }),
+    ).toBe(true);
   });
 
   it("選択状態をまだ読めない間は対象外", () => {

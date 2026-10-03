@@ -1,0 +1,57 @@
+{
+  "schema": 1,
+  "caseId": "bluesky-feed",
+  "route": "/profile/bsky.app/feed/whats-hot",
+  "regions": {
+    "navigation": [
+      {
+        "tag": "div",
+        "testId": "customFeedScreen",
+        "children": [
+          {
+            "tag": "div"
+          },
+          {
+            "tag": "div",
+            "testId": "loadLatestBtn"
+          },
+          {
+            "tag": "div"
+          }
+        ]
+      }
+    ],
+    "card": [
+      {
+        "tag": "div",
+        "role": "link",
+        "testId": "feedItem-by-*",
+        "children": [
+          {
+            "tag": "div",
+            "children": [
+              {
+                "tag": "div"
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "metric": [
+      {
+        "tag": "button",
+        "role": "button",
+        "testId": "likeBtn",
+        "attributes": [
+          "aria-label"
+        ],
+        "children": [
+          {
+            "tag": "div"
+          }
+        ]
+      }
+    ]
+  }
+}

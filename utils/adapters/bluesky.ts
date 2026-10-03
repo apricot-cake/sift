@@ -59,44 +59,8 @@ function selectedTab(root: ParentNode, selector: string): Element | undefined {
 }
 
 export function readBlueskyHomeSupport(root: ParentNode): boolean | null {
-  const selected = Array.from(
-    root.querySelectorAll(BLUESKY_SELECTORS.homeTab),
-  ).find((tab) =>
-    Boolean(tab.querySelector(BLUESKY_SELECTORS.selectedTabMark)),
-  );
-  if (!selected) return null;
-  // Following は並べ替え可能なので、タブの位置では識別しない。
-  const following = root.querySelector('[data-testid="followingFeedPage"]');
-  if (following) {
-    let element: Element | null = following;
-    while (
-      element &&
-      !element.hasAttribute("hidden") &&
-      (element as HTMLElement).style?.display !== "none"
-    )
-      element = element.parentElement;
-    if (!element) return true;
-  }
-  // ホームの固定リストとカスタムフィードは同じ DOM を使う。
-  // サイトが保存した現在のアカウントIDと選択フィード種別だけを参照する。
-  // アカウント情報を保持・送信せず、形式が変わった場合は対象外にする。
-  try {
-    const doc = root.ownerDocument ?? (root as Document);
-    const storage = doc.defaultView?.localStorage;
-    const did = JSON.parse(storage?.getItem("BSKY_STORAGE") ?? "null")?.session
-      ?.currentAccount?.did;
-    if (typeof did !== "string" || !did.startsWith("did:")) return null;
-    const feed = JSON.parse(
-      storage?.getItem(`bsky_account\\${did}:lastSelectedHomeFeed`) ?? "null",
-    )?.data;
-    if (typeof feed !== "string") return null;
-    if (/^list\|at:\/\/[^/]+\/app\.bsky\.graph\.list\/[^/]+$/.test(feed))
-      return true;
-    if (/^(?:feedgen|feed)\|/.test(feed)) return false;
-    return null;
-  } catch {
-    return null;
-  }
+  // 固定リストとカスタムフィードは共通の画面なので、選択タブだけを読む。
+  return selectedTab(root, BLUESKY_SELECTORS.homeTab) ? true : null;
 }
 
 export function isBlueskySupportedHomeTimeline(root: ParentNode): boolean {
@@ -247,7 +211,7 @@ export const blueskyAdapter = Object.freeze({
       )
     )
       return false;
-    return /^\/profile\/[^/]+(?:\/(?:lists\/[^/]+|media|video))?\/?$/.test(
+    return /^\/profile\/[^/]+(?:\/(?:(?:lists|feed)\/[^/]+|media|video))?\/?$/.test(
       page.pathname,
     );
   },
