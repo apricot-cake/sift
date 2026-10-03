@@ -18,6 +18,7 @@ export interface FilterContextResponse {
   readonly timelineAvailable: boolean;
   readonly filteringEnabled: boolean;
   readonly continuousLoadingWarning: boolean;
+  readonly metricContextTruncated?: boolean;
   readonly metricCounts: readonly number[];
   /**
    * 最低値を除いた現在の条件に合う投稿の公開日時。日付を読めない投稿は
@@ -60,6 +61,8 @@ export function isFilterContextResponse(
     typeof response.timelineAvailable === "boolean" &&
     typeof response.filteringEnabled === "boolean" &&
     typeof response.continuousLoadingWarning === "boolean" &&
+    (response.metricContextTruncated === undefined ||
+      typeof response.metricContextTruncated === "boolean") &&
     Array.isArray(response.metricCounts) &&
     response.metricCounts.length <= FILTER_CONTEXT_METRIC_LIMIT &&
     response.metricCounts.every(

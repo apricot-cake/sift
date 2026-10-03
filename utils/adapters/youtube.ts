@@ -1,4 +1,5 @@
 import { normalizeDigits, parseMetric } from "../filter-core.ts";
+import { collectMetricCards } from "./metric-cards.ts";
 import type { ServiceAdapter } from "./types.ts";
 
 const YOUTUBE_SELECTORS = Object.freeze({
@@ -296,6 +297,17 @@ export const youtubeAdapter = Object.freeze({
     return this.isTimelineAvailable(root, page)
       ? `${page.pathname}${page.search}`
       : null;
+  },
+
+  getMetricPostCards(root: ParentNode, limit?: number) {
+    return collectMetricCards(
+      root,
+      (element) =>
+        element.matches(YOUTUBE_SELECTORS.videoCard) ? element : null,
+      (card) => card.closest(YOUTUBE_SELECTORS.cell) || card,
+      100_000,
+      limit,
+    );
   },
 
   getPostCards(root: ParentNode) {

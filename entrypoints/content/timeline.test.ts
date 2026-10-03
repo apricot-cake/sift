@@ -189,6 +189,7 @@ describe("タイムラインのフィルター", () => {
     try {
       const context = await getFilterContext();
       expect(context.metricCounts).toHaveLength(FILTER_CONTEXT_METRIC_LIMIT);
+      expect(context.metricContextTruncated).toBe(true);
       expect(readMetricCount).toHaveBeenCalledTimes(
         FILTER_CONTEXT_METRIC_LIMIT + 64,
       );

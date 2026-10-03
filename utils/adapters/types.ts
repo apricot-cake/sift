@@ -4,6 +4,7 @@
 
 import type { PageSupport } from "../page-health.ts";
 import type { SiteSettingsKey } from "../settings.ts";
+import type { MetricCards } from "./metric-cards.ts";
 
 export interface PostMedia {
   hasImage: boolean;
@@ -32,6 +33,8 @@ export interface ServiceAdapter {
   hasReachedTimelineEnd?(root: ParentNode): boolean;
 
   getPostCards(root: ParentNode): Element[];
+  // パネル用の件数は上限付きで取得する。投稿のフィルター範囲とは別に扱う。
+  getMetricPostCards(root: ParentNode, limit?: number): MetricCards;
   hasPostCards(root: ParentNode): boolean;
   // 投稿が一時的にまだ描かれていない画面でも、操作できるタイムラインなら true。
   isTimelineAvailable(

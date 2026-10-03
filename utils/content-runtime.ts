@@ -6,7 +6,6 @@ import {
   ContinuousLoadWarningTracker,
 } from "./continuous-load-warning.ts";
 import {
-  FILTER_CONTEXT_METRIC_LIMIT,
   type FilterContextResponse,
   isFilterContextRequest,
 } from "./filter-context.ts";
@@ -66,6 +65,7 @@ export function startContentRuntime(
   let metricContextCache: {
     metricCounts: number[];
     metricCreatedAtMs: number[];
+    metricContextTruncated: boolean;
   } | null = null;
   const loadWarningTracker = adapter.readPostId
     ? new ContinuousLoadWarningTracker()
@@ -82,7 +82,7 @@ export function startContentRuntime(
   function pageHealth() {
     if (healthCounts === null) {
       // 診断のための全件再走査は避け、先頭の投稿を上限付きで確認する。
-      const cards = adapter.getPostCards(document).slice(0, 32);
+      const cards = adapter.getMetricPostCards(document, 32).cards;
       healthCounts = {
         sampledPosts: cards.length,
         knownMetricOmissions: cards.filter(
@@ -174,10 +174,15 @@ export function startContentRuntime(
   function metricContextForContext(): {
     metricCounts: number[];
     metricCreatedAtMs: number[];
+    metricContextTruncated: boolean;
   } {
     const siteSettings = selectedSiteSettings();
     if (!timelineAvailable()) {
-      return { metricCounts: [], metricCreatedAtMs: [] };
+      return {
+        metricCounts: [],
+        metricCreatedAtMs: [],
+        metricContextTruncated: false,
+      };
     }
     if (metricContextCache !== null) return metricContextCache;
 
@@ -199,9 +204,8 @@ export function startContentRuntime(
     const metricCreatedAtMs: number[] = [];
     // パネルを開いたままでも、巨大なページを問い合わせのたびに全走査しない。
     // 先頭から同じ上限で切ることで、応答配列だけでなく読み取り処理も制限する。
-    for (const postCard of adapter
-      .getPostCards(document)
-      .slice(0, FILTER_CONTEXT_METRIC_LIMIT)) {
+    const sample = adapter.getMetricPostCards(document);
+    for (const postCard of sample.cards) {
       const metricCount = adapter.readMetricCount(postCard);
       if (!Number.isSafeInteger(metricCount) || metricCount < 0) {
         continue;
@@ -228,7 +232,11 @@ export function startContentRuntime(
         metricCreatedAtMs.push(createdAtMs);
       }
     }
-    metricContextCache = { metricCounts, metricCreatedAtMs };
+    metricContextCache = {
+      metricCounts,
+      metricCreatedAtMs,
+      metricContextTruncated: sample.truncated,
+    };
     return metricContextCache;
   }
 

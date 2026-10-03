@@ -2,6 +2,7 @@
 // 要素が投稿で、判定の入力がそれぞれどこに書かれているか。判定そのものは
 // filter-core.ts にあり、全サービスで共有している。
 import { parseMetric } from "../filter-core.ts";
+import { collectMetricCards } from "./metric-cards.ts";
 import type { ServiceAdapter } from "./types.ts";
 
 // X の画面の作りを1箇所に集めてあるので、X 側の描き直しはここ1箇所の修正で
@@ -144,6 +145,20 @@ export const xAdapter = Object.freeze({
       (tab) => tab.getAttribute("aria-selected") === "true",
     );
     return `${page.pathname}${page.search}:${selected}:${tabs[selected]?.textContent ?? ""}`;
+  },
+
+  getMetricPostCards(root: ParentNode, limit?: number) {
+    return collectMetricCards(
+      root,
+      (element) =>
+        element.matches(X_SELECTORS.postCard) &&
+        element.parentElement?.closest(X_SELECTORS.postCard) === null
+          ? element
+          : null,
+      undefined,
+      100_000,
+      limit,
+    );
   },
 
   getPostCards(root: ParentNode) {

@@ -80,3 +80,5 @@ optionsResetCancel: "キャンセル"
 optionsResetAction: "リセットする"
 optionsErrorLoadFailed: "設定を読み込めません。"
 optionsErrorSaveFailed: "設定を保存できません。"
+
+sidepanelSampleScope: "読み込み済み投稿の一部を集計しています（条件に合う{count}件）。件数は全体の合計ではありません。フィルターは一覧全体に適用します。"
