@@ -115,4 +115,4 @@ Open a supported list page, click the Sift icon in Chrome's toolbar, and adjust 
 
 ## 掲載画像（2026年10月4日）
 
-[掲載画像の記録](store-assets/screenshots/README.md)に、絞り込み前後の日本語画像4枚と撮影条件をまとめた。X は3つの架空アカウントの複数投稿を使い、投稿画像を色違いの単色にした。画面にも架空投稿のデモと表示する。絞り込みと操作欄は実際の Sift を使う。このデモ画像は実サイトの互換性検証として扱わない。
+[掲載画像の記録](store-assets/screenshots/README.md)に、絞り込み前後の日本語画像4枚と撮影条件をまとめた。X は3つの架空アカウントの複数投稿を使い、投稿画像を色違いの単色にした。絞り込みと操作欄は実際の Sift を使う。このデモ画像は実サイトの互換性検証として扱わない。
