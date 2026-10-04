@@ -4,7 +4,12 @@ import { chromium } from "@playwright/test";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { readDevBrowserEndpoint } from "./dev-browser-endpoint.ts";
 import {
+  assertDevBrowserProfile,
+  secureDevBrowserProfile,
+} from "./dev-browser-profile.ts";
+import {
   devBrowserProfile,
+  launchDevBrowser,
   readManagedDevBrowserEndpoint,
   withDevBrowser,
 } from "./managed-dev-browser.ts";
@@ -16,6 +21,10 @@ vi.mock("./dev-browser-endpoint.ts", () => ({
   readDevBrowserEndpoint: vi.fn(),
 }));
 vi.mock("./chrome-path.ts", () => ({ findChromePath: () => "chrome" }));
+vi.mock("./dev-browser-profile.ts", () => ({
+  assertDevBrowserProfile: vi.fn(),
+  secureDevBrowserProfile: vi.fn(),
+}));
 
 describe("検証中だけ有効な開発用 Chrome", () => {
   const read = vi.mocked(readDevBrowserEndpoint);
@@ -62,12 +71,69 @@ describe("検証中だけ有効な開発用 Chrome", () => {
     expect(process.env.SIFT_DEV_BROWSER_SESSION).toBeUndefined();
   });
 
+  test("自動検証はウィンドウを表示せず、通常のスクロールバーで検証する", async () => {
+    await withDevBrowser(async () => 0);
+    const options = launch.mock.calls[0]?.[1];
+    expect(options).toMatchObject({ headless: true, viewport: null });
+    expect(options?.args).toEqual(
+      expect.arrayContaining([
+        "--headless=new",
+        "--remote-debugging-address=127.0.0.1",
+        "--remote-debugging-port=0",
+      ]),
+    );
+    expect(options?.ignoreDefaultArgs).toEqual(
+      expect.arrayContaining(["--headless", "--hide-scrollbars"]),
+    );
+    expect(options?.args).not.toContain("--hide-scrollbars");
+    expect(options?.args?.some((arg) => arg.startsWith("--window-size="))).toBe(
+      false,
+    );
+    expect(close).toHaveBeenCalledOnce();
+  });
+
+  test("手動確認は可視ウィンドウを使い、CDP の TCP ポートを開かない", async () => {
+    await launchDevBrowser(false);
+    const options = launch.mock.calls[0]?.[1];
+    expect(options).toMatchObject({ headless: false, viewport: null });
+    expect(options?.args?.some((arg) => arg.startsWith("--headless"))).toBe(
+      false,
+    );
+    expect(
+      options?.args?.some((arg) => arg.startsWith("--remote-debugging-")),
+    ).toBe(false);
+    expect(options?.args?.some((arg) => arg.startsWith("--window-size="))).toBe(
+      false,
+    );
+  });
+
   test("起動後の接続先確認が失敗してもブラウザを閉じる", async () => {
     read.mockReset().mockResolvedValue(null);
     await expect(withDevBrowser(async () => 0)).rejects.toThrow(
       "接続先を確認できません",
     );
     expect(close).toHaveBeenCalledOnce();
+  });
+
+  test("不正な profile は endpoint probe と Chrome 起動の前に拒否する", async () => {
+    vi.mocked(secureDevBrowserProfile).mockImplementationOnce(() => {
+      throw new Error("unsafe profile");
+    });
+    await expect(withDevBrowser(async () => 0)).rejects.toThrow(
+      "unsafe profile",
+    );
+    expect(read).not.toHaveBeenCalled();
+    expect(launch).not.toHaveBeenCalled();
+  });
+
+  test("読取接続は endpoint probe の前に profile を検査する", async () => {
+    vi.mocked(assertDevBrowserProfile).mockImplementationOnce(() => {
+      throw new Error("unsafe read profile");
+    });
+    await expect(readManagedDevBrowserEndpoint()).rejects.toThrow(
+      "unsafe read profile",
+    );
+    expect(read).not.toHaveBeenCalled();
   });
 
   test("常設された CDP を所有セッションとして流用しない", async () => {
