@@ -7,6 +7,11 @@ import {
   readDevBrowserEndpoint,
 } from "./dev-browser-endpoint.ts";
 
+import {
+  assertDevBrowserProfile,
+  secureDevBrowserProfile,
+} from "./dev-browser-profile.ts";
+
 const sessionKey = "SIFT_DEV_BROWSER_SESSION";
 
 export function devBrowserProfile(): string {
@@ -30,22 +35,30 @@ export function devBrowserArgs(profile: string): string[] {
 
 export async function launchDevBrowser(debug: boolean) {
   const profile = devBrowserProfile();
+  secureDevBrowserProfile(profile);
   return await chromium.launchPersistentContext(profile, {
     executablePath: process.env.SIFT_CHROME || findChromePath(),
-    headless: false,
+    headless: debug,
     viewport: null,
     chromiumSandbox: true,
     ignoreDefaultArgs: [
       "--disable-extensions",
       "--password-store=basic",
       "--use-mock-keychain",
+      // 通常のスクロールバーを保ち、現行 Chrome の非表示モードを明示する。
+      ...(debug ? ["--headless", "--hide-scrollbars"] : []),
     ],
     args: [
       ...devBrowserArgs(profile).filter(
         (arg) => !arg.startsWith("--user-data-dir="),
       ),
       ...(debug
-        ? ["--remote-debugging-address=127.0.0.1", "--remote-debugging-port=0"]
+        ? [
+            "--headless=new",
+            "--window-size=1280,720",
+            "--remote-debugging-address=127.0.0.1",
+            "--remote-debugging-port=0",
+          ]
         : []),
     ],
   });
@@ -54,6 +67,7 @@ export async function launchDevBrowser(debug: boolean) {
 /** セッションの記録は認証ではなく、所有ラッパーの取り違え防止に使う。 */
 export async function readManagedDevBrowserEndpoint(): Promise<DevBrowserEndpoint> {
   const profile = devBrowserProfile();
+  assertDevBrowserProfile(profile);
   const session = process.env[sessionKey];
   const endpoint = await readDevBrowserEndpoint(profile);
   if (
@@ -74,11 +88,12 @@ export async function withDevBrowser<T>(
   signal?: AbortSignal,
 ): Promise<T> {
   signal?.throwIfAborted();
+  const profile = devBrowserProfile();
+  secureDevBrowserProfile(profile);
   if (process.env[sessionKey]) {
     await readManagedDevBrowserEndpoint();
     return await run(false);
   }
-  const profile = devBrowserProfile();
   if (await readDevBrowserEndpoint(profile))
     throw new Error("CDP が有効な開発用 Chrome を先に閉じてください。");
   const context = await launchDevBrowser(true).catch((cause) => {

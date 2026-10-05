@@ -52,7 +52,12 @@ vi.mock("../utils/filter-context.ts", () => ({
   isFilterContextResponse: () => true,
 }));
 
+vi.mock("../utils/local-build-reload.ts", () => ({
+  startLocalBuildReload: vi.fn(),
+}));
+
 beforeEach(async () => {
+  Reflect.deleteProperty(globalThis, "__SIFT_RUNNING_BUILD_ID__");
   vi.clearAllMocks();
   vi.resetModules();
   vi.stubGlobal("__SIFT_LOCAL_DEPLOY__", false);
@@ -290,4 +295,15 @@ it("バックグラウンドのタブへ接続しない", async () => {
     ),
   ).toBe(false);
   expect(api.scripting.executeScript).not.toHaveBeenCalled();
+});
+
+it("ローカルworkerだけが実行中ビルドIDを公開する", async () => {
+  expect(Object.hasOwn(globalThis, "__SIFT_RUNNING_BUILD_ID__")).toBe(false);
+  vi.stubGlobal("__SIFT_LOCAL_DEPLOY__", true);
+  vi.stubGlobal("__SIFT_BUILD_ID__", "running-build");
+  const background = await import("../entrypoints/background.ts");
+  background.default.main();
+  expect(
+    Object.getOwnPropertyDescriptor(globalThis, "__SIFT_RUNNING_BUILD_ID__"),
+  ).toMatchObject({ value: "running-build", writable: false });
 });
