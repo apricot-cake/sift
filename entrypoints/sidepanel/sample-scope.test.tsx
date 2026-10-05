@@ -34,6 +34,7 @@ describe("集計が一部の場合の表示", () => {
         timelineAvailable: true,
         filteringEnabled: false,
         continuousLoadingWarning: false,
+        metricSampleCount: metricCounts.length,
         metricCounts,
         metricCreatedAtMs: [],
         metricContextTruncated: true,
@@ -71,4 +72,49 @@ describe("集計が一部の場合の表示", () => {
       }
     },
   );
+  it("期間集計の総数と投稿日不明数には指標不明の動画も含める", async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+    const response: FilterContextResponse = {
+      site: "youtube",
+      sortOrder: "popular",
+      pageTitle: "youtube",
+      pageKey: "youtube",
+      timelineAvailable: true,
+      filteringEnabled: false,
+      continuousLoadingWarning: false,
+      metricSampleCount: 3,
+      metricCounts: [],
+      metricCreatedAtMs: [Date.now()],
+      metricContextTruncated: false,
+    };
+    vi.spyOn(fakeBrowser.tabs, "query").mockResolvedValue([
+      { id: 1, url: "https://www.youtube.com/@example/videos" },
+    ] as never);
+    vi.spyOn(fakeBrowser.tabs, "sendMessage").mockImplementation(
+      async (_id, message) =>
+        (message as { type: string }).type === FILTER_CONTEXT_REQUEST
+          ? response
+          : undefined,
+    );
+    vi.spyOn(settingsItem, "getValue").mockResolvedValue(defaults);
+    vi.spyOn(settingsItem, "setValue").mockResolvedValue();
+    vi.spyOn(settingsItem, "watch").mockReturnValue(() => {});
+    const element = document.createElement("div");
+    document.body.append(element);
+    const root = createRoot(element);
+    try {
+      await act(async () => {
+        root.render(<SidepanelApp />);
+        for (let i = 0; i < 40; i++) await Promise.resolve();
+      });
+      expect(element.textContent).toContain("Based on 3 loaded videos");
+      expect(element.textContent).toContain(
+        "2 videos with unknown dates are excluded from period counts",
+      );
+    } finally {
+      await act(async () => root.unmount());
+      element.remove();
+    }
+  });
 });

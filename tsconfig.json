@@ -1,5 +1,6 @@
 {
   "extends": "./.wxt/tsconfig.json",
+  "exclude": ["**/node_modules/**", ".output/store/**", "test-results/**"],
   "compilerOptions": {
     "jsx": "react-jsx",
     // Node's built-in type stripping — which is how scripts/*.ts run at all

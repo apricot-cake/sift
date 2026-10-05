@@ -63,6 +63,7 @@ export function startContentRuntime(
   let pageFilteringEnabled = false;
   let reportedTimelineAvailable: boolean | null = null;
   let metricContextCache: {
+    metricSampleCount: number;
     metricCounts: number[];
     metricCreatedAtMs: number[];
     metricContextTruncated: boolean;
@@ -174,6 +175,7 @@ export function startContentRuntime(
   }
 
   function metricContextForContext(): {
+    metricSampleCount: number;
     metricCounts: number[];
     metricCreatedAtMs: number[];
     metricContextTruncated: boolean;
@@ -181,6 +183,7 @@ export function startContentRuntime(
     const siteSettings = selectedSiteSettings();
     if (!timelineAvailable()) {
       return {
+        metricSampleCount: 0,
         metricCounts: [],
         metricCreatedAtMs: [],
         metricContextTruncated: false,
@@ -202,6 +205,7 @@ export function startContentRuntime(
       },
     };
 
+    let metricSampleCount = 0;
     const metricCounts: number[] = [];
     const metricCreatedAtMs: number[] = [];
     // パネルを開いたままでも、巨大なページを問い合わせのたびに全走査しない。
@@ -209,9 +213,6 @@ export function startContentRuntime(
     const sample = adapter.getMetricPostCards(document);
     for (const postCard of sample.cards) {
       const metricCount = adapter.readMetricCount(postCard);
-      if (!Number.isSafeInteger(metricCount) || metricCount < 0) {
-        continue;
-      }
       const createdAtMs = adapter.readCreatedAt?.(postCard) ?? Number.NaN;
       const result = classifyPost(
         {
@@ -229,12 +230,16 @@ export function startContentRuntime(
         continue;
       }
 
-      metricCounts.push(metricCount);
+      metricSampleCount += 1;
+      if (Number.isSafeInteger(metricCount) && metricCount >= 0) {
+        metricCounts.push(metricCount);
+      }
       if (Number.isSafeInteger(createdAtMs)) {
         metricCreatedAtMs.push(createdAtMs);
       }
     }
     metricContextCache = {
+      metricSampleCount,
       metricCounts,
       metricCreatedAtMs,
       metricContextTruncated: sample.truncated,

@@ -97,6 +97,7 @@ describe("上限付きの集計対象", () => {
       timelineAvailable: true,
       filteringEnabled: false,
       continuousLoadingWarning: false,
+      metricSampleCount: 1,
       metricCounts: [1],
       metricCreatedAtMs: [],
       metricContextTruncated: true,
@@ -108,6 +109,19 @@ describe("上限付きの集計対象", () => {
     expect(
       isFilterContextResponse({
         ...response,
+        metricSampleCount: 1001,
+      }),
+    ).toBe(false);
+    expect(
+      isFilterContextResponse({
+        ...response,
+        metricSampleCount: 0,
+      }),
+    ).toBe(false);
+    expect(
+      isFilterContextResponse({
+        ...response,
+        metricSampleCount: 1000,
         metricCounts: Array(1001).fill(1),
       }),
     ).toBe(false);

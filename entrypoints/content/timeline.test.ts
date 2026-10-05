@@ -188,11 +188,47 @@ describe("タイムラインのフィルター", () => {
     });
     try {
       const context = await getFilterContext();
+      expect(context.metricSampleCount).toBe(FILTER_CONTEXT_METRIC_LIMIT);
       expect(context.metricCounts).toHaveLength(FILTER_CONTEXT_METRIC_LIMIT);
       expect(context.metricContextTruncated).toBe(true);
       expect(readMetricCount).toHaveBeenCalledTimes(
         FILTER_CONTEXT_METRIC_LIMIT + 64,
       );
+    } finally {
+      runtime.dispose();
+    }
+  });
+  it("指標と日付の不明値を分け、他条件に合う投稿数を期間集計の分母にする", async () => {
+    document.body.innerHTML = [
+      xPostMarkup("both-known"),
+      xPostMarkup("metric-missing"),
+      xPostMarkup("date-only-missing"),
+      xPostMarkup("both-unknown"),
+      xPostMarkup("other-filter"),
+    ].join("");
+    const values = [
+      { metric: "100", date: "1000" },
+      { metric: "unknown", date: "2000" },
+      { metric: "200", date: "unknown" },
+      { metric: "unknown", date: "unknown" },
+      { metric: "300", date: "3000", excluded: "true" },
+    ];
+    [...document.querySelectorAll("article")].forEach((card, index) => {
+      Object.assign(card.dataset, values[index]);
+    });
+    const runtime = startContentRuntime(new ContentScriptContext("sift-test"), {
+      ...xAdapter,
+      readMetricCount: (card) => Number(card.getAttribute("data-metric")),
+      readCreatedAt: (card) => Number(card.getAttribute("data-date")),
+      readIsRepost: (card) => card.hasAttribute("data-excluded"),
+    });
+    try {
+      expect(await getFilterContext()).toMatchObject({
+        metricSampleCount: 4,
+        metricCounts: [100, 200],
+        metricCreatedAtMs: [1000, 2000],
+        metricContextTruncated: false,
+      });
     } finally {
       runtime.dispose();
     }

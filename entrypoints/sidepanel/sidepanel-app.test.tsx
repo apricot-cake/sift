@@ -27,6 +27,7 @@ function context(site: FilterContextResponse["site"]): FilterContextResponse {
     timelineAvailable: true,
     filteringEnabled: false,
     continuousLoadingWarning: false,
+    metricSampleCount: 1,
     metricCounts: [10],
     metricCreatedAtMs: [],
   };
