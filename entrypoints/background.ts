@@ -48,6 +48,10 @@ async function readFilterContext(
 
 export default defineBackground(() => {
   if (__SIFT_LOCAL_DEPLOY__) {
+    Object.defineProperty(globalThis, "__SIFT_RUNNING_BUILD_ID__", {
+      value: __SIFT_BUILD_ID__,
+      configurable: true,
+    });
     startLocalBuildReload(__SIFT_BUILD_ID__);
   }
 
