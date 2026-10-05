@@ -15,6 +15,22 @@ function samePath(a: string, b: string, platform: NodeJS.Platform): boolean {
   return normalize(a) === normalize(b);
 }
 
+function containsPath(
+  parent: string,
+  child: string,
+  platform: NodeJS.Platform,
+): boolean {
+  const normalize = (value: string) =>
+    platform === "win32" ? value.toLowerCase() : value;
+  const relative = path.relative(normalize(parent), normalize(child));
+  return (
+    relative === "" ||
+    (!path.isAbsolute(relative) &&
+      relative !== ".." &&
+      !relative.startsWith(`..${path.sep}`))
+  );
+}
+
 function canonicalPath(value: string): string {
   const absolute = path.resolve(value);
   try {
@@ -40,6 +56,16 @@ export function assertDevBrowserProfile(
     repository,
   ];
   const canonicalTarget = canonicalPath(target);
+  for (const workingRoot of [repository, process.cwd()]) {
+    const canonicalRoot = canonicalPath(workingRoot);
+    if (
+      containsPath(canonicalRoot, canonicalTarget, platform) ||
+      containsPath(canonicalTarget, canonicalRoot, platform)
+    )
+      throw new Error(
+        `開発専用プロファイルを作業領域と重ねることはできません: ${target}`,
+      );
+  }
   if (
     protectedRoots.some(
       (root) =>

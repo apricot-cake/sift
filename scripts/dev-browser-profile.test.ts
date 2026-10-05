@@ -184,6 +184,43 @@ describe("開発専用 profile の境界", () => {
     expect(mkdir).not.toHaveBeenCalled();
     expect(chmod).not.toHaveBeenCalled();
   });
+
+  test("repository ancestor・.git・任意child を作成・chmod前に拒否する", () => {
+    const root = path.resolve(import.meta.dirname, "..");
+    const mkdir = vi.spyOn(fs, "mkdirSync");
+    const chmod = vi.spyOn(fs, "chmodSync");
+    for (const target of [
+      path.dirname(root),
+      path.join(root, ".git"),
+      path.join(root, "custom"),
+      path.join(root, ".git", "nested"),
+    ])
+      expect(() => secureDevBrowserProfile(target)).toThrow("作業領域");
+    expect(mkdir).not.toHaveBeenCalled();
+    expect(chmod).not.toHaveBeenCalled();
+  });
+  test("cwd の relative parent と child も拒否し、repo外のdedicated siblingは許容する", () => {
+    const parent = temporary();
+    const working = path.join(parent, "work");
+    fs.mkdirSync(working);
+    vi.spyOn(process, "cwd").mockReturnValue(working);
+    const mkdir = vi.spyOn(fs, "mkdirSync");
+    const chmod = vi.spyOn(fs, "chmodSync");
+    for (const target of [
+      "..",
+      path.join(working, ".git"),
+      path.join(working, "custom"),
+    ])
+      expect(() => secureDevBrowserProfile(target)).toThrow("作業領域");
+    expect(mkdir).not.toHaveBeenCalled();
+    expect(chmod).not.toHaveBeenCalled();
+    const dedicated = path.join(parent, "dedicated-profile");
+    expect(assertDevBrowserProfile(dedicated)).toBe(dedicated);
+  });
+  test("home直下の標準 .sift-ext-profile は維持する", () => {
+    const standard = path.join(os.homedir(), ".sift-ext-profile");
+    expect(assertDevBrowserProfile(standard)).toBe(standard);
+  });
   test
     .runIf(process.platform !== "win32")
     .each([0o755, 0o077, 0o000, undefined])(
