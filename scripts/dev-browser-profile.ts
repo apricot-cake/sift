@@ -15,6 +15,16 @@ function samePath(a: string, b: string, platform: NodeJS.Platform): boolean {
   return normalize(a) === normalize(b);
 }
 
+function canonicalPath(value: string): string {
+  const absolute = path.resolve(value);
+  try {
+    return fs.realpathSync.native(absolute);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return absolute;
+    throw error;
+  }
+}
+
 /** 読取経路でも通常 profile と既存 alias を拒否する。作成・権限変更は行わない。 */
 export function assertDevBrowserProfile(
   profile: string,
@@ -22,6 +32,22 @@ export function assertDevBrowserProfile(
   home = homedir(),
 ): string {
   const target = path.resolve(profile);
+  const repository = path.resolve(import.meta.dirname, "..");
+  const protectedRoots = [
+    path.parse(target).root,
+    path.resolve(home),
+    process.cwd(),
+    repository,
+  ];
+  const canonicalTarget = canonicalPath(target);
+  if (
+    protectedRoots.some(
+      (root) =>
+        samePath(target, path.resolve(root), platform) ||
+        samePath(canonicalTarget, canonicalPath(root), platform),
+    )
+  )
+    throw new Error(`開発専用プロファイル以外は使用できません: ${target}`);
   const parts = target.replace(/\\/g, "/").split("/");
   const names =
     platform === "win32" ? parts.map((part) => part.toLowerCase()) : parts;

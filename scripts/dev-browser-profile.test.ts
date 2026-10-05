@@ -138,6 +138,52 @@ describe("開発専用 profile の境界", () => {
     expect(() => secureDevBrowserProfile(alias)).toThrow("実体のある");
     expect(fs.statSync(actual).isDirectory()).toBe(true);
   });
+
+  test("home junction の実体も作成・chmod前に拒否する", () => {
+    const parent = temporary();
+    const actual = path.join(parent, "home-actual");
+    const alias = path.join(parent, "home-alias");
+    fs.mkdirSync(actual);
+    fs.symlinkSync(
+      actual,
+      alias,
+      process.platform === "win32" ? "junction" : "dir",
+    );
+    const mkdir = vi.spyOn(fs, "mkdirSync");
+    const chmod = vi.spyOn(fs, "chmodSync");
+    expect(() =>
+      secureDevBrowserProfile(actual, process.platform, alias),
+    ).toThrow("開発専用");
+    expect(mkdir).not.toHaveBeenCalled();
+    expect(chmod).not.toHaveBeenCalled();
+  });
+  test("cwd の relative dot と canonical alias を変更しない", () => {
+    const parent = temporary();
+    const actual = path.join(parent, "working-root");
+    const alias = path.join(parent, "working-alias");
+    fs.mkdirSync(actual);
+    fs.symlinkSync(
+      actual,
+      alias,
+      process.platform === "win32" ? "junction" : "dir",
+    );
+    vi.spyOn(process, "cwd").mockReturnValue(actual);
+    const mkdir = vi.spyOn(fs, "mkdirSync");
+    const chmod = vi.spyOn(fs, "chmodSync");
+    for (const target of [".", actual, alias])
+      expect(() => secureDevBrowserProfile(target)).toThrow("開発専用");
+    expect(mkdir).not.toHaveBeenCalled();
+    expect(chmod).not.toHaveBeenCalled();
+  });
+  test("repository root を作成・chmod前に拒否する", () => {
+    const mkdir = vi.spyOn(fs, "mkdirSync");
+    const chmod = vi.spyOn(fs, "chmodSync");
+    expect(() =>
+      secureDevBrowserProfile(path.resolve(import.meta.dirname, "..")),
+    ).toThrow("開発専用");
+    expect(mkdir).not.toHaveBeenCalled();
+    expect(chmod).not.toHaveBeenCalled();
+  });
   test
     .runIf(process.platform !== "win32")
     .each([0o755, 0o077, 0o000, undefined])(
