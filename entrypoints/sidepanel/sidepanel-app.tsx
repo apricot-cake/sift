@@ -660,7 +660,7 @@ export function SidepanelApp(): React.JSX.Element {
                         <PublicationPeriodPicker
                           settings={selectedSettings}
                           dates={activeContext?.metricCreatedAtMs ?? []}
-                          total={activeContext?.metricCounts.length ?? 0}
+                          total={activeContext?.metricSampleCount ?? 0}
                           truncated={
                             activeContext?.metricContextTruncated === true
                           }
