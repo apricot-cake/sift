@@ -86,9 +86,7 @@ describe("検証中だけ有効な開発用 Chrome", () => {
       expect.arrayContaining(["--headless", "--hide-scrollbars"]),
     );
     expect(options?.args).not.toContain("--hide-scrollbars");
-    expect(options?.args?.some((arg) => arg.startsWith("--window-size="))).toBe(
-      false,
-    );
+    expect(options?.args).toContain("--window-size=1280,720");
     expect(close).toHaveBeenCalledOnce();
   });
 
