@@ -38,16 +38,16 @@
     "@wxt-dev/i18n": "0.2.7",
     "class-variance-authority": "0.7.1",
     "clsx": "2.1.1",
-    "lucide-react": "1.48.0",
+    "lucide-react": "1.50.0",
     "react": "19.3.0",
     "react-dom": "19.3.0",
     "tailwind-merge": "3.7.0"
   },
   "devDependencies": {
-    "@biomejs/biome": "2.5.14",
+    "@biomejs/biome": "2.5.15",
     "@playwright/test": "1.63.0",
     "@tailwindcss/vite": "4.3.3",
-    "@types/node": "26.6.3",
+    "@types/node": "26.6.4",
     "@types/react": "19.3.0",
     "@types/react-dom": "19.3.0",
     "@wxt-dev/module-react": "1.2.2",
@@ -55,8 +55,8 @@
     "markdownlint-cli2": "0.23.3",
     "tailwindcss": "4.3.3",
     "typescript": "7.0.2",
-    "vite": "8.3.1",
-    "vitest": "5.0.2",
+    "vite": "8.3.2",
+    "vitest": "5.0.3",
     "wxt": "0.21.4"
   }
 }
