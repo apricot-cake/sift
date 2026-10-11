@@ -167,7 +167,7 @@ export default defineBackground(() => {
 
   browser.action.onClicked.addListener((tab) => {
     void openPanelForActiveTab(tab).catch((error: unknown) => {
-      console.error("Sift のサイドパネルを開けなかった。", error);
+      console.error("sift のサイドパネルを開けなかった。", error);
     });
   });
 

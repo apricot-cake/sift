@@ -35,7 +35,7 @@ const BLUESKY_SELECTORS = Object.freeze({
 const BLUESKY_POST_ID = /\/profile\/([^/]+)\/post\/([^/?#]+)/;
 const BLUESKY_FEED_END_TEXT = /^(?:End of feed|フィードの終わり)$/;
 
-// Sift が隠したカード自身は読み直す。サイトが退避した画面・タブは読まない。
+// sift が隠したカード自身は読み直す。サイトが退避した画面・タブは読まない。
 function hasHiddenAncestor(element: Element): boolean {
   let parent = element.parentElement;
   while (parent) {

@@ -1,4 +1,4 @@
-// ホストページの表示言語は読者の X / Bluesky の設定で決まり、Sift の UI 言語
+// ホストページの表示言語は読者の X / Bluesky の設定で決まり、sift の UI 言語
 // とは無関係に変わる（#82）。ここに載る綴りは、Node 24.16 / ICU 78.3 の
 // `Intl.NumberFormat(locale, { notation: "compact" })` を40ロケール分実測し、
 // 桁が言語をまたいで衝突しないと確認できたものだけ＝出典は Issue #82 の

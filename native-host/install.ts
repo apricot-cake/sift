@@ -61,7 +61,7 @@ export function installReloadHost({
 } = {}): { manifest: string; launcher: string; host: string } {
   if (process.platform !== "win32") {
     throw new Error(
-      "Sift のローカル自己リロードは Windows のみ対応しています。",
+      "sift のローカル自己リロードは Windows のみ対応しています。",
     );
   }
 
@@ -86,7 +86,7 @@ export function installReloadHost({
     `${JSON.stringify(
       {
         name: HOST_NAME,
-        description: "Sift local deployment reload host",
+        description: "sift local deployment reload host",
         path: launcher,
         type: "stdio",
         allowed_origins: [`chrome-extension://${EXTENSION_ID}/`],

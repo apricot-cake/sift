@@ -1,5 +1,5 @@
 // ローカル配備専用の Native Messaging Host。配備スタンプを監視し、新しい
-// build ID を接続中の Sift へ伝える。ストア提出物には含めない。
+// build ID を接続中の sift へ伝える。ストア提出物には含めない。
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";

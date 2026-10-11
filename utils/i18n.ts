@@ -10,7 +10,7 @@
 // `i18n.t()`＝素の browser.i18n.getMessage に、複数形分岐（0/1/n）と型を足した
 // もの。
 //
-// 既定のロケールは `en` なので、Sift がメッセージを持たない言語に設定された
+// 既定のロケールは `en` なので、sift がメッセージを持たない言語に設定された
 // ブラウザは英語を読む。
 import { type GeneratedI18nStructure, i18n } from "#i18n";
 

@@ -1,14 +1,14 @@
 <!-- markdownlint-disable MD025 -- 日本語版と英語版をそれぞれ独立した文書として記載する -->
 
-# Sift プライバシーポリシー
+# sift プライバシーポリシー
 
 最終更新日: 2026年10月3日
 
-Sift は、ユーザーがツールバーのアイコンを押した対応サイトで、画面に表示された投稿や動画を指定した条件で絞り込む Chrome 拡張機能です。
+sift は、ユーザーがツールバーのアイコンを押した対応サイトで、画面に表示された投稿や動画を指定した条件で絞り込む Chrome 拡張機能です。
 
 ## 扱うデータ
 
-Sift は、絞り込みに必要な範囲で、対応サイトの投稿や動画の反応数、再生数、公開時期、コンテンツタイプ、返信・引用・リポストの区分、投稿識別子などを読み取ります。ユーザーが Sift を起動した対応サイトのタブで処理し、絞り込みはブラウザー内で完結します。
+sift は、絞り込みに必要な範囲で、対応サイトの投稿や動画の反応数、再生数、公開時期、コンテンツタイプ、返信・引用・リポストの区分、投稿識別子などを読み取ります。ユーザーが sift を起動した対応サイトのタブで処理し、絞り込みはブラウザー内で完結します。
 
 対応ページの判定と接続維持のために、対象タブの URL を参照します。また、タブ識別子とサイトの origin（プロトコルとドメインなど）を、ブラウザーのセッション中だけ保存します。この接続情報は Chrome の同期対象にはしません。閲覧した投稿や動画の内容を永続保存せず、閲覧履歴を蓄積しません。
 
@@ -22,9 +22,9 @@ Bluesky の一覧判別にサイトの保存データを参照する旧ビルド
 
 ## データの送信と共有
 
-Sift は、閲覧中のページから読み取った情報を、開発者または第三者のサーバーへ送信しません。保存した絞り込み条件は、Chrome の同期が有効な場合に Google の同期機能で端末外へ送られます。開発者はこれらのデータを受信しません。解析、広告、トラッキングは行わず、データを販売しません。Chrome による設定の同期を除き、第三者へデータを共有しません。
+sift は、閲覧中のページから読み取った情報を、開発者または第三者のサーバーへ送信しません。保存した絞り込み条件は、Chrome の同期が有効な場合に Google の同期機能で端末外へ送られます。開発者はこれらのデータを受信しません。解析、広告、トラッキングは行わず、データを販売しません。Chrome による設定の同期を除き、第三者へデータを共有しません。
 
-Sift によるデータの利用は、Chrome ウェブストアのユーザーデータポリシーと Limited Use の要件に従い、画面上の投稿や動画を絞り込む機能の提供に限定します。
+sift によるデータの利用は、Chrome ウェブストアのユーザーデータポリシーと Limited Use の要件に従い、画面上の投稿や動画を絞り込む機能の提供に限定します。
 
 ## 設定の変更
 
@@ -36,31 +36,31 @@ Sift によるデータの利用は、Chrome ウェブストアのユーザー�
 
 ---
 
-# Sift Privacy Policy
+# sift Privacy Policy
 
 Last updated: October 3, 2026
 
-Sift is a Chrome extension that filters posts and videos displayed on supported websites according to conditions selected by the user.
+sift is a Chrome extension that filters posts and videos displayed on supported websites according to conditions selected by the user.
 
-## Data handled by Sift
+## Data handled by sift
 
-Sift reads the information needed to filter posts and videos on supported websites, including reaction counts, view counts, publication time, content type, whether an item is a reply, quote post, or repost, and post identifiers. Processing takes place in a supported website tab where the user has activated Sift. Filtering occurs entirely within the browser.
+sift reads the information needed to filter posts and videos on supported websites, including reaction counts, view counts, publication time, content type, whether an item is a reply, quote post, or repost, and post identifiers. Processing takes place in a supported website tab where the user has activated sift. Filtering occurs entirely within the browser.
 
-Sift reads the target tab's URL to identify supported pages and maintain its connection. It also stores the tab identifier and website origin (including the protocol and domain) for the browser session only. This connection information is not synchronized through Chrome. Sift does not persist viewed post or video content or accumulate browsing history.
+sift reads the target tab's URL to identify supported pages and maintain its connection. It also stores the tab identifier and website origin (including the protocol and domain) for the browser session only. This connection information is not synchronized through Chrome. sift does not persist viewed post or video content or accumulate browsing history.
 
-Sift reads the scroll position and interactions within the page to maintain the viewing position after filtering and continue loading items. It does not store or transmit an interaction history.
+sift reads the scroll position and interactions within the page to maintain the viewing position after filtering and continue loading items. It does not store or transmit an interaction history.
 
 Filtering preferences for each website are stored in Chrome sync storage. If Chrome sync is enabled, Chrome may synchronize these preferences between browsers signed in to the same account. The developer does not receive these preferences.
 
 ## Bluesky support in older builds
 
-Older builds that identify Bluesky lists using the website's stored data use the current account identifier (DID) and selected feed. Parsing the entire stored data object may also read email addresses and authentication tokens. Sift does not save this data in its own storage, use it for authentication, or transmit it externally. An upcoming update will identify lists from the page and remove this stored-data access.
+Older builds that identify Bluesky lists using the website's stored data use the current account identifier (DID) and selected feed. Parsing the entire stored data object may also read email addresses and authentication tokens. sift does not save this data in its own storage, use it for authentication, or transmit it externally. An upcoming update will identify lists from the page and remove this stored-data access.
 
 ## Data transmission and sharing
 
-Sift does not transmit information read from pages to the developer or to third-party servers. When Chrome sync is enabled, saved filtering preferences are sent off the device through Google's synchronization service. The developer does not receive this data. Sift does not use analytics, advertising, or tracking, and does not sell data. Except for preference synchronization by Chrome, Sift does not share data with third parties.
+sift does not transmit information read from pages to the developer or to third-party servers. When Chrome sync is enabled, saved filtering preferences are sent off the device through Google's synchronization service. The developer does not receive this data. sift does not use analytics, advertising, or tracking, and does not sell data. Except for preference synchronization by Chrome, sift does not share data with third parties.
 
-Sift's use of data complies with the Chrome Web Store User Data Policy, including the Limited Use requirements, and is limited to providing the user-facing filtering feature.
+sift's use of data complies with the Chrome Web Store User Data Policy, including the Limited Use requirements, and is limited to providing the user-facing filtering feature.
 
 ## Changing preferences
 

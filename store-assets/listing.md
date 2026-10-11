@@ -4,7 +4,7 @@
 
 ### 名前
 
-Sift
+sift
 
 ### 概要
 
@@ -12,7 +12,7 @@ X・Bluesky・YouTube・ニコニコ動画の投稿や動画を、いいね数�
 
 ### 詳細説明
 
-Sift は、対応サイトの一覧に表示された投稿や動画を、その場で絞り込む Chrome 拡張機能です。拡張機能のボタンからサイドパネルを開き、現在のサイトに適用する条件を設定します。
+sift は、対応サイトの一覧に表示された投稿や動画を、その場で絞り込む Chrome 拡張機能です。拡張機能のボタンからサイドパネルを開き、現在のサイトに適用する条件を設定します。
 
 - X と Bluesky: 最低いいね数、画像・動画の有無、返信・引用・リポストの除外
 - YouTube: 最低再生回数、人気の動画での再生回数の上限、公開からの期間、メンバー限定動画の除外
@@ -30,7 +30,7 @@ Sift は、対応サイトの一覧に表示された投稿や動画を、その
 
 ### Name
 
-Sift
+sift
 
 ### Summary
 
@@ -38,7 +38,7 @@ Filter posts and videos on X, Bluesky, YouTube, and Niconico by likes, views, ag
 
 ### Detailed description
 
-Sift filters posts and videos in supported website lists as you browse. Open the side panel from the extension button and choose the conditions for the current website.
+sift filters posts and videos in supported website lists as you browse. Open the side panel from the extension button and choose the conditions for the current website.
 
 - X and Bluesky: minimum likes, image or video content, and exclusions for replies, quote posts, and reposts
 - YouTube: minimum views, maximum views for popular videos, time since publication, and members-only video exclusion
@@ -46,7 +46,7 @@ Sift filters posts and videos in supported website lists as you browse. Open the
 - Applies the same conditions to newly loaded posts and videos
 - Saves separate preferences for each website
 
-All filtering happens within the browser. Sift does not transmit page data to external servers and does not use analytics, advertising, or tracking.
+All filtering happens within the browser. sift does not transmit page data to external servers and does not use analytics, advertising, or tracking.
 
 ### Category
 

@@ -47,9 +47,9 @@ export default defineConfig({
     // ブラウザがここに自分のロケールを持たないとき、どのメッセージファイルへ
     // 落ちるか。`en`。@wxt-dev/i18n が locales/en.yml から生成する。
     default_locale: "en",
-    // 説明文と違ってリテラルのまま＝名前はどの言語でも "Sift" で、
+    // 説明文と違ってリテラルのまま＝名前はどの言語でも "sift" で、
     // __MSG_extensionName__ はそう言うために間接の層を1つ増やすだけ。
-    name: "Sift",
+    name: "sift",
     description: "__MSG_extensionDescription__",
     permissions: [
       "storage",
@@ -58,7 +58,7 @@ export default defineConfig({
       ...(localDeploy ? (["nativeMessaging"] as const) : []),
     ],
     action: {
-      default_title: "Sift",
+      default_title: "sift",
     },
   },
   vite: () => ({

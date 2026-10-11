@@ -76,7 +76,7 @@ try {
       t.type === "service_worker" &&
       t.url === `chrome-extension://${ext}/background.js`,
   );
-  if (!wt) throw Error("Siftのバックグラウンドが見つかりません");
+  if (!wt) throw Error("siftのバックグラウンドが見つかりません");
   worker = await connect(wt.webSocketDebuggerUrl);
   // 既存の表示中パネルを閉じたり、接続先を変更したりしない。
   for (const t of (await targets()).filter(
@@ -88,7 +88,7 @@ try {
         'document.visibilityState === "visible"',
       )
     )
-      throw Error("既存のSiftパネルを閉じてから実行してください");
+      throw Error("既存のsiftパネルを閉じてから実行してください");
   }
   backup = await evaluate(worker, "chrome.storage.sync.get('settings')");
   fs.writeFileSync(
