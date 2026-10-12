@@ -28,6 +28,9 @@ describe("ページに対してアダプターを選ぶ", () => {
     expect(selectAdapter("bsky.app")).toBe(blueskyAdapter);
     expect(selectAdapter("www.youtube.com")).toBe(youtubeAdapter);
     expect(selectAdapter("www.nicovideo.jp")).toBe(niconicoAdapter);
+    expect(selectAdapter("official.fanbox.cc")).toBeNull();
+    expect(selectAdapter("fanbox.cc")).toBeNull();
+    expect(selectAdapter("notfanbox.cc")).toBeNull();
     expect(selectAdapter("soundcloud.com")).toBeNull();
     expect(selectAdapter("weibo.com")).toBeNull();
   });

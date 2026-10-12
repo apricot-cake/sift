@@ -19,7 +19,7 @@ export interface PageHealth {
 
 export interface PageHealthObservation {
   requiresMetrics?: boolean;
-  knownMetricOmissions?: number;
+  observesMetrics?: boolean;
   pageKey: string;
   support: PageSupport;
   empty: boolean;
@@ -48,14 +48,16 @@ export class PageHealthTracker {
       support,
       empty,
       requiresDates,
+      observesMetrics = true,
       sampledPosts,
       readableMetrics,
       readableDates,
     } = observation;
     const counts = { sampledPosts, readableMetrics, readableDates };
     const requiredIssue =
+      observesMetrics &&
       observation.requiresMetrics &&
-      readableMetrics + (observation.knownMetricOmissions ?? 0) < sampledPosts
+      readableMetrics < sampledPosts
         ? "metrics"
         : requiresDates && readableDates < sampledPosts
           ? "dates"
@@ -81,8 +83,7 @@ export class PageHealthTracker {
         ? "page"
         : sampledPosts === 0
           ? "posts"
-          : readableMetrics === 0 &&
-              observation.knownMetricOmissions !== sampledPosts
+          : observesMetrics && readableMetrics === 0
             ? "metrics"
             : requiresDates && readableDates === 0
               ? "dates"
@@ -102,7 +103,7 @@ export class PageHealthTracker {
     }
     this.failureKey = "";
     const partial =
-      readableMetrics < sampledPosts
+      observesMetrics && readableMetrics < sampledPosts
         ? "metrics"
         : requiresDates && readableDates < sampledPosts
           ? "dates"

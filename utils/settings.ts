@@ -2,7 +2,6 @@
 import type { ClassifyThresholds } from "./filter-core.ts";
 
 export type MediaMode = "any" | "images" | "video";
-export type PublicationAgeUnit = "hour" | "day" | "week" | "month" | "year";
 export type ReactionSiteSettingsKey = "x" | "bluesky";
 export type MetricSiteSettingsKey = "youtube" | "niconico";
 export type SiteSettingsKey = ReactionSiteSettingsKey | MetricSiteSettingsKey;
@@ -20,27 +19,15 @@ export interface ReactionSiteSettings {
 }
 
 export interface MetricSiteSettings {
-  readonly maxCountEnabled: boolean;
-  readonly maxCount: number;
+  readonly kind: "metric";
   readonly postedWithinDays?: number;
   readonly manualPeriodDays?: number;
-  readonly manualMinimum?: number;
-  readonly kind: "metric";
-  readonly minCountEnabled: boolean;
-  readonly minCount: number;
-  readonly hidePublishedWithinEnabled: boolean;
-  readonly hidePublishedWithinValue: number;
-  readonly hidePublishedWithinUnit: PublicationAgeUnit;
-}
-
-export interface YouTubeSiteSettings extends MetricSiteSettings {
-  readonly hideMembersOnly: boolean;
 }
 
 export interface SiteSettingsMap {
   readonly x: ReactionSiteSettings;
   readonly bluesky: ReactionSiteSettings;
-  readonly youtube: YouTubeSiteSettings;
+  readonly youtube: MetricSiteSettings;
   readonly niconico: MetricSiteSettings;
 }
 
@@ -65,36 +52,16 @@ function defaultReactionSiteSettings(
   });
 }
 
-function defaultMetricSiteSettings(
-  minCount: number,
-): Readonly<MetricSiteSettings> {
-  return Object.freeze({
-    kind: "metric",
-    maxCountEnabled: false,
-    maxCount: 1000000,
-    minCountEnabled: true,
-    minCount,
-    hidePublishedWithinEnabled: false,
-    hidePublishedWithinValue: 1,
-    hidePublishedWithinUnit: "year",
-  });
-}
-
-function defaultYouTubeSiteSettings(
-  minCount: number,
-): Readonly<YouTubeSiteSettings> {
-  return Object.freeze({
-    ...defaultMetricSiteSettings(minCount),
-    hideMembersOnly: false,
-  });
+function defaultMetricSiteSettings(): Readonly<MetricSiteSettings> {
+  return Object.freeze({ kind: "metric" });
 }
 
 export const defaults: Readonly<Settings> = Object.freeze({
   siteSettings: Object.freeze({
     x: defaultReactionSiteSettings(1000),
     bluesky: defaultReactionSiteSettings(1000),
-    youtube: defaultYouTubeSiteSettings(10000),
-    niconico: defaultMetricSiteSettings(1000),
+    youtube: defaultMetricSiteSettings(),
+    niconico: defaultMetricSiteSettings(),
   }),
 });
 
@@ -119,22 +86,6 @@ function objectSource(value: unknown): Record<string, unknown> {
 
 function normalizeMediaMode(value: unknown, fallback: MediaMode): MediaMode {
   if (value === "any" || value === "images" || value === "video") {
-    return value;
-  }
-  return fallback;
-}
-
-function normalizePublicationAgeUnit(
-  value: unknown,
-  fallback: PublicationAgeUnit,
-): PublicationAgeUnit {
-  if (
-    value === "hour" ||
-    value === "day" ||
-    value === "week" ||
-    value === "month" ||
-    value === "year"
-  ) {
     return value;
   }
   return fallback;
@@ -190,12 +141,10 @@ function normalizeReactionSiteSettings(
   };
 }
 
-function normalizeMetricSiteSettings(
-  value: unknown,
-  fallback: MetricSiteSettings,
-): MetricSiteSettings {
+function normalizeMetricSiteSettings(value: unknown): MetricSiteSettings {
   const source = objectSource(value);
   return {
+    kind: "metric",
     ...(source.postedWithinDays === undefined
       ? {}
       : {
@@ -206,57 +155,6 @@ function normalizeMetricSiteSettings(
       : {
           manualPeriodDays: clampInteger(source.manualPeriodDays, 30, 1, 36500),
         }),
-    ...(source.manualMinimum === undefined
-      ? {}
-      : {
-          manualMinimum: clampInteger(
-            source.manualMinimum,
-            fallback.minCount,
-            0,
-            1000000000,
-          ),
-        }),
-    kind: "metric",
-    minCountEnabled:
-      source.minCountEnabled === true
-        ? true
-        : source.minCountEnabled === false
-          ? false
-          : fallback.minCountEnabled,
-    minCount: clampInteger(source.minCount, fallback.minCount, 0, 1000000000),
-    maxCountEnabled:
-      typeof source.maxCountEnabled === "boolean"
-        ? source.maxCountEnabled
-        : fallback.maxCountEnabled,
-    maxCount: clampInteger(source.maxCount, fallback.maxCount, 0, 1000000000),
-    hidePublishedWithinEnabled:
-      typeof source.hidePublishedWithinEnabled === "boolean"
-        ? source.hidePublishedWithinEnabled
-        : fallback.hidePublishedWithinEnabled,
-    hidePublishedWithinValue: clampInteger(
-      source.hidePublishedWithinValue,
-      fallback.hidePublishedWithinValue,
-      1,
-      1000,
-    ),
-    hidePublishedWithinUnit: normalizePublicationAgeUnit(
-      source.hidePublishedWithinUnit,
-      fallback.hidePublishedWithinUnit,
-    ),
-  };
-}
-
-function normalizeYouTubeSiteSettings(
-  value: unknown,
-  fallback: YouTubeSiteSettings,
-): YouTubeSiteSettings {
-  const source = objectSource(value);
-  return {
-    ...normalizeMetricSiteSettings(value, fallback),
-    hideMembersOnly:
-      typeof source.hideMembersOnly === "boolean"
-        ? source.hideMembersOnly
-        : fallback.hideMembersOnly,
   };
 }
 
@@ -274,14 +172,8 @@ export function normalizeSettings(value: unknown): Settings {
   const siteSettings: SiteSettingsMap = {
     x: normalizeReactionFor("x"),
     bluesky: normalizeReactionFor("bluesky"),
-    youtube: normalizeYouTubeSiteSettings(
-      storedSiteSettings.youtube,
-      defaults.siteSettings.youtube,
-    ),
-    niconico: normalizeMetricSiteSettings(
-      storedSiteSettings.niconico,
-      defaults.siteSettings.niconico,
-    ),
+    youtube: normalizeMetricSiteSettings(storedSiteSettings.youtube),
+    niconico: normalizeMetricSiteSettings(storedSiteSettings.niconico),
   };
 
   return { siteSettings };
@@ -305,32 +197,10 @@ export function withSiteSettings(
   });
 }
 
-const HOURS_PER_PUBLICATION_AGE_UNIT: Readonly<
-  Record<PublicationAgeUnit, number>
-> = Object.freeze({
-  hour: 1,
-  day: 24,
-  week: 24 * 7,
-  month: 24 * 30,
-  year: 24 * 365,
-});
-
-export function publicationAgeInHours(
-  value: number,
-  unit: PublicationAgeUnit,
-): number {
-  return value * HOURS_PER_PUBLICATION_AGE_UNIT[unit];
-}
-
 export function thresholdsFor(
   settings: SiteSettings,
   sortOrder?: string,
-  supportsPublicationAge = true,
 ): ClassifyThresholds {
-  const usePublicationPeriod =
-    supportsPublicationAge &&
-    sortOrder === "popular" &&
-    "hideMembersOnly" in settings;
   if (settings.kind === "metric") {
     return {
       mediaEnabled: false,
@@ -338,32 +208,12 @@ export function thresholdsFor(
       hideQuotes: false,
       hideReposts: false,
       inclusion: {
-        ...(sortOrder === "popular" && settings.maxCountEnabled
-          ? { maximum: settings.maxCount }
-          : {}),
-        ...(usePublicationPeriod
-          ? {
-              maximumAgeHours: settings.postedWithinDays
-                ? settings.postedWithinDays * 24
-                : null,
-            }
-          : {}),
-        minimum:
-          !usePublicationPeriod && settings.minCountEnabled
-            ? settings.minCount
-            : null,
-        minimumAgeHours:
-          supportsPublicationAge &&
-          !usePublicationPeriod &&
-          settings.hidePublishedWithinEnabled
-            ? publicationAgeInHours(
-                settings.hidePublishedWithinValue,
-                settings.hidePublishedWithinUnit,
-              )
+        minimum: null,
+        maximumAgeHours:
+          sortOrder === "popular" && settings.postedWithinDays
+            ? settings.postedWithinDays * 24
             : null,
       },
-      hideMembersOnly:
-        "hideMembersOnly" in settings && settings.hideMembersOnly,
     };
   }
   return {
@@ -373,7 +223,6 @@ export function thresholdsFor(
     hideReposts: settings.hideReposts,
     inclusion: {
       minimum: settings.minReactionsEnabled ? settings.minReactions : null,
-      minimumAgeHours: null,
     },
   };
 }

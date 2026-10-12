@@ -80,6 +80,67 @@ afterEach(async () => {
   vi.useRealTimers();
 });
 describe("接続先と非同期応答", () => {
+  it.each([
+    ["youtube", "https://www.youtube.com/@Google/videos"],
+    ["youtube", "https://www.youtube.com/@Google/streams"],
+    [
+      "niconico",
+      "https://www.nicovideo.jp/user/53559097/video?sortKey=viewCount&sortOrder=desc",
+    ],
+    ["niconico", "https://www.nicovideo.jp/search/test?sort=v&order=d"],
+  ] as const)("%s の再生数順には投稿期間だけを表示する", async (site, url) => {
+    tab = { id: 1, url };
+    request = async () => ({
+      ...context(site),
+      sortOrder: "popular",
+    });
+    await mount();
+    expect(container.querySelector("[data-period-group]")).not.toBeNull();
+    expect(container.querySelector("[data-minimum-group]")).toBeNull();
+    expect(container.querySelector("[data-maximum-views]")).toBeNull();
+    expect(container.querySelector("[data-publication-age]")).toBeNull();
+    expect(container.querySelector("[data-filter-section]")).toBeNull();
+    expect(container.textContent).toContain(t("optionsPostingPeriod"));
+    expect(container.querySelectorAll("[role=switch]")).toHaveLength(0);
+  });
+  it.each(["youtube", "niconico"] as const)(
+    "%s の新しい順では操作項目を表示しない",
+    async (site) => {
+      tab = {
+        id: 1,
+        url:
+          site === "youtube"
+            ? "https://www.youtube.com/@Google/videos"
+            : "https://www.nicovideo.jp/user/53559097/video",
+      };
+      request = async () => ({
+        ...context(site),
+        sortOrder: "newest",
+        timelineAvailable: false,
+      });
+      await mount();
+      expect(container.querySelector("[data-minimum-group]")).toBeNull();
+      expect(container.querySelector("[data-period-group]")).toBeNull();
+      expect(container.textContent).toContain(
+        t("sidepanelYouTubeUnsupportedTitle"),
+      );
+    },
+  );
+  it("対応を外したFANBOXでは対象外表示にして再接続しない", async () => {
+    tab = { id: 1, url: "https://official.fanbox.cc/posts" };
+    const read = vi.fn(async () => null);
+    request = read;
+    const reconnect = vi
+      .spyOn(fakeBrowser.runtime, "sendMessage")
+      .mockResolvedValue(undefined);
+    await mount();
+    expect(container.textContent).toContain(t("sidepanelStatusUnavailable"));
+    expect(container.textContent).toContain(t("sidepanelSupportedSitesHint"));
+    expect(container.querySelector("[data-minimum-group]")).toBeNull();
+    expect(read).toHaveBeenCalledOnce();
+    expect(reconnect).not.toHaveBeenCalled();
+    expect(writes).toHaveLength(0);
+  });
   it("750msを超える正常応答を定期取得で破棄しない", async () => {
     const slow = deferred<FilterContextResponse>();
     const read = vi.fn(() => slow.promise);
@@ -107,7 +168,9 @@ describe("接続先と非同期応答", () => {
     old.resolve(context("youtube"));
     await flush();
     expect(writes).toHaveLength(1);
-    expect(writes[0]?.siteSettings.youtube.minCountEnabled).toBe(true);
+    expect(writes[0]?.siteSettings.youtube).toEqual(
+      defaults.siteSettings.youtube,
+    );
     expect(writes[0]?.siteSettings.x.minReactionsEnabled).toBe(false);
     expect(fakeBrowser.tabs.sendMessage).not.toHaveBeenCalledWith(1, {
       type: TIMELINE_CONTROL.setFiltering,
@@ -136,7 +199,9 @@ describe("接続先と非同期応答", () => {
     oldSettings.resolve(defaults);
     await flush();
     expect(writes).toHaveLength(1);
-    expect(writes[0]?.siteSettings.youtube.minCountEnabled).toBe(true);
+    expect(writes[0]?.siteSettings.youtube).toEqual(
+      defaults.siteSettings.youtube,
+    );
   });
   it("古い接続失敗を別タブへの切替後に再接続しない", async () => {
     const old = deferred<FilterContextResponse | null>();
@@ -165,7 +230,9 @@ describe("接続先と非同期応答", () => {
     old.resolve(context("niconico"));
     await flush();
     expect(writes).toHaveLength(1);
-    expect(writes[0]?.siteSettings.niconico.minCountEnabled).toBe(true);
+    expect(writes[0]?.siteSettings.niconico).toEqual(
+      defaults.siteSettings.niconico,
+    );
   });
   it("非表示中のタブ変更でも保存待ちの初期化を無効にする", async () => {
     const write = deferred<void>();
@@ -188,13 +255,15 @@ describe("接続先と非同期応答", () => {
   it.each(["unmount", "switch"])(
     "ユーザー設定の保存待ちで%sしても有効化を再送しない",
     async (change) => {
+      tab = { id: 1, url: "https://x.com/example" };
+      request = async () => context("x");
       await mount();
       const write = deferred<void>();
       vi.mocked(settingsItem.setValue).mockImplementationOnce(
         () => write.promise,
       );
       const toggle = container.querySelector<HTMLButtonElement>(
-        `button[aria-label="${t("optionsHideMembersOnly")}"]`,
+        `button[aria-label="${t("optionsHideReplies")}"]`,
       );
       expect(toggle).not.toBeNull();
       await act(async () => toggle?.click());

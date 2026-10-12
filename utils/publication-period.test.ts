@@ -13,9 +13,6 @@ describe("再生回数順の投稿期間", () => {
   const day = 86400000;
   const settings = {
     ...defaults.siteSettings.youtube,
-    minCountEnabled: true,
-    minCount: 1000000,
-    hidePublishedWithinEnabled: true,
     postedWithinDays: 30,
   };
   const post = {
@@ -26,44 +23,19 @@ describe("再生回数順の投稿期間", () => {
     isQuote: false,
     isRepost: false,
   };
-  it.each(["newest", "popular"])(
-    "ショートの%sでは日付不明でも最低再生回数を適用する",
-    (sort) => {
-      const supportsAge = youtubeAdapter.supportsPublicationAge({
+  it("投稿日時のないショートを再生数順でも対象にしない", () => {
+    const root = render(
+      '<ytd-browse><button role="tab" aria-selected="true">人気の動画</button><ytd-video-renderer></ytd-video-renderer></ytd-browse>',
+    );
+    expect(
+      youtubeAdapter.isTimelineAvailable(root, {
         pathname: "/@channel/shorts",
-      });
-      const thresholds = thresholdsFor(settings, sort, supportsAge);
-      expect(thresholds.inclusion).toEqual({
-        minimum: 1000000,
-        minimumAgeHours: null,
-      });
-      expect(
-        classifyPost({ ...post, createdAtMs: NaN }, thresholds, now).state,
-      ).toBe("hidden");
-      expect(
-        classifyPost(
-          { ...post, metricCount: 1000000, createdAtMs: NaN },
-          thresholds,
-          now,
-        ).state,
-      ).toBe("matched");
-      expect(
-        thresholdsFor(
-          { ...settings, minCountEnabled: false },
-          sort,
-          supportsAge,
-        ).inclusion.minimum,
-      ).toBeNull();
-      expect(
-        youtubeAdapter.supportsPublicationAge({ pathname: "/@channel/videos" }),
-      ).toBe(true);
-      expect(
-        youtubeAdapter.supportsPublicationAge({
-          pathname: "/@channel/streams",
-        }),
-      ).toBe(true);
-    },
-  );
+      }),
+    ).toBe(false);
+    expect(
+      youtubeAdapter.readPageSupport(root, { pathname: "/@channel/shorts" }),
+    ).toBe("unsupported");
+  });
   it("期間の境界を含め、古い動画を除外する", () => {
     const thresholds = thresholdsFor(settings, "popular");
     expect(classifyPost(post, thresholds, now).state).toBe("matched");
@@ -84,14 +56,14 @@ describe("再生回数順の投稿期間", () => {
       ).state,
     ).toBe("visible");
   });
-  it("並び順が戻ると従来条件へ戻り、期間条件は適用しない", () => {
+  it("再生数順から戻ると投稿期間を適用しない", () => {
     expect(thresholdsFor(settings, "newest").inclusion).toEqual({
-      minimum: 1000000,
-      minimumAgeHours: 8760,
+      minimum: null,
+      maximumAgeHours: null,
     });
     expect(
       thresholdsFor({ ...settings, postedWithinDays: 0 }, "popular").inclusion,
-    ).toEqual({ minimum: null, minimumAgeHours: null, maximumAgeHours: null });
+    ).toEqual({ minimum: null, maximumAgeHours: null });
   });
   it("件数を同じ境界で計算し、0件の候補も固定で残す", () => {
     expect(
@@ -137,7 +109,7 @@ describe("再生回数順の投稿期間", () => {
         render(
           "<ytd-browse><yt-chip-cloud-chip-renderer selected>Popular</yt-chip-cloud-chip-renderer></ytd-browse>",
         ),
-        { pathname: "/@Google/shorts" },
+        { pathname: "/@Google/videos" },
       ),
     ).toBe("popular");
     expect(

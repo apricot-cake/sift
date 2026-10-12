@@ -1,7 +1,7 @@
 {
   "schema": 1,
-  "caseId": "niconico-videos",
-  "route": "/user/129217273/video",
+  "caseId": "niconico-period-representative",
+  "route": "/user/53559097/video?sortKey=viewCount&sortOrder=desc",
   "regions": {
     "sort": [
       {
@@ -27,11 +27,6 @@
             ]
           }
         ]
-      }
-    ],
-    "metric": [
-      {
-        "tag": "div"
       }
     ]
   }

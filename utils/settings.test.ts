@@ -2,42 +2,60 @@ import { describe, expect, it } from "vitest";
 import {
   defaults,
   normalizeSettings,
-  publicationAgeInHours,
   settingsFor,
   thresholdsFor,
   withSiteSettings,
 } from "./settings.ts";
 
 describe("normalizeSettings", () => {
-  it("旧設定では再生回数の上限を無効にし、保存値を正規化する", () => {
-    const base = normalizeSettings({});
-    expect(base.siteSettings.youtube.maxCountEnabled).toBe(false);
-    expect(base.siteSettings.niconico.maxCountEnabled).toBe(false);
-    const saved = normalizeSettings({
+  it("対応を外したサイトの保存値を除外し、他サイトの値を維持する", () => {
+    const settings = normalizeSettings({
       siteSettings: {
-        youtube: { maxCountEnabled: true, maxCount: "12345" },
-        niconico: { maxCountEnabled: "true", maxCount: -1 },
+        x: { manualMinimum: 234, minReactions: 123 },
+        fanbox: { kind: "likes", minReactions: 100 },
       },
     });
-    expect(saved.siteSettings.youtube).toMatchObject({
-      maxCountEnabled: true,
-      maxCount: 12345,
+    expect(Object.keys(settings.siteSettings)).toEqual([
+      "x",
+      "bluesky",
+      "youtube",
+      "niconico",
+    ]);
+    expect(settings.siteSettings.x).toMatchObject({
+      manualMinimum: 234,
+      minReactions: 123,
     });
-    expect(saved.siteSettings.niconico).toMatchObject({
-      maxCountEnabled: false,
-      maxCount: 0,
-    });
-    expect(normalizeSettings(saved)).toEqual(saved);
-    expect(
-      normalizeSettings({ siteSettings: { youtube: { maxCount: Infinity } } })
-        .siteSettings.youtube.maxCount,
-    ).toBe(1000000);
-    expect(
-      normalizeSettings({ siteSettings: { youtube: { maxCount: 2000000000 } } })
-        .siteSettings.youtube.maxCount,
-    ).toBe(1000000000);
+    expect(normalizeSettings(settings)).toEqual(settings);
   });
-  it.each(["x", "bluesky", "youtube", "niconico"] as const)(
+  it.each(["youtube", "niconico"] as const)(
+    "%s は旧再生数・新しい動画除外・メンバー限定設定を捨て、投稿期間だけを保存する",
+    (site) => {
+      const saved = normalizeSettings({
+        siteSettings: {
+          [site]: {
+            maxCountEnabled: true,
+            maxCount: 12345,
+            minCountEnabled: true,
+            minCount: 999999,
+            manualMinimum: 42,
+            hidePublishedWithinEnabled: true,
+            hidePublishedWithinValue: 2,
+            hidePublishedWithinUnit: "year",
+            hideMembersOnly: true,
+            postedWithinDays: "365",
+            manualPeriodDays: "42",
+          },
+        },
+      });
+      expect(saved.siteSettings[site]).toEqual({
+        kind: "metric",
+        postedWithinDays: 365,
+        manualPeriodDays: 42,
+      });
+      expect(normalizeSettings(saved)).toEqual(saved);
+    },
+  );
+  it.each(["x", "bluesky"] as const)(
     "%s の手動値を候補の適用値と別に保持する",
     (site) => {
       const settings = normalizeSettings({
@@ -51,9 +69,7 @@ describe("normalizeSettings", () => {
       });
       const stored = settingsFor(settings, site);
       expect(stored.manualMinimum).toBe(12345);
-      expect(
-        stored.kind === "metric" ? stored.minCount : stored.minReactions,
-      ).toBe(50000);
+      expect(stored.minReactions).toBe(50000);
       expect(settingsFor(normalizeSettings(settings), site).manualMinimum).toBe(
         12345,
       );
@@ -73,14 +89,8 @@ describe("normalizeSettings", () => {
       minReactions: 1000,
     });
     expect(defaults.siteSettings.bluesky.minReactions).toBe(1000);
-    expect(defaults.siteSettings.youtube).toMatchObject({
-      minCount: 10000,
-      hidePublishedWithinEnabled: false,
-      hidePublishedWithinValue: 1,
-      hidePublishedWithinUnit: "year",
-      hideMembersOnly: false,
-    });
-    expect(defaults.siteSettings.niconico.minCount).toBe(1000);
+    expect(defaults.siteSettings.youtube).toEqual({ kind: "metric" });
+    expect(defaults.siteSettings.niconico).toEqual({ kind: "metric" });
   });
 
   it("メディア条件は無効で、オンにしたときはメディアありを既定にする", () => {
@@ -140,11 +150,11 @@ describe("normalizeSettings", () => {
     const base = normalizeSettings({});
     const changed = withSiteSettings(base, "youtube", {
       ...settingsFor(base, "youtube"),
-      minCount: 20000,
+      postedWithinDays: 365,
     });
 
     expect(changed.siteSettings.youtube).toMatchObject({
-      minCount: 20000,
+      postedWithinDays: 365,
     });
     expect(changed.siteSettings.x).toEqual(base.siteSettings.x);
     expect(changed.siteSettings.niconico).toEqual(base.siteSettings.niconico);
@@ -187,9 +197,7 @@ describe("normalizeSettings", () => {
     expect("periodMode" in settings.siteSettings.x).toBe(false);
     expect("periodValue" in settings.siteSettings.x).toBe(false);
     expect("periodUnit" in settings.siteSettings.x).toBe(false);
-    expect(settings.siteSettings.youtube.hidePublishedWithinEnabled).toBe(
-      false,
-    );
+    expect(settings.siteSettings.youtube).toEqual({ kind: "metric" });
   });
 
   it("旧形式の公開時期設定を有効な新しい動画の除外へ移行しない", () => {
@@ -203,49 +211,34 @@ describe("normalizeSettings", () => {
       },
     });
 
-    expect(settings.siteSettings.youtube).toMatchObject({
-      hidePublishedWithinEnabled: false,
-      hidePublishedWithinValue: 1,
-      hidePublishedWithinUnit: "year",
-      hideMembersOnly: false,
-    });
+    expect(settings.siteSettings.youtube).toEqual({ kind: "metric" });
     expect("publishedWithinEnabled" in settings.siteSettings.youtube).toBe(
       false,
     );
   });
 });
 
-describe("publicationAgeInHours", () => {
-  it("各単位を時間へ換算する", () => {
-    expect(publicationAgeInHours(2, "hour")).toBe(2);
-    expect(publicationAgeInHours(2, "day")).toBe(48);
-    expect(publicationAgeInHours(2, "week")).toBe(336);
-    expect(publicationAgeInHours(2, "month")).toBe(1440);
-    expect(publicationAgeInHours(2, "year")).toBe(17520);
-  });
-});
-
 describe("thresholdsFor", () => {
   it.each(["youtube", "niconico"] as const)(
-    "%s の上限は再生数順でだけ適用する",
+    "%s は再生数順で投稿期間だけを適用する",
     (site) => {
       const settings = normalizeSettings({
         siteSettings: {
           [site]: {
+            minCountEnabled: true,
+            minCount: 10000,
             maxCountEnabled: true,
-            maxCount: 12345,
-            minCountEnabled: false,
+            maxCount: 100,
             hidePublishedWithinEnabled: true,
-            hidePublishedWithinValue: 2,
-            hidePublishedWithinUnit: "day",
+            hideMembersOnly: true,
+            postedWithinDays: 30,
           },
         },
       }).siteSettings[site];
-      expect(thresholdsFor(settings, "popular").inclusion.maximum).toBe(12345);
-      expect(
-        thresholdsFor({ ...settings, maxCountEnabled: false }, "popular")
-          .inclusion.maximum,
-      ).toBeUndefined();
+      expect(thresholdsFor(settings, "popular").inclusion).toEqual({
+        minimum: null,
+        maximumAgeHours: 720,
+      });
       for (const sort of [
         "newest",
         "default",
@@ -253,13 +246,14 @@ describe("thresholdsFor", () => {
         "unknown",
         undefined,
       ])
-        expect(thresholdsFor(settings, sort).inclusion.maximum).toBeUndefined();
-      expect(thresholdsFor(settings, "popular").inclusion.minimumAgeHours).toBe(
-        site === "niconico" ? 48 : null,
-      );
-      expect(thresholdsFor(settings, "popular", false).inclusion.maximum).toBe(
-        12345,
-      );
+        expect(thresholdsFor(settings, sort).inclusion).toEqual({
+          minimum: null,
+          maximumAgeHours: null,
+        });
+      expect(
+        thresholdsFor({ ...settings, postedWithinDays: 0 }, "popular").inclusion
+          .maximumAgeHours,
+      ).toBeNull();
     },
   );
   it("選択したサイトの設定から反応数の判定条件を作る", () => {
@@ -280,34 +274,7 @@ describe("thresholdsFor", () => {
       mediaEnabled: false,
       inclusion: {
         minimum: 25,
-        minimumAgeHours: null,
       },
-    });
-  });
-
-  it("再生数の判定条件を作る", () => {
-    const stored = normalizeSettings({
-      siteSettings: {
-        youtube: {
-          minCount: 20000,
-          minCountEnabled: true,
-          hidePublishedWithinEnabled: true,
-          hidePublishedWithinValue: 2,
-          hidePublishedWithinUnit: "week",
-        },
-      },
-    });
-
-    expect(thresholdsFor(stored.siteSettings.youtube)).toEqual({
-      hideReplies: false,
-      hideQuotes: false,
-      hideReposts: false,
-      mediaEnabled: false,
-      inclusion: {
-        minimum: 20000,
-        minimumAgeHours: 336,
-      },
-      hideMembersOnly: false,
     });
   });
 
@@ -322,7 +289,6 @@ describe("thresholdsFor", () => {
 
     expect(thresholdsFor(stored.siteSettings.x).inclusion).toEqual({
       minimum: null,
-      minimumAgeHours: null,
     });
   });
 });

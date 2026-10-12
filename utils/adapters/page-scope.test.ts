@@ -7,17 +7,17 @@ import { readYouTubeSortOrder, youtubeAdapter } from "./youtube.ts";
 
 const cards = `<article data-testid="tweet"></article>
   <div data-testid="feedItem-by-test"><button data-testid="likeBtn"></button></div>
-  <ytd-browse><button role="tab" aria-selected="true">新しい順</button><ytd-video-renderer></ytd-video-renderer></ytd-browse>
+  <ytd-browse><button role="tab" aria-selected="true">人気の動画</button><ytd-video-renderer></ytd-video-renderer></ytd-browse>
   <article data-video-id="sm123"><a href="/watch/sm123">動画</a></article>`;
 
-describe.each(["videos", "shorts", "streams"])("YouTube %s の並び順", (tab) => {
+describe.each(["videos", "streams"])("YouTube %s の並び順", (tab) => {
   it("並び順欄のない読み込み済みグリッドは通常表示として扱う", () => {
     const root = render(
       `<ytd-browse><button role="tab" aria-selected="true">動画</button><ytd-rich-grid-renderer><div id="header"></div><ytd-rich-item-renderer><yt-lockup-view-model></yt-lockup-view-model></ytd-rich-item-renderer></ytd-rich-grid-renderer></ytd-browse>`,
     );
     const page = { pathname: `/@example/${tab}` };
     expect(readYouTubeSortOrder(root, page)).toBe("default");
-    expect(youtubeAdapter.isTimelineAvailable(root, page)).toBe(true);
+    expect(youtubeAdapter.isTimelineAvailable(root, page)).toBe(false);
   });
   it.each([
     '<div id="header"></div>',
@@ -33,9 +33,9 @@ describe.each(["videos", "shorts", "streams"])("YouTube %s の並び順", (tab) 
     );
   });
   it.each([
-    ["新しい順", "newest", true],
+    ["新しい順", "newest", false],
     ["人気の動画", "popular", true],
-    ["Latest", "newest", true],
+    ["Latest", "newest", false],
     ["Popular", "popular", true],
     ["古い順", "unknown", false],
     ["Oldest", "unknown", false],
@@ -53,19 +53,16 @@ describe.each(["videos", "shorts", "streams"])("YouTube %s の並び順", (tab) 
     expect(readYouTubeSortOrder(root, page)).toBe(order);
     expect(youtubeAdapter.isTimelineAvailable(root, page)).toBe(available);
   });
-  it.each(["新しい順", "人気の動画", "Latest", "Popular"])(
-    "%s は対象",
-    (label) => {
-      const root = render(
-        `<ytd-browse><button role="tab" aria-selected="true">${label}</button><ytd-video-renderer></ytd-video-renderer></ytd-browse>`,
-      );
-      expect(
-        youtubeAdapter.isTimelineAvailable(root, {
-          pathname: `/@example/${tab}`,
-        }),
-      ).toBe(true);
-    },
-  );
+  it.each(["人気の動画", "Popular"])("%s は対象", (label) => {
+    const root = render(
+      `<ytd-browse><button role="tab" aria-selected="true">${label}</button><ytd-video-renderer></ytd-video-renderer></ytd-browse>`,
+    );
+    expect(
+      youtubeAdapter.isTimelineAvailable(root, {
+        pathname: `/@example/${tab}`,
+      }),
+    ).toBe(true);
+  });
   it.each(["古い順", "Oldest", "", "不明"])(
     "%s はカードが残っていても対象外",
     (label) => {
@@ -125,16 +122,13 @@ describe.each([
   },
   {
     adapter: youtubeAdapter,
-    accepted: [
-      "/@example/videos",
-      "/@example/shorts",
-      "/@example/streams",
-      "/@example/search?query=test",
-    ],
+    accepted: ["/@example/videos", "/@example/streams"],
     rejected: [
       "/",
       "/@example",
       "/@example/featured",
+      "/@example/shorts",
+      "/@example/search?query=test",
       "/results?search_query=test",
       "/feed/subscriptions",
       "/watch?v=test",
@@ -144,12 +138,17 @@ describe.each([
   {
     adapter: niconicoAdapter,
     accepted: [
-      "/user/123/video",
-      "/user/123/video?sortKey=registeredAt&sortOrder=desc",
       "/user/123/video?sortKey=viewCount&sortOrder=desc",
+      "/search/test?sort=v&order=d",
     ],
     rejected: [
-      "/search/test?sort=v&order=d",
+      "/search/test",
+      "/user/123/video",
+      "/user/123/video?sortKey=registeredAt&sortOrder=desc",
+      "/search/test?sort=f&order=d",
+      "/search/test?sort=h&order=d",
+      "/search/test?sort=f&order=a",
+      "/search/test?sort=v&order=a",
       "/tag/test?sort=f&order=d",
       "/user/123/mylist/456?sortKey=viewCount&sortOrder=desc",
       "/user/123/video?sortKey=viewCount&sortOrder=asc",

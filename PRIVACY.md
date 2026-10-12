@@ -2,13 +2,13 @@
 
 # sift プライバシーポリシー
 
-最終更新日: 2026年10月3日
+最終更新日: 2026年10月10日
 
 sift は、ユーザーがツールバーのアイコンを押した対応サイトで、画面に表示された投稿や動画を指定した条件で絞り込む Chrome 拡張機能です。
 
 ## 扱うデータ
 
-sift は、絞り込みに必要な範囲で、対応サイトの投稿や動画の反応数、再生数、公開時期、コンテンツタイプ、返信・引用・リポストの区分、投稿識別子などを読み取ります。ユーザーが sift を起動した対応サイトのタブで処理し、絞り込みはブラウザー内で完結します。
+sift は、絞り込みに必要な範囲で、対応サイトの投稿や動画のいいね数、公開時期、コンテンツタイプ、返信・引用・リポストの区分、投稿識別子などを読み取ります。ユーザーが sift を起動した対応サイトのタブで処理し、絞り込みはブラウザー内で完結します。
 
 対応ページの判定と接続維持のために、対象タブの URL を参照します。また、タブ識別子とサイトの origin（プロトコルとドメインなど）を、ブラウザーのセッション中だけ保存します。この接続情報は Chrome の同期対象にはしません。閲覧した投稿や動画の内容を永続保存せず、閲覧履歴を蓄積しません。
 
@@ -38,13 +38,13 @@ sift によるデータの利用は、Chrome ウェブストアのユーザー�
 
 # sift Privacy Policy
 
-Last updated: October 3, 2026
+Last updated: October 10, 2026
 
 sift is a Chrome extension that filters posts and videos displayed on supported websites according to conditions selected by the user.
 
 ## Data handled by sift
 
-sift reads the information needed to filter posts and videos on supported websites, including reaction counts, view counts, publication time, content type, whether an item is a reply, quote post, or repost, and post identifiers. Processing takes place in a supported website tab where the user has activated sift. Filtering occurs entirely within the browser.
+sift reads the information needed to filter posts and videos on supported websites, including like counts, publication time, content type, whether an item is a reply, quote post, or repost, and post identifiers. Processing takes place in a supported website tab where the user has activated sift. Filtering occurs entirely within the browser.
 
 sift reads the target tab's URL to identify supported pages and maintain its connection. It also stores the tab identifier and website origin (including the protocol and domain) for the browser session only. This connection information is not synchronized through Chrome. sift does not persist viewed post or video content or accumulate browsing history.
 

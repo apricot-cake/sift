@@ -30,7 +30,7 @@ function classifyWith(
   });
   return classifyPost(
     { ...BASE_POST, ...post },
-    thresholdsFor(settingsFor(settings, site)),
+    thresholdsFor(settingsFor(settings, site), "popular"),
     NOW,
   );
 }
@@ -89,7 +89,7 @@ const PAGE_CASES: readonly PageCase[] = [
     accepted: {
       pathname: "/@sift/videos",
       markup:
-        '<ytd-browse><button role="tab" aria-selected="true">新しい順</button></ytd-browse><ytd-video-renderer></ytd-video-renderer>',
+        '<ytd-browse><button role="tab" aria-selected="true">人気の動画</button></ytd-browse><ytd-video-renderer></ytd-video-renderer>',
     },
     rejected: {
       pathname: "/watch",
@@ -127,7 +127,7 @@ describe("サイトと対象ページ", () => {
       expect(
         adapter.isTimelineAvailable(render(accepted.markup), {
           pathname: accepted.pathname,
-          search: "?sort=v&order=d",
+          search: "?sortKey=viewCount&sortOrder=desc&sort=v&order=d",
         }),
       ).toBe(true);
       expect(
@@ -178,34 +178,29 @@ describe("サイト別の設定項目", () => {
   );
 
   it.each(["youtube", "niconico"] as const)(
-    "%s の再生数・公開時期設定を判定へ反映する",
+    "%s の投稿期間だけを判定へ反映し、旧再生数・新しい動画除外設定を捨てる",
     (site) => {
-      expect(classifyWith(site, { minCount: 1_001 })).toMatchObject({
-        reason: "below-threshold",
+      expect(classifyWith(site, { postedWithinDays: 1 })).toMatchObject({
+        reason: "older-than-period",
       });
-      expect(classifyWith(site, { minCountEnabled: false })).toMatchObject({
+      expect(classifyWith(site, { postedWithinDays: 2 })).toMatchObject({
+        reason: "filter-match",
+      });
+      expect(classifyWith(site, { postedWithinDays: 0 })).toMatchObject({
         reason: "no-inclusion-filter",
       });
       expect(
-        classifyWith(
-          site,
-          {
-            minCountEnabled: false,
-            hidePublishedWithinEnabled: true,
-            hidePublishedWithinValue: 2,
-            hidePublishedWithinUnit: "day",
-          },
-          { createdAtMs: NOW - 47 * 3_600_000 },
-        ),
-      ).toMatchObject({ reason: "newer-than-period" });
-      expect(
         classifyWith(site, {
-          minCountEnabled: false,
+          minCount: 1001,
+          minCountEnabled: true,
+          maxCount: 0,
+          maxCountEnabled: true,
           hidePublishedWithinEnabled: true,
-          hidePublishedWithinValue: 2,
+          hidePublishedWithinValue: 365,
           hidePublishedWithinUnit: "day",
+          hideMembersOnly: true,
         }),
-      ).toMatchObject({ reason: "filter-match" });
+      ).toMatchObject({ reason: "no-inclusion-filter" });
     },
   );
 });

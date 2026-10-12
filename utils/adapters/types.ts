@@ -21,7 +21,6 @@ export interface ServiceAdapter {
     root: ParentNode,
     page: Pick<Location, "pathname" | "search">,
   ): string;
-  supportsPublicationAge?(page: Pick<Location, "pathname">): boolean;
   readSortOrder?(
     root: ParentNode,
     page: Pick<Location, "pathname" | "search">,
@@ -57,14 +56,11 @@ export interface ServiceAdapter {
     root: ParentNode,
     page: Pick<Location, "pathname" | "search">,
   ): string | null;
-  // サービスが一覧で公開している主指標。X / Bluesky は反応数、動画サービスは
-  // 再生回数を返す。
-  readMetricCount(postCard: Element): number;
+  // 反応数で絞り込むサービスだけが実装する。
+  readMetricCount?(postCard: Element): number;
   // 公開時刻を一覧から読めるサービスだけが実装する。読めない場合は NaN。
   readCreatedAt?(postCard: Element): number;
   readMedia(postCard: Element): PostMedia;
-  // 画面上のメンバー限定バッジを読めるサービスだけが実装する。
-  readIsMembersOnly?(postCard: Element): boolean;
   // 返信・引用の区別を画面に持つサービスだけが実装する。
   readIsReply?(postCard: Element): boolean;
   readIsQuote?(postCard: Element): boolean;

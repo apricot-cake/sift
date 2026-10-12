@@ -53,15 +53,6 @@
         ]
       }
     ],
-    "metric": [
-      {
-        "tag": "span",
-        "role": "text",
-        "attributes": [
-          "aria-label"
-        ]
-      }
-    ],
     "date": [
       {
         "tag": "span",

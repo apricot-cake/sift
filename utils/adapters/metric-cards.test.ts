@@ -20,7 +20,7 @@ describe("上限付きの集計対象", () => {
   it.each([
     [xAdapter, "x-following"],
     [blueskyAdapter, "bluesky-home"],
-    [youtubeAdapter, "youtube-channel-search"],
+    [youtubeAdapter, "youtube-videos-popular"],
     [niconicoAdapter, "niconico-search"],
   ] as const)("%sの通常のカード集合を維持する", (adapter, fixture) => {
     const page = root(

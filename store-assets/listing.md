@@ -8,19 +8,23 @@ sift
 
 ### 概要
 
-X・Bluesky・YouTube・ニコニコ動画の投稿や動画を、いいね数・再生数・公開からの期間・画像や動画の有無などで絞り込めます。
+X・Blueskyの投稿をいいね数などで、YouTube・ニコニコ動画の再生数順の一覧を投稿期間で絞り込めます。
 
 ### 詳細説明
 
 sift は、対応サイトの一覧に表示された投稿や動画を、その場で絞り込む Chrome 拡張機能です。拡張機能のボタンからサイドパネルを開き、現在のサイトに適用する条件を設定します。
 
 - X と Bluesky: 最低いいね数、画像・動画の有無、返信・引用・リポストの除外
-- YouTube: 最低再生回数、人気の動画での再生回数の上限、公開からの期間、メンバー限定動画の除外
-- ニコニコ動画: 最低再生回数、再生数が多い順での再生回数の上限、公開からの期間
+- YouTube: チャンネルの動画・配信の「人気の動画」を投稿期間で絞り込み
+- ニコニコ動画: 投稿動画一覧・キーワード検索の「再生数が多い順」を投稿期間で絞り込み
 - 新しく読み込まれた投稿や動画にも同じ条件を適用
 - サイトごとに条件を保存
 
-判定はブラウザー内で行います。閲覧中のページから読み取ったデータを外部へ送信せず、解析、広告、トラッキングも行いません。
+サイトの並び順は変更しません。YouTubeのショート・チャンネル内検索・人気順を確認できない一覧、ニコニコ動画の再生数が多い順以外は対象外です。
+
+判定はブラウザー内で行います。開発者へのデータ送信、解析、広告、トラッキングは行いません。
+
+掲載画像には『崩壊：スターレイル』公式X・YouTubeの投稿を使用しています。siftはHoYoverseの公式製品ではありません。
 
 ### カテゴリ
 
@@ -34,19 +38,21 @@ sift
 
 ### Summary
 
-Filter posts and videos on X, Bluesky, YouTube, and Niconico by likes, views, age, and image or video content.
+Filter X and Bluesky posts by likes and content type, and popular YouTube and Niconico videos by publication period.
 
 ### Detailed description
 
 sift filters posts and videos in supported website lists as you browse. Open the side panel from the extension button and choose the conditions for the current website.
 
 - X and Bluesky: minimum likes, image or video content, and exclusions for replies, quote posts, and reposts
-- YouTube: minimum views, maximum views for popular videos, time since publication, and members-only video exclusion
-- Niconico: minimum views, maximum views when sorted by most views, and time since publication
+- YouTube: publication period on a channel's Videos and Live tabs sorted by Popular
+- Niconico: publication period on uploaded videos and keyword search results sorted by most views
 - Applies the same conditions to newly loaded posts and videos
 - Saves separate preferences for each website
 
-All filtering happens within the browser. sift does not transmit page data to external servers and does not use analytics, advertising, or tracking.
+sift does not change the website's sort order. YouTube Shorts, channel search, and lists without a confirmed Popular order are unsupported. Niconico lists in other sort orders are also unsupported.
+
+All filtering happens within the browser. sift does not send data to the developer or use analytics, advertising, or tracking.
 
 ### Category
 
@@ -56,7 +62,7 @@ Productivity
 
 ### 単一用途
 
-対応サイトの画面に表示された投稿や動画を、ユーザーが指定した反応数、再生数、公開からの期間、コンテンツタイプで絞り込みます。
+対応サイトの画面に表示された投稿や動画を、ユーザーが指定したいいね数、投稿期間、コンテンツタイプなどで絞り込みます。
 
 ### 権限の理由
 

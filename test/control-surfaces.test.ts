@@ -9,14 +9,11 @@ function readEntrypoint(path: string): string {
 describe("抽出の操作入口", () => {
   it("最低値の候補は数値だけにし、件数と数値入力の単位は残す", () => {
     const panel = readEntrypoint("entrypoints/sidepanel/sidepanel-app.tsx");
-    for (const [locale, views, likes] of [
-      ["ja", "回", "いいね"],
-      ["en", " views", " likes"],
+    for (const [locale, likes] of [
+      ["ja", "いいね"],
+      ["en", " likes"],
     ]) {
       const messages = readEntrypoint(`locales/${locale}.yml`);
-      expect(messages).toContain(
-        `sidepanelMinimumSuggestionMinimumSuffix: "${views}"`,
-      );
       expect(messages).toContain(
         `sidepanelLikeSuggestionMinimumSuffix: "${likes}"`,
       );
@@ -32,7 +29,6 @@ describe("抽出の操作入口", () => {
     expect(options).not.toContain("SuggestionMinimumSuffix");
     expect(options).toContain('data-choice-count=""');
     expect(options).toContain("sidepanelLikeSuggestionCountSuffix");
-    expect(options).toContain("sidepanelMinimumSuggestionCountSuffix");
   });
   it("SNSの除外スイッチに表示ラベルと同じ名前を付ける", () => {
     const panel = readEntrypoint("entrypoints/sidepanel/sidepanel-app.tsx");
@@ -70,13 +66,12 @@ describe("抽出の操作入口", () => {
   });
   it("候補の選択は値と最低値トグルを同時に更新する", () => {
     const sidepanel = readEntrypoint("entrypoints/sidepanel/sidepanel-app.tsx");
-    expect(sidepanel).toMatch(/minCount: minimum,\s*minCountEnabled: true/);
     expect(sidepanel).toMatch(
       /minReactions: minimum,\s*minReactionsEnabled: true/,
     );
     expect(sidepanel).toContain("setManualMinimum(value, true)");
     expect(sidepanel).toContain(
-      "!manualActive && selectedSettings.minCountEnabled",
+      "!manualActive && selectedSettings.minReactionsEnabled",
     );
   });
   it("どのタブでもパネルを開き、対応サイトだけに処理を注入する", () => {
@@ -182,59 +177,6 @@ describe("抽出の操作入口", () => {
     expect(mediaSetting).not.toContain("<Switch");
   });
 
-  it("動画の公開時期は指定期間以内を非表示にする", () => {
-    const sidepanel = readEntrypoint("entrypoints/sidepanel/sidepanel-app.tsx");
-    const start = sidepanel.indexOf("function NewerVideosSetting");
-    const end = sidepanel.indexOf("function MediaSetting", start);
-    const periodSetting = sidepanel.slice(start, end);
-
-    expect(start).toBeGreaterThan(-1);
-    expect(periodSetting).toContain('t("optionsHidePublishedWithin")');
-    expect(periodSetting).toContain('className="w-14 px-2"');
-    expect(periodSetting).toContain('className="w-auto min-w-16 gap-1 px-2"');
-    const select = readEntrypoint(
-      "entrypoints/sidepanel/components/ui/select.tsx",
-    );
-    expect(select).toContain('className="size-4 shrink-0 opacity-50"');
-    expect(periodSetting).toContain('data-publication-age=""');
-    expect(periodSetting).toContain('data-publication-age-inputs=""');
-    expect(periodSetting.indexOf("<Switch")).toBeGreaterThan(
-      periodSetting.indexOf("<EditableNumberInput"),
-    );
-    const styles = readEntrypoint("entrypoints/sidepanel/style.css");
-    expect(styles).toMatch(
-      /\[data-publication-age\] > \[role="switch"\]\s*\{[^}]*grid-row: 1 \/ 3;[^}]*align-self: center;/,
-    );
-    expect(periodSetting).not.toContain("disabled={!enabled}");
-    expect(periodSetting).toContain(
-      "onChange(enabled, nextValue as PublicationAgeUnit)",
-    );
-    expect(periodSetting).toContain("<Switch");
-    expect(periodSetting).not.toContain('<SelectItem value="all">');
-  });
-
-  it("再生回数はラベルと回数の単位を表示する", () => {
-    const sidepanel = readEntrypoint("entrypoints/sidepanel/sidepanel-app.tsx");
-    expect(sidepanel).toContain('{t("optionsMinViews")}');
-    expect(
-      sidepanel.match(/label=\{t\("optionsManualMinimum"\)\}/g),
-    ).toHaveLength(2);
-    expect(
-      sidepanel.match(
-        /suffix=\{\s*t\(\s*"sidepanelMinimumSuggestionMinimumSuffix",?\s*\)\s*\}/g,
-      ),
-    ).toHaveLength(1);
-    expect(sidepanel).not.toContain("optionsViewsPrefix");
-  });
-
-  it("YouTubeだけでメンバー限定動画を除外できる", () => {
-    const sidepanel = readEntrypoint("entrypoints/sidepanel/sidepanel-app.tsx");
-
-    expect(sidepanel).toContain('t("optionsHideMembersOnly")');
-    expect(sidepanel).toContain('selectedSite === "youtube"');
-    expect(sidepanel).toContain("hideMembersOnly");
-  });
-
   it("サイドパネルは現在タブへ追従し、設定の操作入口を集約する", () => {
     const background = readEntrypoint("entrypoints/background.ts");
     const sidepanel = readEntrypoint("entrypoints/sidepanel/sidepanel-app.tsx");
@@ -284,10 +226,12 @@ describe("抽出の操作入口", () => {
 
   it("指定なし・候補・数値入力の順に並べ集計説明を末尾に置く", () => {
     const sidepanel = readEntrypoint("entrypoints/sidepanel/sidepanel-app.tsx");
-    expect(sidepanel.match(/<section data-minimum-group="">/g)).toHaveLength(2);
-    expect(sidepanel.match(/<\/MetricThresholdSuggestions>/g)).toHaveLength(2);
+    expect(sidepanel.match(/<section data-minimum-group="">/g)).toHaveLength(1);
+    expect(sidepanel.match(/<\/ReactionThresholdSuggestions>/g)).toHaveLength(
+      1,
+    );
     const suggestions = sidepanel.slice(
-      sidepanel.indexOf("function MetricThresholdSuggestions"),
+      sidepanel.indexOf("function ReactionThresholdSuggestions"),
       sidepanel.indexOf("function EditableNumberInput"),
     );
     expect(suggestions.indexOf("suggestions.map")).toBeLessThan(
@@ -321,7 +265,7 @@ describe("抽出の操作入口", () => {
     expect(group).not.toContain("<CardContent");
     expect(group).toContain("disabled={!filteringIsAvailable}");
     expect(group).not.toContain('t("optionsSectionDisplayConditions")');
-    expect(group.match(/t\("optionsSectionExclude"\)/g)).toHaveLength(2);
+    expect(group.match(/t\("optionsSectionExclude"\)/g)).toHaveLength(1);
     expect(group).not.toContain("data-master-filter");
     expect(group).not.toContain("sidepanelFiltering");
     expect(group).not.toContain("divide-y");

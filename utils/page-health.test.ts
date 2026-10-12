@@ -40,37 +40,34 @@ describe("ページ情報の健全性", () => {
       tracker.observe({ ...partial, pageKey: "/other" }, 500).warnPartial,
     ).toBe(false);
   });
-  it("既知の非公開指標では警告せず、期間指定は日付の欠損だけを警告する", () => {
+  it("投稿期間だけの動画では反応数を診断せず、日付の取得を診断する", () => {
     const tracker = new PageHealthTracker(100);
-    const known = {
+    const video = {
       ...good,
-      readableMetrics: 1,
-      knownMetricOmissions: 2,
-      requiresMetrics: true,
+      observesMetrics: false,
+      readableMetrics: 0,
+      readableDates: 3,
     };
-    tracker.observe(known, 0);
-    expect(tracker.observe(known, 1000).warnPartial).toBe(false);
-    const dates = {
-      ...good,
-      readableMetrics: 1,
-      readableDates: 2,
-      requiresDates: true,
-    };
-    expect(tracker.observe(dates, 1001).warnPartial).toBe(false);
-    expect(tracker.observe(dates, 1101).warnPartial).toBe(true);
-  });
-  it("全件が指標非公開の限定動画でも取得失敗にはせず欠損を報告する", () => {
-    const tracker = new PageHealthTracker(0);
-    expect(
-      tracker.observe({ ...good, readableMetrics: 0, knownMetricOmissions: 3 }),
-    ).toMatchObject({
-      state: "degraded",
-      issue: "metrics",
+    expect(tracker.observe(video, 0)).toMatchObject({
+      state: "ready",
       readableMetrics: 0,
     });
     expect(
-      tracker.observe({ ...good, readableMetrics: 0, knownMetricOmissions: 2 }),
-    ).toMatchObject({ state: "unreadable", issue: "metrics" });
+      tracker.observe({ ...video, requiresDates: true, readableDates: 0 }, 1),
+    ).toMatchObject({ state: "loading", issue: "dates" });
+    expect(
+      tracker.observe({ ...video, requiresDates: true, readableDates: 0 }, 101),
+    ).toMatchObject({ state: "unreadable", issue: "dates" });
+    const partial = { ...video, requiresDates: true, readableDates: 2 };
+    expect(tracker.observe(partial, 102)).toMatchObject({
+      state: "degraded",
+      issue: "dates",
+      warnPartial: true,
+    });
+    expect(tracker.observe(partial, 202).warnPartial).toBe(true);
+    expect(
+      tracker.observe({ ...partial, requiresDates: false }, 203),
+    ).toMatchObject({ state: "ready", warnPartial: false });
   });
   it("構造不明は対象外とせず、読み込み猶予後に失敗を報告する", () => {
     const tracker = new PageHealthTracker(100);

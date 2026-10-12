@@ -4,7 +4,7 @@ import { isNiconicoFilterPage, niconicoAdapter } from "./niconico.ts";
 
 describe("ニコニコ動画", () => {
   it.each([
-    ["", "newest"],
+    ["", "unknown"],
     ["?sortKey=viewCount&sortOrder=desc", "popular"],
     ["?sortKey=viewCount&sortOrder=asc", "unknown"],
     ["?sortKey=commentCount&sortOrder=desc", "unknown"],
@@ -63,8 +63,8 @@ describe("ニコニコ動画", () => {
     ).toBe(false);
   });
   it.each([
-    ["", true],
-    ["?sortKey=registeredAt&sortOrder=desc", true],
+    ["", false],
+    ["?sortKey=registeredAt&sortOrder=desc", false],
     ["?sortKey=viewCount&sortOrder=desc", true],
     ["?sortKey=registeredAt&sortOrder=asc", false],
     ["?sortKey=viewCount&sortOrder=asc", false],
@@ -98,16 +98,16 @@ describe("ニコニコ動画", () => {
     const card = cards[0];
     if (!card) throw new Error("動画カードが無い");
     expect(niconicoAdapter.readPostId(card)).toBe("sm46562085");
-    expect(niconicoAdapter.readMetricCount(card)).toBe(531);
     expect(niconicoAdapter.readCreatedAt(card)).toBe(
       Date.parse("2026/7/18 16:53"),
     );
   });
 
-  it("読み込み中や0件でも対応ページとして扱う", () => {
+  it("読み込み中や0件でも再生数順の対応ページとして扱う", () => {
     expect(
       niconicoAdapter.isTimelineAvailable(render(""), {
         pathname: "/user/123/video",
+        search: "?sortKey=viewCount&sortOrder=desc",
       }),
     ).toBe(true);
     expect(
@@ -117,7 +117,7 @@ describe("ニコニコ動画", () => {
     ).toBe(false);
     expect(isNiconicoFilterPage("/user/123/videos-other")).toBe(false);
   });
-  it("一覧カードの動画ID、再生数、公開時刻、タイトルを読む", () => {
+  it("一覧カードの動画ID、公開時刻、タイトルを読む", () => {
     const card = render(`
       <article data-video-id="sm123">
         <a href="/watch/sm123" title="動画タイトル">動画タイトル</a>
@@ -128,11 +128,10 @@ describe("ニコニコ動画", () => {
     if (!card) throw new Error("動画カードが無い");
 
     expect(niconicoAdapter.readPostId?.(card)).toBe("sm123");
-    expect(niconicoAdapter.readMetricCount(card)).toBe(12000);
     expect(niconicoAdapter.readCreatedAt?.(card)).toBe(
       Date.parse("2026-08-23T12:00:00+09:00"),
     );
-    expect(isNiconicoFilterPage("/search/music")).toBe(false);
+    expect(isNiconicoFilterPage("/search/music")).toBe(true);
     expect(isNiconicoFilterPage("/watch/sm123")).toBe(false);
   });
 
@@ -148,13 +147,12 @@ describe("ニコニコ動画", () => {
     `).firstElementChild;
     if (!card) throw new Error("動画カードが無い");
 
-    expect(niconicoAdapter.readMetricCount(card)).toBe(12);
     expect(niconicoAdapter.readCreatedAt?.(card)).toBe(
       Date.parse("2020/1/2 03:04"),
     );
   });
 
-  it("再生数と確認できない指標は読み飛ばす", () => {
+  it("サイドバーの指標ではなく動画カードを取得する", () => {
     const page = render(`
       <div>
         <div data-decoration-video-id="sm456">
@@ -173,21 +171,6 @@ describe("ニコニコ動画", () => {
 
     expect(niconicoAdapter.getPostCards(page)).toHaveLength(1);
     expect(niconicoAdapter.readPostId?.(card)).toBe("sm456");
-    expect(niconicoAdapter.readMetricCount(card)).toBeNaN();
-  });
-
-  it("先頭に別の指標があっても再生数の表示を優先する", () => {
-    const card = render(`
-      <article data-video-id="sm789">
-        <a href="/watch/sm789">動画タイトル</a>
-        <time datetime="2026-08-21T15:00:00.000Z">2026/8/22</time>
-        <p><span>12</span></p>
-        <p><span title="7.9万 再生">7.9万</span></p>
-      </article>
-    `).firstElementChild;
-    if (!card) throw new Error("動画カードが無い");
-
-    expect(niconicoAdapter.readMetricCount(card)).toBe(79000);
   });
 
   it("カードの描画途中に追加されたリンク要素は拾わない", () => {
@@ -201,10 +184,58 @@ describe("ニコニコ動画", () => {
   });
 
   it("ユーザーが集合を限定するページだけを対象にする", () => {
-    expect(isNiconicoFilterPage("/search/music")).toBe(false);
+    expect(isNiconicoFilterPage("/search/music")).toBe(true);
     expect(isNiconicoFilterPage("/tag/VOCALOID")).toBe(false);
     expect(isNiconicoFilterPage("/user/123/video")).toBe(true);
     expect(isNiconicoFilterPage("/user/123/mylist/456")).toBe(false);
     expect(isNiconicoFilterPage("/newarrival")).toBe(false);
+  });
+
+  it.each([
+    ["?sort=f&order=d", "unknown", false],
+    ["?sort=v&order=d&page=2", "popular", true],
+    ["?sort=viewCount&order=desc", "popular", true],
+    ["?sort=viewCount&order=desc&page=2", "popular", true],
+    ["?sort=viewCount&order=asc", "unknown", false],
+    ["?sort=registeredAt&order=desc", "unknown", false],
+    ["?sort=likeCount&order=desc", "unknown", false],
+    ["?sort=viewCount", "unknown", false],
+    ["?sort=viewCount&order=d", "unknown", false],
+    ["?sort=v&order=desc", "unknown", false],
+    ["", "unknown", false],
+    ["?sort=h&order=d", "unknown", false],
+    ["?sort=f&order=a", "unknown", false],
+    ["?sort=v", "unknown", false],
+    ["?sort=l&order=d", "unknown", false],
+  ])("検索の並び順 %s の対応判定", (search, order, supported) => {
+    const page = { pathname: "/search/初音ミク", search };
+    expect(niconicoAdapter.readSortOrder(render(""), page)).toBe(order);
+    expect(niconicoAdapter.isTimelineAvailable(render(""), page)).toBe(
+      supported,
+    );
+  });
+
+  it("検索結果の本体だけを取得し、投稿日時を読む", () => {
+    const page = render(`
+      <div data-decoration-video-id="sm1" data-anchor-page="search" data-anchor-area="main">
+        <a href="/watch/sm1">999999 views 2026-08-23</a>
+        <time datetime="2026-08-21T15:00:00.000Z">昨日</time>
+        <p><svg><path d="M19.12 35.97 heart"></path></svg><span>8万</span></p>
+        <p><svg><path d="M35.18 16.92 8.01 2.94"></path></svg><span>1.2万</span></p>
+      </div>
+      <div data-decoration-video-id="sm2" data-anchor-page="search" data-anchor-area="short">
+        <a href="/watch/sm2">おすすめショート</a>
+      </div>
+      <article><a href="/watch/sm3">サイドバーの動画</a></article>
+    `);
+    const cards = niconicoAdapter.getPostCards(page);
+    expect(cards).toHaveLength(1);
+    expect(niconicoAdapter.getMetricPostCards(page).cards).toEqual(cards);
+    const card = cards[0];
+    if (!card) throw new Error("検索カードが無い");
+    expect(niconicoAdapter.readPostId(card)).toBe("sm1");
+    expect(niconicoAdapter.readCreatedAt(card)).toBe(
+      Date.parse("2026-08-21T15:00:00.000Z"),
+    );
   });
 });

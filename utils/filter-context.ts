@@ -10,7 +10,6 @@ export interface FilterContextRequest {
 
 export interface FilterContextResponse {
   readonly health?: PageHealth;
-  readonly supportsPublicationAge?: boolean;
   readonly sortOrder?:
     | "newest"
     | "popular"
@@ -24,9 +23,9 @@ export interface FilterContextResponse {
   readonly filteringEnabled: boolean;
   readonly continuousLoadingWarning: boolean;
   readonly metricContextTruncated?: boolean;
-  /** 最低値を除いた現在の条件に合う、パネル集計用サンプルの投稿数。 */
+  /** 数値と投稿期間の条件を除いた現在の条件に合う、パネル集計用サンプルの投稿数。 */
   readonly metricSampleCount: number;
-  /** 上記サンプルのうち、指標を読めた投稿の指標値。 */
+  /** 上記サンプルのうち、X / Bluesky の反応数を読めた投稿の反応数。 */
   readonly metricCounts: readonly number[];
   /**
    * 最低値を除いた現在の条件に合う投稿の公開日時。日付を読めない投稿は
@@ -54,8 +53,6 @@ export function isFilterContextResponse(
   const response = value as Partial<FilterContextResponse>;
   return (
     (response.health === undefined || isPageHealth(response.health)) &&
-    (response.supportsPublicationAge === undefined ||
-      typeof response.supportsPublicationAge === "boolean") &&
     (response.sortOrder === undefined ||
       response.sortOrder === "newest" ||
       response.sortOrder === "popular" ||

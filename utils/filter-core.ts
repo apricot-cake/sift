@@ -116,14 +116,11 @@ export interface Post {
   isReply: boolean;
   isQuote: boolean;
   isRepost: boolean;
-  isMembersOnly?: boolean;
 }
 
 export interface InclusionThreshold {
-  maximum?: number | null;
   maximumAgeHours?: number | null;
   minimum: number | null;
-  minimumAgeHours: number | null;
 }
 
 export interface ClassifyThresholds {
@@ -132,7 +129,6 @@ export interface ClassifyThresholds {
   hideReposts: boolean;
   inclusion: InclusionThreshold;
   mediaEnabled: boolean;
-  hideMembersOnly?: boolean;
 }
 
 export type ClassifyState = "visible" | "matched" | "hidden";
@@ -141,14 +137,11 @@ export type ClassifyReason =
   | "reply"
   | "quote"
   | "repost"
-  | "members-only"
   | "indeterminate-metric"
   | "indeterminate-age"
-  | "newer-than-period"
   | "older-than-period"
   | "no-inclusion-filter"
   | "filter-match"
-  | "above-threshold"
   | "below-threshold";
 
 export interface ClassifyResult {
@@ -177,23 +170,14 @@ export function classifyPost(
     return { state: "hidden", reason: "quote" };
   }
 
-  if (settings.hideMembersOnly && post.isMembersOnly) {
-    return { state: "hidden", reason: "members-only" };
-  }
-
   if (
     settings.inclusion.minimum === null &&
-    settings.inclusion.maximum == null &&
-    settings.inclusion.minimumAgeHours === null &&
     settings.inclusion.maximumAgeHours == null
   ) {
     return { state: "visible", reason: "no-inclusion-filter" };
   }
 
-  if (
-    settings.inclusion.minimum !== null ||
-    settings.inclusion.maximum != null
-  ) {
+  if (settings.inclusion.minimum !== null) {
     // `parseMetric` が判定不能（`Number.NaN`）を返した投稿。誤って隠すと
     // 利用者からは見えず回復できないが、誤って残すのは目に入るだけなので、
     // ここでは線を付けずに残す（#82）。
@@ -206,22 +190,6 @@ export function classifyPost(
       post.metricCount < settings.inclusion.minimum
     ) {
       return { state: "hidden", reason: "below-threshold" };
-    }
-    if (
-      settings.inclusion.maximum != null &&
-      post.metricCount > settings.inclusion.maximum
-    ) {
-      return { state: "hidden", reason: "above-threshold" };
-    }
-  }
-
-  if (settings.inclusion.minimumAgeHours !== null) {
-    if (!Number.isFinite(post.createdAtMs)) {
-      return { state: "visible", reason: "indeterminate-age" };
-    }
-    const ageHours = (nowMs - post.createdAtMs) / 3600000;
-    if (ageHours < settings.inclusion.minimumAgeHours) {
-      return { state: "hidden", reason: "newer-than-period" };
     }
   }
 

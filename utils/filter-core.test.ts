@@ -7,7 +7,7 @@ import {
 
 const settings: ClassifyThresholds = {
   mediaEnabled: false,
-  inclusion: { minimum: 500, minimumAgeHours: null },
+  inclusion: { minimum: 500 },
   hideReplies: false,
   hideQuotes: false,
   hideReposts: true,
@@ -70,73 +70,6 @@ describe("parseMetric", () => {
 });
 
 describe("classifyPost", () => {
-  it.each([
-    [999, "matched", "filter-match"],
-    [1000, "matched", "filter-match"],
-    [1001, "hidden", "above-threshold"],
-    [Number.NaN, "visible", "indeterminate-metric"],
-  ])("上限1000に対する再生回数 %s の判定", (metricCount, state, reason) => {
-    expect(
-      classifyPost(
-        {
-          mediaMatches: true,
-          metricCount,
-          createdAtMs: Number.NaN,
-          isReply: false,
-          isQuote: false,
-          isRepost: false,
-        },
-        {
-          ...settings,
-          inclusion: { minimum: null, maximum: 1000, minimumAgeHours: null },
-        },
-      ),
-    ).toEqual({ state, reason });
-  });
-  it("最低値・上限・投稿期間を同時に満たす動画だけを残す", () => {
-    const now = 1800000000000;
-    const post = {
-      mediaMatches: true,
-      metricCount: 500,
-      createdAtMs: now - 86400000,
-      isReply: false,
-      isQuote: false,
-      isRepost: false,
-    };
-    const thresholds = {
-      ...settings,
-      inclusion: {
-        minimum: 500,
-        maximum: 1000,
-        minimumAgeHours: null,
-        maximumAgeHours: 48,
-      },
-    };
-    expect(classifyPost(post, thresholds, now).state).toBe("matched");
-    expect(
-      classifyPost({ ...post, metricCount: 499 }, thresholds, now).reason,
-    ).toBe("below-threshold");
-    expect(
-      classifyPost({ ...post, metricCount: 1001 }, thresholds, now).reason,
-    ).toBe("above-threshold");
-    expect(
-      classifyPost(
-        { ...post, createdAtMs: now - 49 * 3600000 },
-        thresholds,
-        now,
-      ).reason,
-    ).toBe("older-than-period");
-    expect(
-      classifyPost(
-        { ...post, metricCount: 1 },
-        {
-          ...thresholds,
-          inclusion: { ...thresholds.inclusion, minimum: null, maximum: 0 },
-        },
-        now,
-      ).reason,
-    ).toBe("above-threshold");
-  });
   it("最低値を満たす投稿を残す", () => {
     expect(
       classifyPost(
@@ -182,7 +115,7 @@ describe("classifyPost", () => {
         },
         {
           ...settings,
-          inclusion: { minimum: null, minimumAgeHours: null },
+          inclusion: { minimum: null },
         },
       ),
     ).toEqual({ state: "visible", reason: "no-inclusion-filter" });
@@ -218,23 +151,6 @@ describe("classifyPost", () => {
         settings,
       ),
     ).toEqual({ state: "hidden", reason: "repost" });
-  });
-
-  it("メンバー限定の除外を有効にしたときだけ対象動画を隠す", () => {
-    expect(
-      classifyPost(
-        {
-          mediaMatches: true,
-          metricCount: 1000,
-          createdAtMs: Number.NaN,
-          isReply: false,
-          isQuote: false,
-          isRepost: false,
-          isMembersOnly: true,
-        },
-        { ...settings, hideMembersOnly: true },
-      ),
-    ).toEqual({ state: "hidden", reason: "members-only" });
   });
 
   it("設定が入っている間、返信を隠す", () => {
@@ -285,34 +201,13 @@ describe("classifyPost", () => {
     ).toEqual({ state: "visible", reason: "indeterminate-metric" });
   });
 
-  it("公開から指定期間以内の動画を隠す", () => {
+  it("指定期間より古い動画を隠す", () => {
     const now = Date.parse("2026-09-02T12:00:00Z");
     expect(
       classifyPost(
         {
           mediaMatches: true,
           metricCount: 0,
-          createdAtMs: now - 23 * 3600000,
-          isReply: false,
-          isQuote: false,
-          isRepost: false,
-        },
-        {
-          ...settings,
-          inclusion: { minimum: null, minimumAgeHours: 24 },
-        },
-        now,
-      ),
-    ).toEqual({ state: "hidden", reason: "newer-than-period" });
-  });
-
-  it("指定した公開時期より古い動画を残す", () => {
-    const now = Date.parse("2026-09-02T12:00:00Z");
-    expect(
-      classifyPost(
-        {
-          mediaMatches: true,
-          metricCount: 500,
           createdAtMs: now - 25 * 3600000,
           isReply: false,
           isQuote: false,
@@ -320,7 +215,28 @@ describe("classifyPost", () => {
         },
         {
           ...settings,
-          inclusion: { minimum: 500, minimumAgeHours: 24 },
+          inclusion: { minimum: null, maximumAgeHours: 24 },
+        },
+        now,
+      ),
+    ).toEqual({ state: "hidden", reason: "older-than-period" });
+  });
+
+  it("指定した投稿期間内の動画を残す", () => {
+    const now = Date.parse("2026-09-02T12:00:00Z");
+    expect(
+      classifyPost(
+        {
+          mediaMatches: true,
+          metricCount: 500,
+          createdAtMs: now - 23 * 3600000,
+          isReply: false,
+          isQuote: false,
+          isRepost: false,
+        },
+        {
+          ...settings,
+          inclusion: { minimum: 500, maximumAgeHours: 24 },
         },
         now,
       ),
@@ -340,7 +256,7 @@ describe("classifyPost", () => {
         },
         {
           ...settings,
-          inclusion: { minimum: 500, minimumAgeHours: 24 },
+          inclusion: { minimum: 500, maximumAgeHours: 24 },
         },
       ),
     ).toEqual({ state: "visible", reason: "indeterminate-age" });

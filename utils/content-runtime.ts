@@ -74,7 +74,6 @@ export function startContentRuntime(
   let observedPageKey = pageKey();
   const healthTracker = new PageHealthTracker();
   let healthCounts: {
-    knownMetricOmissions: number;
     sampledPosts: number;
     readableMetrics: number;
     readableDates: number;
@@ -86,13 +85,8 @@ export function startContentRuntime(
       const cards = adapter.getMetricPostCards(document, 32).cards;
       healthCounts = {
         sampledPosts: cards.length,
-        knownMetricOmissions: cards.filter(
-          (card) =>
-            !Number.isFinite(adapter.readMetricCount(card)) &&
-            adapter.readIsMembersOnly?.(card),
-        ).length,
         readableMetrics: cards.filter((card) =>
-          Number.isFinite(adapter.readMetricCount(card)),
+          Number.isFinite(adapter.readMetricCount?.(card)),
         ).length,
         readableDates: cards.filter((card) =>
           Number.isFinite(adapter.readCreatedAt?.(card)),
@@ -100,25 +94,18 @@ export function startContentRuntime(
       };
     }
     const sort = adapter.readSortOrder?.(document, location);
-    const thresholds = thresholdsFor(
-      selectedSiteSettings(),
-      sort,
-      adapter.supportsPublicationAge?.(location),
-    );
+    const thresholds = thresholdsFor(selectedSiteSettings(), sort);
     return healthTracker.observe({
       pageKey: `${pageKey()}:${sort ?? ""}`,
       support:
         adapter.readPageSupport?.(document, location) ??
         (timelineAvailable() ? "supported" : "unsupported"),
       empty: adapter.hasEmptyTimeline?.(document) ?? false,
+      observesMetrics: adapter.readMetricCount !== undefined,
       requiresMetrics:
-        filteringEnabled() &&
-        (thresholds.inclusion.minimum !== null ||
-          thresholds.inclusion.maximum != null),
+        filteringEnabled() && thresholds.inclusion.minimum !== null,
       requiresDates:
-        filteringEnabled() &&
-        (thresholds.inclusion.maximumAgeHours != null ||
-          thresholds.inclusion.minimumAgeHours != null),
+        filteringEnabled() && thresholds.inclusion.maximumAgeHours != null,
       ...healthCounts,
     });
   }
@@ -161,7 +148,7 @@ export function startContentRuntime(
     siteSettings: ReturnType<typeof selectedSiteSettings>,
   ): boolean {
     const { hasImage, hasVideo } = adapter.readMedia(postCard);
-    if (siteSettings.kind === "metric" || !siteSettings.mediaEnabled) {
+    if (siteSettings.kind !== "reactions" || !siteSettings.mediaEnabled) {
       return true;
     }
     const mediaMode = siteSettings.mediaMode;
@@ -194,7 +181,6 @@ export function startContentRuntime(
     const thresholds = thresholdsFor(
       siteSettings,
       adapter.readSortOrder?.(document, location),
-      adapter.supportsPublicationAge?.(location),
     );
     const withoutMinimum = {
       ...thresholds,
@@ -212,7 +198,7 @@ export function startContentRuntime(
     // 先頭から同じ上限で切ることで、応答配列だけでなく読み取り処理も制限する。
     const sample = adapter.getMetricPostCards(document);
     for (const postCard of sample.cards) {
-      const metricCount = adapter.readMetricCount(postCard);
+      const metricCount = adapter.readMetricCount?.(postCard) ?? Number.NaN;
       const createdAtMs = adapter.readCreatedAt?.(postCard) ?? Number.NaN;
       const result = classifyPost(
         {
@@ -222,7 +208,6 @@ export function startContentRuntime(
           isReply: adapter.readIsReply?.(postCard) ?? false,
           isQuote: adapter.readIsQuote?.(postCard) ?? false,
           isRepost: adapter.readIsRepost(postCard),
-          isMembersOnly: adapter.readIsMembersOnly?.(postCard) ?? false,
         },
         withoutMinimum,
       );
@@ -421,7 +406,6 @@ export function startContentRuntime(
     const thresholds = thresholdsFor(
       siteSettings,
       adapter.readSortOrder?.(document, location),
-      adapter.supportsPublicationAge?.(location),
     );
     const loadObservations: ContinuousLoadObservation[] = [];
     const updates: {
@@ -447,12 +431,11 @@ export function startContentRuntime(
       const result = classifyPost(
         {
           mediaMatches: matchesMediaFilter(postCard, siteSettings),
-          metricCount: adapter.readMetricCount(postCard),
+          metricCount: adapter.readMetricCount?.(postCard) ?? Number.NaN,
           createdAtMs: adapter.readCreatedAt?.(postCard) ?? Number.NaN,
           isReply: adapter.readIsReply?.(postCard) ?? false,
           isQuote: adapter.readIsQuote?.(postCard) ?? false,
           isRepost: adapter.readIsRepost(postCard),
-          isMembersOnly: adapter.readIsMembersOnly?.(postCard) ?? false,
         },
         thresholds,
       );
@@ -509,7 +492,8 @@ export function startContentRuntime(
   function scheduleFilter(): void {
     healthCounts = null;
     metricContextCache = null;
-    if (!runtimeIsActive() || filterFrame !== null) {
+    if (!runtimeIsActive()) return;
+    if (filterFrame !== null) {
       return;
     }
     filterFrame = window.requestAnimationFrame(filterVisiblePosts);
@@ -591,8 +575,6 @@ export function startContentRuntime(
         health: pageHealth(),
         site: adapter.settingsKey,
         sortOrder: adapter.readSortOrder?.(document, location) ?? "unknown",
-        supportsPublicationAge:
-          adapter.supportsPublicationAge?.(location) ?? true,
         pageTitle: document.title,
         pageKey: pageKey(),
         timelineAvailable: timelineAvailable(),

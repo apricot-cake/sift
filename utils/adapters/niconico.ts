@@ -1,12 +1,26 @@
-import { parseMetric } from "../filter-core.ts";
 import { collectMetricCards } from "./metric-cards.ts";
 import type { ServiceAdapter } from "./types.ts";
 
 const WATCH_LINK = 'a[href*="/watch/"]';
 const CARD_CANDIDATES =
   "[data-decoration-video-id], [data-video-id], .NC-VideoMediaObject, article, li, [class*='VideoItem']";
-const VIEW_COUNT_TITLE =
-  'span[title*="再生"], span[title*="視聴"], span[title*="view" i]';
+const SEARCH_CARD =
+  '[data-decoration-video-id][data-anchor-page="search"][data-anchor-area="main"]';
+
+function isSearchRoot(root: ParentNode): boolean {
+  return (
+    root.querySelector('[data-anchor-page="search"]') !== null ||
+    /^\/search\/[^/]+\/?$/.test(
+      (root.ownerDocument ?? (root as Document)).location?.pathname ?? "",
+    )
+  );
+}
+
+function cardForLink(link: Element, search: boolean): Element | null {
+  return link.matches(WATCH_LINK) && videoId(link) !== null
+    ? link.closest(search ? SEARCH_CARD : CARD_CANDIDATES)
+    : null;
+}
 
 function videoId(link: Element): string | null {
   try {
@@ -25,9 +39,9 @@ function videoId(link: Element): string | null {
 
 function cards(root: ParentNode): Element[] {
   const result = new Set<Element>();
+  const search = isSearchRoot(root);
   for (const link of root.querySelectorAll(WATCH_LINK)) {
-    if (videoId(link) === null) continue;
-    const card = link.closest(CARD_CANDIDATES);
+    const card = cardForLink(link, search);
     if (card) {
       result.add(card);
     }
@@ -36,7 +50,10 @@ function cards(root: ParentNode): Element[] {
 }
 
 export function isNiconicoFilterPage(pathname: string): boolean {
-  return /^\/user\/\d+\/video\/?$/.test(pathname);
+  return (
+    /^\/user\/\d+\/video\/?$/.test(pathname) ||
+    /^\/search\/[^/]+\/?$/.test(pathname)
+  );
 }
 
 export function isNiconicoSupportedSort(
@@ -45,9 +62,15 @@ export function isNiconicoSupportedSort(
 ): boolean {
   const params = new URLSearchParams(page.search ?? "");
   if (/^\/user\/\d+\/video\/?$/.test(page.pathname)) {
-    const key = params.get("sortKey") ?? "registeredAt";
+    const key = params.get("sortKey");
     const order = params.get("sortOrder") ?? "desc";
-    return order === "desc" && (key === "registeredAt" || key === "viewCount");
+    return order === "desc" && key === "viewCount";
+  }
+  if (/^\/search\/[^/]+\/?$/.test(page.pathname)) {
+    return (
+      (params.get("order") === "desc" && params.get("sort") === "viewCount") ||
+      (params.get("order") === "d" && params.get("sort") === "v")
+    );
   }
   return false;
 }
@@ -58,9 +81,7 @@ export const niconicoAdapter = Object.freeze({
   settingsKey: "niconico",
   readSortOrder(root: ParentNode, page: Pick<Location, "pathname" | "search">) {
     if (!isNiconicoSupportedSort(root, page)) return "unknown";
-    return new URLSearchParams(page.search).get("sortKey") === "viewCount"
-      ? "popular"
-      : "newest";
+    return "popular";
   },
   readPageSupport(
     root: ParentNode,
@@ -77,12 +98,10 @@ export const niconicoAdapter = Object.freeze({
   },
   getPostCards: cards,
   getMetricPostCards(root: ParentNode, limit?: number) {
+    const search = isSearchRoot(root);
     return collectMetricCards(
       root,
-      (element) =>
-        element.matches(WATCH_LINK) && videoId(element) !== null
-          ? element.closest(CARD_CANDIDATES)
-          : null,
+      (element) => cardForLink(element, search),
       undefined,
       100_000,
       limit,
@@ -112,17 +131,6 @@ export const niconicoAdapter = Object.freeze({
           .find((id) => id !== null)) ??
       null
     );
-  },
-  readMetricCount(card: Element) {
-    const views = card.querySelector(".NC-VideoMetaCount_view");
-    if (views) return parseMetric(views.textContent ?? "");
-    const titledCount = card.querySelector(VIEW_COUNT_TITLE);
-    if (titledCount) {
-      return parseMetric(
-        `${titledCount.getAttribute("title") ?? ""} ${titledCount.textContent ?? ""}`,
-      );
-    }
-    return Number.NaN;
   },
   readCreatedAt(card: Element) {
     const datetime = card

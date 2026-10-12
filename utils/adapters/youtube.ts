@@ -1,4 +1,4 @@
-import { normalizeDigits, parseMetric } from "../filter-core.ts";
+import { normalizeDigits } from "../filter-core.ts";
 import { collectMetricCards } from "./metric-cards.ts";
 import type { ServiceAdapter } from "./types.ts";
 
@@ -8,24 +8,13 @@ const YOUTUBE_SELECTORS = Object.freeze({
     "ytd-rich-grid-media",
     "ytd-grid-video-renderer",
     "ytd-compact-video-renderer",
-    "ytd-reel-item-renderer",
     "yt-lockup-view-model",
-    "ytm-shorts-lockup-view-model",
-    "ytm-shorts-lockup-view-model-v2",
   ].join(", "),
   cell: "ytd-rich-item-renderer",
-  title:
-    "a#video-title, a#video-title-link, a.shortsLockupViewModelHostEndpoint, h3 a[href]",
+  title: "a#video-title, a#video-title-link, h3 a[href]",
   metadata:
     "#metadata-line span, .inline-metadata-item, .ytContentMetadataViewModelMetadataText, [class*='MetadataSubhead'], [class*='metadata-subhead']",
-  memberBadge:
-    "ytd-badge-supported-renderer, yt-badge-shape, [class*='members-only']",
 });
-
-const VIEW_LABEL =
-  /(?:views?|回視聴|回再生|조회수|次觀看|次观看|visualizaciones?|visualiza(?:ç|c)[õo]es?)/i;
-const MEMBERS_ONLY_LABEL = /(?:members?\s+only|メンバー限定)/i;
-const MEMBERS_ONLY_BADGE_LABEL = /^(?:members?\s+only|メンバー限定)$/i;
 
 const AGE_IN_MILLISECONDS: Readonly<Record<string, number>> = Object.freeze({
   second: 1000,
@@ -38,26 +27,7 @@ const AGE_IN_MILLISECONDS: Readonly<Record<string, number>> = Object.freeze({
 });
 
 const CHANNEL_FILTER_PATH =
-  /^\/(?:@[^/]+|channel\/[^/]+|c\/[^/]+|user\/[^/]+)\/(?:videos|shorts|streams|search)\/?$/;
-
-function isChannelSearch(pathname: string): boolean {
-  return CHANNEL_FILTER_PATH.test(pathname) && /\/search\/?$/.test(pathname);
-}
-
-function youtubePageKey(
-  root: ParentNode,
-  page: Pick<Location, "pathname" | "search">,
-): string {
-  if (!isChannelSearch(page.pathname)) return `${page.pathname}${page.search}`;
-  // YouTube は検索後に query を URL から消すことがある。
-  const query =
-    root.querySelector<HTMLInputElement>(
-      "ytd-browse:not([hidden]) ytd-expandable-tab-renderer input",
-    )?.value ??
-    new URLSearchParams(page.search).get("query") ??
-    "";
-  return `${page.pathname}?${new URLSearchParams({ query })}`;
-}
+  /^\/(?:@[^/]+|channel\/[^/]+|c\/[^/]+|user\/[^/]+)\/(?:videos|streams)\/?$/;
 
 export function isYouTubeFilterPage(pathname: string): boolean {
   return CHANNEL_FILTER_PATH.test(pathname);
@@ -68,7 +38,6 @@ export function readYouTubeSortOrder(
   page: Pick<Location, "pathname">,
 ): "newest" | "popular" | "relevance" | "default" | "unknown" {
   if (!CHANNEL_FILTER_PATH.test(page.pathname)) return "unknown";
-  if (isChannelSearch(page.pathname)) return "relevance";
   const selected = root.querySelectorAll(
     'ytd-browse:not([hidden]) [role="combobox"], ytd-browse:not([hidden]) [role="tab"][aria-selected="true"], ytd-browse:not([hidden]) yt-chip-cloud-chip-renderer[selected]',
   );
@@ -262,50 +231,16 @@ function metadataTexts(postCard: Element): string[] {
     .filter(Boolean);
 }
 
-function hasMembersOnlyBadge(container: Element): boolean {
-  const badges = Array.from(
-    container.querySelectorAll(YOUTUBE_SELECTORS.memberBadge),
-  );
-  if (
-    badges.some((badge) => {
-      if (badge.matches("[class*='members-only']")) {
-        return true;
-      }
-      return MEMBERS_ONLY_LABEL.test(
-        `${badge.getAttribute("aria-label") ?? ""} ${badge.textContent ?? ""}`,
-      );
-    })
-  ) {
-    return true;
-  }
-
-  // YouTube の新しい一覧では、バッジが動画本体ではなく一覧セルの兄弟要素に
-  // なることがある。ラベルだけを持つ要素も対象にするが、動画タイトルは除く。
-  return Array.from(container.querySelectorAll("*")).some((element) => {
-    if (
-      element.closest(YOUTUBE_SELECTORS.title) ||
-      element.querySelector(YOUTUBE_SELECTORS.title)
-    ) {
-      return false;
-    }
-    return MEMBERS_ONLY_BADGE_LABEL.test(
-      `${element.getAttribute("aria-label") ?? ""} ${element.textContent ?? ""}`.trim(),
-    );
-  });
-}
-
 export const youtubeAdapter = Object.freeze({
   id: "youtube",
   matches: Object.freeze(["https://www.youtube.com/*"]),
   settingsKey: "youtube",
-  readPageKey: youtubePageKey,
   readSortOrder: readYouTubeSortOrder,
-  supportsPublicationAge(page: Pick<Location, "pathname">) {
-    return !/\/shorts\/?$/.test(page.pathname);
-  },
   readPageSupport(root: ParentNode, page: Pick<Location, "pathname">) {
     if (!isYouTubeFilterPage(page.pathname)) return "unsupported";
-    if (readYouTubeSortOrder(root, page) !== "unknown") return "supported";
+    const sort = readYouTubeSortOrder(root, page);
+    if (sort === "popular") return "supported";
+    if (sort !== "unknown") return "unsupported";
     const selected = root.querySelectorAll(
       'ytd-browse:not([hidden]) [role="combobox"], ytd-browse:not([hidden]) [role="tab"][aria-selected="true"], ytd-browse:not([hidden]) yt-chip-cloud-chip-renderer[selected]',
     );
@@ -332,7 +267,7 @@ export const youtubeAdapter = Object.freeze({
     page: Pick<Location, "pathname" | "search">,
   ) {
     return this.isTimelineAvailable(root, page)
-      ? youtubePageKey(root, page)
+      ? `${page.pathname}${page.search}`
       : null;
   },
 
@@ -368,7 +303,7 @@ export const youtubeAdapter = Object.freeze({
   isTimelineAvailable(root: ParentNode, page: Pick<Location, "pathname">) {
     return (
       isYouTubeFilterPage(page.pathname) &&
-      readYouTubeSortOrder(root, page) !== "unknown" &&
+      readYouTubeSortOrder(root, page) === "popular" &&
       this.hasPostCards(root)
     );
   },
@@ -385,27 +320,7 @@ export const youtubeAdapter = Object.freeze({
       return null;
     }
     const url = new URL(href, "https://www.youtube.com");
-    const videoId =
-      url.pathname === "/watch"
-        ? url.searchParams.get("v")
-        : /^\/shorts\/([^/?#]+)/.exec(url.pathname)?.[1];
-    return videoId || null;
-  },
-
-  readMetricCount(postCard: Element) {
-    const text = metadataTexts(postCard).find((entry) =>
-      VIEW_LABEL.test(entry),
-    );
-    if (text !== undefined) return parseMetric(text);
-    // 検索結果の横長カードには「回視聴」を省いた数値だけの表示もある。
-    // 日付や動画の長さを拾わないよう、再生数用の先頭項目に限定する。
-    const compact = postCard
-      .querySelector("#metadata-line > span:first-of-type")
-      ?.textContent?.trim();
-    return compact &&
-      /^[\d.,\s]+(?:[KMB]|[千천万萬만億亿억])?$/i.test(normalizeDigits(compact))
-      ? parseMetric(compact)
-      : Number.NaN;
+    return url.pathname === "/watch" ? url.searchParams.get("v") : null;
   },
 
   readCreatedAt(postCard: Element) {
@@ -420,11 +335,6 @@ export const youtubeAdapter = Object.freeze({
 
   readMedia(_postCard: Element) {
     return { hasImage: false, hasVideo: true };
-  },
-
-  readIsMembersOnly(postCard: Element) {
-    const cell = postCard.closest(YOUTUBE_SELECTORS.cell);
-    return hasMembersOnlyBadge(cell ?? postCard);
   },
 
   readIsRepost(_postCard: Element) {

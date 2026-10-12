@@ -24,6 +24,7 @@ describe("SITE_MATCHES", () => {
 
   it("対応サイトの HTTPS URL だけをサイドパネルの対象にする", () => {
     expect(isSupportedSiteUrl("https://x.com/home")).toBe(true);
+    expect(isSupportedSiteUrl("https://official.fanbox.cc/posts")).toBe(false);
     expect(isSupportedSiteUrl("https://www.youtube.com/watch?v=test")).toBe(
       true,
     );
