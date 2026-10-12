@@ -1,7 +1,8 @@
 export const demoPosts = [
   {
-    name: "こむぎ",
-    handle: "@sample_komugi",
+    name: "あんず",
+    handle: "@sample_anzu",
+    avatar: "apricot",
     text: "うちの子",
     likes: 124,
     reposts: 8,
@@ -12,14 +13,16 @@ export const demoPosts = [
   {
     name: "ひかり",
     handle: "@sample_hikari",
+    avatar: "blue",
     text: "パン買いすぎた",
     likes: 3,
     reposts: 0,
     replies: 1,
   },
   {
-    name: "こむぎ",
-    handle: "@sample_komugi",
+    name: "あんず",
+    handle: "@sample_anzu",
+    avatar: "apricot",
     text: "ラ・プルマ #アークナイツ",
     likes: 108,
     reposts: 5,
@@ -30,6 +33,7 @@ export const demoPosts = [
   {
     name: "そら",
     handle: "@sample_sora",
+    avatar: "mint",
     text: "コーヒー冷めてた",
     likes: 5,
     reposts: 0,
@@ -38,6 +42,7 @@ export const demoPosts = [
   {
     name: "ひかり",
     handle: "@sample_hikari",
+    avatar: "blue",
     text: "今日は早めに寝る",
     likes: 1,
     reposts: 0,

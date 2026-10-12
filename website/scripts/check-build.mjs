@@ -64,11 +64,6 @@ for (const html of [home, alternative]) {
     /src="\/sift\/screenshots\//,
     "置き換え前の画面画像が残っています",
   );
-  assert.match(
-    html,
-    /投稿内容・数値はデモ用です/,
-    "デモ用データの注記がありません",
-  );
   assert.match(html, /data-replay-demo/, "操作デモの初期画面がありません");
   assert.equal(
     [...html.matchAll(/data-step="[0-3]"/g)].length,

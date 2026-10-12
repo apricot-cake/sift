@@ -1,7 +1,31 @@
 :root {
   view-transition-name: none;
 }
+.product-header {
+  width: min(100% - 3rem, 1080px);
+  min-height: 80px;
+  margin-inline: auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+}
+.product-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  color: var(--foreground);
+  font-size: 25px;
+  font-weight: 650;
+  letter-spacing: -0.04em;
+}
+.product-brand img {
+  width: 36px;
+  height: 36px;
+}
 .product-page {
+  --product-heading-size: clamp(23px, 2.5vw, 30px);
   --product-section-gap: clamp(64px, 7vw, 96px);
   width: min(100% - 3rem, 960px);
   margin-inline: auto;
@@ -9,36 +33,34 @@
 .product-intro {
   width: min(100%, 960px);
   margin-inline: auto;
-  padding-block: 48px 64px;
+  padding-block: 36px 88px;
   text-align: center;
 }
 .product-page-title {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-  margin: 0 0 16px;
-  font-size: 28px;
-  line-height: 1.2;
-  font-weight: 600;
+  color: var(--foreground);
+  margin: 0 0 24px;
+  font-size: clamp(31px, 3.5vw, 43px);
+  line-height: 1.45;
+  font-weight: 650;
   letter-spacing: -0.025em;
 }
-.product-page-title img {
+.product-page-title span {
   display: block;
-  width: 40px;
-  height: 40px;
 }
 .product-description {
   text-wrap: pretty;
   max-width: 620px;
   margin-inline: auto;
-  color: #111;
-  font-size: 16px;
+  color: var(--muted-foreground);
+  font-size: 18px;
   line-height: 1.9;
   font-weight: 400;
 }
 .product-description p {
   margin: 0;
+}
+.product-kind {
+  white-space: nowrap;
 }
 .product-actions {
   display: flex;
@@ -46,7 +68,7 @@
   justify-content: center;
   flex-wrap: wrap;
   gap: 16px;
-  margin-top: 20px;
+  margin-top: 28px;
 }
 .product-store {
   display: inline-flex;
@@ -54,8 +76,8 @@
 }
 .product-store img {
   display: block;
-  width: 180px;
-  height: calc(58px * 180 / 206);
+  width: auto;
+  height: 52px;
   object-fit: contain;
 }
 .product-github {
@@ -63,21 +85,11 @@
   flex-shrink: 0;
   align-items: center;
   justify-content: center;
-  gap: 10px;
-  width: 180px;
-  height: calc(58px * 180 / 206);
-  border-radius: 12px;
-  border: 1px solid var(--border);
-  background: #fff;
-  color: #111;
-  font-size: 15px;
-  font-weight: 500;
-  transition:
-    background-color 150ms ease,
-    scale 140ms ease;
-}
-.product-github:active {
-  scale: 0.98;
+  width: 44px;
+  height: 44px;
+  border-radius: 8px;
+  color: var(--foreground);
+  transition: background-color 150ms ease;
 }
 .product-github:hover {
   background: var(--muted);
@@ -94,38 +106,39 @@
   margin-top: var(--product-section-gap);
 }
 .product-demo h2 {
-  margin: 0 0 12px;
+  margin: 0 0 24px;
   text-align: center;
-  font-size: 1.375rem;
-  font-weight: 500;
+  color: var(--foreground);
+  font-size: var(--product-heading-size);
+  font-weight: 600;
   letter-spacing: -0.025em;
 }
+.product-platforms {
+  margin: 0 0 18px;
+  text-align: center;
+  color: var(--muted-foreground);
+  font-size: 15px;
+  font-weight: 500;
+}
 .product-demo-description {
-  margin: 0 auto 24px;
+  margin: 0 auto 44px;
   max-width: 720px;
   text-align: center;
-  font-size: 15px;
+  font-size: 17px;
   line-height: 1.8;
   color: var(--muted-foreground);
   text-wrap: pretty;
 }
 [data-reveal] {
   transition:
-    opacity 700ms cubic-bezier(0.215, 0.61, 0.355, 1),
-    translate 700ms cubic-bezier(0.215, 0.61, 0.355, 1);
+    opacity 1000ms ease,
+    translate 1000ms cubic-bezier(0.215, 0.61, 0.355, 1);
   transition-delay: var(--reveal-delay, 0ms);
 }
 [data-reveal-pending] {
   opacity: 0;
-  translate: 0 8px;
+  translate: 0 18px;
   transition: none;
-}
-.product-demo-note {
-  text-align: center;
-  margin: 16px 0 0;
-  font-size: 0.8125rem;
-  line-height: 1.8;
-  color: var(--muted-foreground);
 }
 .product-video {
   width: 100%;
@@ -134,9 +147,9 @@
 }
 .product-video h2 {
   margin: 0 0 24px;
-  color: #111;
-  font-size: 1.375rem;
-  font-weight: 500;
+  color: var(--foreground);
+  font-size: var(--product-heading-size);
+  font-weight: 600;
   letter-spacing: -0.025em;
   text-align: center;
 }
@@ -150,36 +163,84 @@
   aspect-ratio: 16 / 9;
   border: 0;
 }
-.product-install {
-  display: flex;
+.product-local {
+  display: grid;
+  grid-template-columns: auto auto;
   justify-content: center;
-  padding-block: 40px 24px;
+  text-align: left;
+  align-items: center;
+  gap: 32px;
+  margin-top: var(--product-section-gap);
+  padding: 48px;
+  color: var(--muted-foreground);
+}
+.product-local-icon {
+  display: flex;
+  justify-content: flex-end;
+}
+.product-local-icon svg {
+  width: 70px;
+  height: 70px;
+}
+.product-local h2 {
+  margin: 0;
+  color: var(--foreground);
+  font-size: var(--product-heading-size);
+  font-weight: 600;
+  letter-spacing: -0.025em;
+}
+.product-local p {
+  margin: 20px 0 0;
+  font-size: 16px;
+  line-height: 1.9;
+}
+.product-install {
+  padding-block: 40px 192px;
 }
 @media (max-width: 640px) {
+  .product-header {
+    width: calc(100% - 2rem);
+    min-height: 72px;
+  }
   .product-page {
+    --product-heading-size: 1.25rem;
     width: calc(100% - 2rem);
   }
   .product-intro {
-    padding-block: 32px 48px;
+    padding-block: 28px 64px;
   }
   .product-actions {
     gap: 16px;
-    margin-top: 20px;
+    margin-top: 24px;
   }
   .product-description {
-    font-size: 16px;
-  }
-  .product-demo h2 {
-    font-size: 1.25rem;
+    font-size: 17px;
   }
   .product-demo-description {
-    margin-bottom: 24px;
-  }
-  .product-video h2 {
-    font-size: 1.25rem;
+    margin-bottom: 36px;
   }
   .product-video-surface {
     border-radius: 16px;
+  }
+  .product-local {
+    grid-template-columns: 1fr;
+    justify-items: center;
+    text-align: center;
+    gap: 22px;
+    padding: 26px;
+  }
+  .product-local-icon {
+    justify-content: center;
+  }
+  .product-local-icon svg {
+    width: 42px;
+    height: 42px;
+  }
+  .product-local p {
+    margin-top: 16px;
+  }
+  .product-install {
+    padding-bottom: 160px;
   }
 }
 @media (prefers-reduced-motion: reduce) {
@@ -190,8 +251,5 @@
   }
   .product-github {
     transition: none;
-  }
-  .product-github:active {
-    scale: none;
   }
 }

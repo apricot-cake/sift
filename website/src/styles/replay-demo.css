@@ -67,17 +67,15 @@
   border-radius: 8px;
   background: transparent;
   text-align: center;
-  font-size: 12px;
-  color: #71717a;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--muted-foreground);
   transition:
     background 180ms ease,
     scale 140ms ease;
 }
 .replay-timeline button:hover {
   background: #f4f4f5;
-}
-.replay-timeline button[aria-current] {
-  color: #18181b;
 }
 .replay-track {
   display: block;
@@ -266,13 +264,13 @@
   width: 32px;
   height: 32px;
   border-radius: 50%;
-  background: #c4d8d1;
+  background: #d2f0e3;
 }
-.replay-avatar.avatar-1 {
-  background: #dbcab9;
+.replay-avatar.avatar-apricot {
+  background: #ffdfbf;
 }
-.replay-avatar.avatar-2 {
-  background: #c7ccdd;
+.replay-avatar.avatar-blue {
+  background: #d2e3ff;
 }
 .replay-author {
   display: flex;
@@ -491,7 +489,7 @@
   height: 48px;
   flex: 0 0 48px;
   border-radius: 50%;
-  background: #c4d8d1;
+  background: #ffdfbf;
 }
 .replay-channel h3 {
   margin: 0;

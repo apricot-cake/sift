@@ -69,6 +69,7 @@ function initialize(root: HTMLElement) {
   let last = performance.now();
   let visible = true;
   let optionOffset: Point | undefined;
+  let renderedState = "";
   function updatePanel() {
     const youtube = root.dataset.mode === "youtube";
     get("[data-label]").textContent = youtube ? "投稿期間" : "最低いいね数";
@@ -140,63 +141,72 @@ function initialize(root: HTMLElement) {
   function render(time: number) {
     const { stage, menuOpen, chosen, clicked } = getReplayState(time);
     const youtube = root.dataset.mode === "youtube";
-    root.dataset.stage = String(stage);
-    get(".replay-panel").setAttribute("aria-hidden", String(stage === 0));
-    menu.hidden = !menuOpen;
-    get(".replay-option").classList.toggle("chosen", chosen);
-    cursor.classList.toggle("click", clicked);
-    get(".replay-extension").classList.toggle(
-      "pressed",
-      clicked && stage === 0,
-    );
-    get("[data-value]").textContent =
-      stage === 3 ? (youtube ? "3か月以内" : "100") : "指定なし";
+    const state = `${stage}:${menuOpen}:${chosen}:${clicked}`;
+    const changed = state !== renderedState;
+    if (changed) {
+      renderedState = state;
+      root.dataset.stage = String(stage);
+      get(".replay-panel").setAttribute("aria-hidden", String(stage === 0));
+      menu.hidden = !menuOpen;
+      get(".replay-option").classList.toggle("chosen", chosen);
+      cursor.classList.toggle("click", clicked);
+      get(".replay-extension").classList.toggle(
+        "pressed",
+        clicked && stage === 0,
+      );
+      get("[data-value]").textContent =
+        stage === 3 ? (youtube ? "3か月以内" : "100") : "指定なし";
+    }
     root
       .querySelectorAll<HTMLElement>("[data-step]")
       .forEach((button, index) => {
-        if (stage === index) button.setAttribute("aria-current", "step");
-        else button.removeAttribute("aria-current");
+        if (changed) {
+          if (stage === index) button.setAttribute("aria-current", "step");
+          else button.removeAttribute("aria-current");
+        }
         const start = boundaries[index] ?? 0;
         const end = boundaries[index + 1] ?? 15700;
         const fill = button.querySelector<HTMLElement>(".replay-progress");
         if (fill)
           fill.style.transform = `scaleX(${Math.max(0, Math.min(1, (time - start) / (end - start)))})`;
       });
-    root.querySelectorAll<HTMLElement>(".replay-post").forEach((post) => {
-      const removed = !isReplayItemVisible(
-        "social",
-        Number(post.dataset.likes),
-        time,
-      );
-      post.classList.toggle("removed", removed);
-      post.setAttribute("aria-hidden", String(removed));
-    });
-    root.querySelectorAll<HTMLElement>(".replay-video").forEach((video) => {
-      const removed = !isReplayItemVisible(
-        "youtube",
-        Number(video.dataset.days),
-        time,
-      );
-      video.hidden = removed;
-      video.setAttribute("aria-hidden", String(removed));
-    });
-    const items = [
-      ...root.querySelectorAll<HTMLElement>(
-        youtube ? ".replay-video" : ".replay-post",
-      ),
-    ];
-    const count = items.filter((item) =>
-      youtube ? !item.hidden : !item.classList.contains("removed"),
-    ).length;
-    get(youtube ? "[data-video-count]" : "[data-social-count]").textContent =
-      `${count} / ${items.length}件を表示`;
-    get("[data-selected-count]").textContent =
-      `${count}${youtube ? "本" : "件"}`;
-    cursor.hidden = stage === 3;
+    if (changed) {
+      root.querySelectorAll<HTMLElement>(".replay-post").forEach((post) => {
+        const removed = !isReplayItemVisible(
+          "social",
+          Number(post.dataset.likes),
+          time,
+        );
+        post.classList.toggle("removed", removed);
+        post.setAttribute("aria-hidden", String(removed));
+      });
+      root.querySelectorAll<HTMLElement>(".replay-video").forEach((video) => {
+        const removed = !isReplayItemVisible(
+          "youtube",
+          Number(video.dataset.days),
+          time,
+        );
+        video.hidden = removed;
+        video.setAttribute("aria-hidden", String(removed));
+      });
+      const items = [
+        ...root.querySelectorAll<HTMLElement>(
+          youtube ? ".replay-video" : ".replay-post",
+        ),
+      ];
+      const count = items.filter((item) =>
+        youtube ? !item.hidden : !item.classList.contains("removed"),
+      ).length;
+      get(youtube ? "[data-video-count]" : "[data-social-count]").textContent =
+        `${count} / ${items.length}件を表示`;
+      get("[data-selected-count]").textContent =
+        `${count}${youtube ? "本" : "件"}`;
+      cursor.hidden = stage === 3;
+    }
     if (stage === 3) return;
     const icon = point(get(".replay-extension"));
     const picker = point(get(".replay-picker"));
-    if (!menu.hidden || !optionOffset) {
+    if (!optionOffset) {
       const wasHidden = menu.hidden;
       menu.hidden = false;
       const option = point(get(".replay-option"));
