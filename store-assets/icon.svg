@@ -1,13 +1,41 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 1300" role="img" aria-labelledby="title">
   <title id="title">sift</title>
-  <text
-    x="256"
-    y="348"
-    fill="#006edc"
-    font-family="Segoe UI Variable, Segoe UI, sans-serif"
-    font-size="320"
-    font-weight="800"
-    letter-spacing="-24"
-    text-anchor="middle"
-  >Si</text>
+  <defs>
+    <linearGradient id="color" x1="600" y1="150" x2="600" y2="1160" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#d8baff"/>
+      <stop offset=".17" stop-color="#8597ff"/>
+      <stop offset=".34" stop-color="#4a7cff"/>
+      <stop offset=".55" stop-color="#649aff"/>
+      <stop offset=".72" stop-color="#518aff"/>
+      <stop offset="1" stop-color="#3c45ff"/>
+    </linearGradient>
+    <radialGradient id="light">
+      <stop stop-color="#d9edff" stop-opacity=".73"/>
+      <stop offset="1" stop-color="#b7d4ff" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="violet">
+      <stop stop-color="#b49fff" stop-opacity=".65"/>
+      <stop offset="1" stop-color="#9899ff" stop-opacity="0"/>
+    </radialGradient>
+    <filter id="soft" x="-30%" y="-100%" width="160%" height="300%">
+      <feGaussianBlur stdDeviation="17"/>
+    </filter>
+    <path id="chevron" d="M355 586 L560 430 Q600 405 640 430 L840 586 L806 614 L618 470 Q600 457 582 470 L390 614 Z"/>
+    <path id="lower" d="M267 653 L556 908 Q600 947 644 908 L928 653 L1024 727 Q1072 775 1024 823 L640 1146 Q600 1179 560 1146 L176 823 Q128 775 176 727 Z"/>
+    <mask id="mark" maskUnits="userSpaceOnUse" x="0" y="0" width="1200" height="1300">
+      <path fill="white" d="M560 166 Q600 136 640 166 L1021 465 Q1060 496 1021 527 L640 865 Q600 901 560 865 L179 527 Q140 496 179 465 Z"/>
+      <path fill="black" d="M574 210 Q600 190 626 210 L978 484 Q995 497 978 511 L615 834 Q600 847 585 834 L222 511 Q205 497 222 484 Z"/>
+      <use href="#chevron" fill="white"/>
+      <use href="#lower" fill="white"/>
+    </mask>
+  </defs>
+  <g mask="url(#mark)">
+    <path fill="url(#color)" d="M120 140H1080V1190H120Z"/>
+    <ellipse cx="392" cy="695" rx="245" ry="110" fill="url(#light)" transform="rotate(-28 392 695)"/>
+    <ellipse cx="890" cy="780" rx="185" ry="165" fill="url(#violet)"/>
+    <ellipse cx="400" cy="951" rx="195" ry="140" fill="url(#light)" opacity=".32"/>
+    <path d="M135 791 C310 738 348 782 483 714 S748 690 929 740" fill="none" stroke="#d3e6ff" stroke-width="43" opacity=".38" filter="url(#soft)"/>
+    <path d="M401 1116 C461 989 522 930 680 937 S889 1040 1033 1000" fill="none" stroke="#a6baff" stroke-width="34" opacity=".29" filter="url(#soft)"/>
+    <path d="M203 341 C381 296 403 213 625 174" fill="none" stroke="#eadbff" stroke-width="29" opacity=".21" filter="url(#soft)"/>
+  </g>
 </svg>
