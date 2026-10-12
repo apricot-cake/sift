@@ -1,6 +1,8 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { render } from "../../test/dom.ts";
 import { isXSupportedHomeTimeline, xAdapter } from "./x.ts";
+
+afterEach(() => vi.restoreAllMocks());
 
 // X は投稿を、区切り線と周囲の余白も持つセルで包んでいて、投稿そのものはその
 // セルの中の article。
@@ -46,6 +48,47 @@ describe("投稿を見つける", () => {
     `);
     expect(xAdapter.isTimelineAvailable(post, { pathname })).toBe(false);
     expect(xAdapter.readTimelineKey(post, { pathname, search: "" })).toBeNull();
+  });
+
+  it.each(["/author", "/home", "/search?q=cat&f=live", "/i/lists/123"])(
+    "%s のライトボックスでは元の一覧を保ち、画像内の投稿を集計しない",
+    (previousPath) => {
+      vi.spyOn(window.history, "state", "get").mockReturnValue({
+        state: { fromApp: true, previousPath },
+      });
+      const root = render(`<div data-testid="ScrollSnap-List" role="tablist">
+        <div role="tab" aria-selected="false">おすすめ</div>
+        <div role="tab" aria-selected="true">フォロー中</div>
+      </div><main data-testid="primaryColumn">
+        <article data-testid="tweet"><button data-testid="like" aria-label="10 件のいいね"></button></article>
+      </main><div role="dialog"><article data-testid="tweet">
+        <button data-testid="like" aria-label="500 件のいいね"></button>
+      </article></div>`);
+      const page = { pathname: "/author/status/100/photo/1", search: "" };
+      expect(xAdapter.isTimelineAvailable(root, page)).toBe(true);
+      expect(xAdapter.readPageSupport(root, page)).toBe("supported");
+      expect(xAdapter.readPageKey(root, page)).toBe(previousPath);
+      expect(xAdapter.readTimelineKey(root, page)).toBeNull();
+      expect(xAdapter.getPostCards(root)).toHaveLength(1);
+      expect(xAdapter.getMetricPostCards(root).cards).toHaveLength(1);
+    },
+  );
+
+  it.each([
+    { fromApp: false, previousPath: "/author" },
+    { fromApp: true, previousPath: "/author/status/100" },
+    { fromApp: true, previousPath: "/search?q=cat&f=top" },
+    { fromApp: true, previousPath: "//example.com/author" },
+  ])("対象外から開いた画像は一覧として扱わない: %j", (state) => {
+    vi.spyOn(window.history, "state", "get").mockReturnValue({ state });
+    const root = render(
+      '<main data-testid="primaryColumn"></main><div role="dialog"></div>',
+    );
+    expect(
+      xAdapter.isTimelineAvailable(root, {
+        pathname: "/author/status/100/photo/1",
+      }),
+    ).toBe(false);
   });
 
   it("ホーム内の別のタブには同じ位置を復元しない", () => {

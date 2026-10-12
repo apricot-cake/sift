@@ -686,7 +686,7 @@ export function startContentRuntime(
       return;
     }
     if (filteringEnabled()) {
-      timelineViewport?.cancel();
+      timelineViewport?.cancelForUserNavigation();
       loadWarningTracker?.reset(readCurrentPostIds());
       if (!adapter.needsLayoutProbeForPagination) {
         return;

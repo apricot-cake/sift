@@ -10,6 +10,7 @@ interface Anchor {
 export class TimelineViewport {
   private key: string | null = null;
   private away = false;
+  private cancelledRestoreRoute: string | null = null;
   private anchors: Anchor[] = [];
   private readonly savedAnchors = new Map<string, Anchor[]>();
   private width = window.innerWidth;
@@ -26,7 +27,13 @@ export class TimelineViewport {
     return this.adapter.readTimelineKey?.(document, location) ?? null;
   }
 
+  private currentRoute(): string {
+    return `${location.pathname}${location.search}`;
+  }
+
   syncRoute(): boolean {
+    if (this.cancelledRestoreRoute !== this.currentRoute())
+      this.cancelledRestoreRoute = null;
     const key = this.currentKey();
     if (key === null) {
       this.away = true;
@@ -37,11 +44,16 @@ export class TimelineViewport {
       this.cancel();
       this.anchors = this.savedAnchors.get(key) ?? [];
       this.key = key;
-      this.beginRestore();
-    } else if (this.away) {
+      if (this.cancelledRestoreRoute !== this.currentRoute())
+        this.beginRestore();
+    } else if (
+      this.away &&
+      this.cancelledRestoreRoute !== this.currentRoute()
+    ) {
       this.beginRestore();
     }
     this.away = false;
+    this.cancelledRestoreRoute = null;
     return true;
   }
 
@@ -129,12 +141,24 @@ export class TimelineViewport {
     this.restoringUntil = 0;
   }
 
+  cancelForUserNavigation(): void {
+    // 入力より遅れて通知される画面・幅の変更を先に消化する。
+    // 中止した復元が次の scroll 通知で再開しないようにする。
+    const available = this.syncRoute();
+    this.cancel();
+    this.width = window.innerWidth;
+    // SPA の一覧がまだ描画されていなくても、この画面での閲覧操作を優先する。
+    // 投稿詳細など別画面での操作は、戻り先の保存位置に影響させない。
+    this.cancelledRestoreRoute = available ? null : this.currentRoute();
+  }
+
   reset(): void {
     this.cancel();
     this.key = null;
     this.anchors = [];
     this.savedAnchors.clear();
     this.away = false;
+    this.cancelledRestoreRoute = null;
     this.width = window.innerWidth;
   }
 }

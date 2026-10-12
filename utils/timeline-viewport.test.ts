@@ -195,6 +195,129 @@ describe("X の一覧の位置復元", () => {
     expect(window.scrollBy).not.toHaveBeenCalled();
   });
 
+  it.each([true, false])(
+    "メニュー復帰の通知前の閲覧操作で古い位置へ戻さない（メニュー表示中: %s）",
+    (menuStillOpen) => {
+      const menu = document.createElement("div");
+      menu.setAttribute("role", "menu");
+      document.body.append(menu);
+      viewport.syncRoute();
+      top = 470;
+      if (!menuStillOpen) menu.remove();
+      viewport.cancelForUserNavigation();
+      menu.remove();
+      viewport.update();
+      vi.advanceTimersByTime(2_100);
+      expect(top).toBe(470);
+      expect(window.scrollBy).not.toHaveBeenCalled();
+      expect(viewport.isRestoring()).toBe(false);
+    },
+  );
+
+  it("一覧上の入力の後に開いたメニューからは元の位置へ復元する", () => {
+    viewport.cancelForUserNavigation();
+    const menu = document.createElement("div");
+    menu.setAttribute("role", "menu");
+    document.body.append(menu);
+    top = 470;
+    viewport.update();
+    menu.remove();
+    viewport.update();
+    vi.advanceTimersByTime(32);
+    expect(top).toBe(-30);
+  });
+
+  it("メニュー内の入力後に別画面へ移動して戻れば元の位置へ復元する", () => {
+    const menu = document.createElement("div");
+    menu.setAttribute("role", "menu");
+    document.body.append(menu);
+    top = 470;
+    viewport.cancelForUserNavigation();
+    history.replaceState({}, "", "/i/lists/add_member");
+    viewport.syncRoute();
+    menu.remove();
+    history.replaceState({}, "", "/i/lists/42");
+    viewport.update();
+    vi.advanceTimersByTime(32);
+    expect(top).toBe(-30);
+  });
+
+  it("幅変更の通知前に閲覧操作をしたら次のスクロール通知で復元しない", () => {
+    vi.spyOn(window, "innerWidth", "get").mockReturnValue(572);
+    top = 200;
+    viewport.cancelForUserNavigation();
+    viewport.update();
+    vi.advanceTimersByTime(2_100);
+    expect(top).toBe(200);
+    expect(window.scrollBy).not.toHaveBeenCalled();
+  });
+
+  it("戻り先URLの一覧が未描画でも閲覧操作を記憶し、描画後に復元しない", () => {
+    function addHomeTabs(): void {
+      const tabs = document.createElement("div");
+      tabs.dataset.testid = "ScrollSnap-List";
+      tabs.setAttribute("role", "tablist");
+      tabs.innerHTML =
+        '<button role="tab">おすすめ</button><button role="tab" aria-selected="true">フォロー中</button>';
+      document.body.prepend(tabs);
+    }
+    viewport.reset();
+    history.replaceState({}, "", "/home");
+    addHomeTabs();
+    viewport.update();
+    history.replaceState({}, "", "/example/status/123");
+    viewport.syncRoute();
+    history.replaceState({}, "", "/home");
+    renderPost();
+    top = 200;
+    viewport.cancelForUserNavigation();
+    // 遷移中の監視が繰り返されても、入力の記録を消さない。
+    viewport.update();
+    vi.advanceTimersByTime(32);
+    addHomeTabs();
+    viewport.update();
+    vi.advanceTimersByTime(2_100);
+    expect(top).toBe(200);
+    expect(window.scrollBy).not.toHaveBeenCalled();
+  });
+
+  it("投稿詳細での閲覧操作は戻り先の一覧の保存位置を消さない", () => {
+    history.replaceState({}, "", "/example/status/123");
+    top = 200;
+    viewport.cancelForUserNavigation();
+    viewport.update();
+    vi.advanceTimersByTime(32);
+    expect(window.scrollBy).not.toHaveBeenCalled();
+    history.replaceState({}, "", "/i/lists/42");
+    top = 470;
+    viewport.update();
+    vi.advanceTimersByTime(32);
+    expect(top).toBe(-30);
+  });
+
+  it("リスト復帰の通知前の閲覧操作は他のリストの保存位置を維持する", () => {
+    history.replaceState({}, "", "/i/lists/43");
+    top = 100;
+    viewport.update();
+    history.replaceState({}, "", "/i/lists/42");
+    top = 200;
+    viewport.cancelForUserNavigation();
+    viewport.update();
+    vi.advanceTimersByTime(2_100);
+    expect(top).toBe(200);
+    expect(window.scrollBy).not.toHaveBeenCalled();
+    history.replaceState({}, "", "/i/lists/43");
+    top = 500;
+    viewport.update();
+    vi.advanceTimersByTime(32);
+    expect(top).toBe(100);
+    history.replaceState({}, "", "/i/lists/42");
+    top = 500;
+    viewport.update();
+    vi.advanceTimersByTime(32);
+    expect(top).toBe(200);
+  });
+
   it("復元の終了後は投稿の位置を固定し続けない", () => {
     viewport.resize();
     vi.advanceTimersByTime(2_100);
@@ -269,7 +392,7 @@ describe.each([
     path: "/@music/videos",
     nextPath: "/@news/videos",
     markup:
-      '<ytd-video-renderer data-sift-filter-state="matched"><a id="video-title" href="/watch?v=123">動画</a></ytd-video-renderer><ytd-browse><button role="tab" aria-selected="true">新しい順</button></ytd-browse>',
+      '<ytd-video-renderer data-sift-filter-state="matched"><a id="video-title" href="/watch?v=123">動画</a></ytd-video-renderer><ytd-browse><button role="tab" aria-selected="true">人気の動画</button></ytd-browse>',
   },
 ])("$name の位置復元", ({ adapter, path, nextPath, markup }) => {
   function prepare(): void {

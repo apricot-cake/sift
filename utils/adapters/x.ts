@@ -25,6 +25,8 @@ const X_SELECTORS = Object.freeze({
   homeTab: '[role="tab"]',
 });
 const X_STATUS_ID = /\/status\/(\d+)/;
+const X_MEDIA_ROUTE =
+  /^\/(?:[\w]{1,15}|i\/web)\/status\/\d+\/(?:photo|video)\/\d+\/?$/;
 const X_RESERVED_PATHS = new Set([
   "home",
   "search",
@@ -41,10 +43,37 @@ const X_RESERVED_PATHS = new Set([
   "privacy",
 ]);
 
+function backgroundPage(
+  root: ParentNode,
+  page: Pick<Location, "pathname"> & Partial<Pick<Location, "search">>,
+) {
+  if (
+    !X_MEDIA_ROUTE.test(page.pathname) ||
+    !root.querySelector('[role="dialog"]') ||
+    !root.querySelector('[data-testid="primaryColumn"]')
+  )
+    return page;
+  const document =
+    root.nodeType === 9 ? (root as Document) : root.ownerDocument;
+  const state = document?.defaultView?.history.state?.state;
+  // X が一覧上で開いた画像に残す遷移元だけを使う。直接開いた個別投稿は含めない。
+  if (
+    state?.fromApp !== true ||
+    typeof state.previousPath !== "string" ||
+    !state.previousPath.startsWith("/") ||
+    state.previousPath.startsWith("//")
+  )
+    return page;
+  const previous = new URL(state.previousPath, "https://x.com");
+  if (previous.origin !== "https://x.com") return page;
+  return { pathname: previous.pathname, search: previous.search };
+}
+
 export function isXFilterPage(
   root: ParentNode,
   page: Pick<Location, "pathname"> & Partial<Pick<Location, "search">>,
 ): boolean {
+  page = backgroundPage(root, page);
   if (page.pathname === "/home") return isXSupportedHomeTimeline(root);
   if (page.pathname === "/search") {
     return new URLSearchParams(page.search ?? "").get("f") === "live";
@@ -60,7 +89,8 @@ export function isXFilterPage(
 function timelinePostCards(root: ParentNode): Element[] {
   return Array.from(root.querySelectorAll(X_SELECTORS.postCard)).filter(
     (postCard) =>
-      postCard.parentElement?.closest(X_SELECTORS.postCard) === null,
+      postCard.parentElement?.closest(X_SELECTORS.postCard) === null &&
+      !postCard.closest('[role="dialog"]'),
   );
 }
 
@@ -109,6 +139,10 @@ export const xAdapter = Object.freeze({
   id: "x",
   matches: Object.freeze(["https://x.com/*", "https://twitter.com/*"]),
   settingsKey: "x",
+  readPageKey(root: ParentNode, page: Pick<Location, "pathname" | "search">) {
+    const background = backgroundPage(root, page);
+    return `${background.pathname}${background.search ?? ""}`;
+  },
   readPageSupport(
     root: ParentNode,
     page: Pick<Location, "pathname"> & Partial<Pick<Location, "search">>,
@@ -136,6 +170,7 @@ export const xAdapter = Object.freeze({
     root: ParentNode,
     page: Pick<Location, "pathname" | "search">,
   ) {
+    if (X_MEDIA_ROUTE.test(page.pathname)) return null;
     if (!this.isTimelineAvailable(root, page)) return null;
     // 投稿メニューから遷移する際、X は URL の変更前に背景をスクロールする。
     // メニュー操作中の座標で、元の一覧の位置を上書きしない。
@@ -152,7 +187,8 @@ export const xAdapter = Object.freeze({
       root,
       (element) =>
         element.matches(X_SELECTORS.postCard) &&
-        element.parentElement?.closest(X_SELECTORS.postCard) === null
+        element.parentElement?.closest(X_SELECTORS.postCard) === null &&
+        !element.closest('[role="dialog"]')
           ? element
           : null,
       undefined,
