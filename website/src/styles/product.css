@@ -1,0 +1,197 @@
+:root {
+  view-transition-name: none;
+}
+.product-page {
+  --product-section-gap: clamp(64px, 7vw, 96px);
+  width: min(100% - 3rem, 960px);
+  margin-inline: auto;
+}
+.product-intro {
+  width: min(100%, 960px);
+  margin-inline: auto;
+  padding-block: 48px 64px;
+  text-align: center;
+}
+.product-page-title {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin: 0 0 16px;
+  font-size: 28px;
+  line-height: 1.2;
+  font-weight: 600;
+  letter-spacing: -0.025em;
+}
+.product-page-title img {
+  display: block;
+  width: 40px;
+  height: 40px;
+}
+.product-description {
+  text-wrap: pretty;
+  max-width: 620px;
+  margin-inline: auto;
+  color: #111;
+  font-size: 16px;
+  line-height: 1.9;
+  font-weight: 400;
+}
+.product-description p {
+  margin: 0;
+}
+.product-actions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-top: 20px;
+}
+.product-store {
+  display: inline-flex;
+  flex-shrink: 0;
+}
+.product-store img {
+  display: block;
+  width: 180px;
+  height: calc(58px * 180 / 206);
+  object-fit: contain;
+}
+.product-github {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 180px;
+  height: calc(58px * 180 / 206);
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: #fff;
+  color: #111;
+  font-size: 15px;
+  font-weight: 500;
+  transition:
+    background-color 150ms ease,
+    scale 140ms ease;
+}
+.product-github:active {
+  scale: 0.98;
+}
+.product-github:hover {
+  background: var(--muted);
+}
+.product-github img {
+  width: 24px;
+  height: 24px;
+}
+.product-demo {
+  width: min(100%, 960px);
+  margin-inline: auto;
+}
+.product-demo + .product-demo {
+  margin-top: var(--product-section-gap);
+}
+.product-demo h2 {
+  margin: 0 0 12px;
+  text-align: center;
+  font-size: 1.375rem;
+  font-weight: 500;
+  letter-spacing: -0.025em;
+}
+.product-demo-description {
+  margin: 0 auto 24px;
+  max-width: 720px;
+  text-align: center;
+  font-size: 15px;
+  line-height: 1.8;
+  color: var(--muted-foreground);
+  text-wrap: pretty;
+}
+[data-reveal] {
+  transition:
+    opacity 700ms cubic-bezier(0.215, 0.61, 0.355, 1),
+    translate 700ms cubic-bezier(0.215, 0.61, 0.355, 1);
+  transition-delay: var(--reveal-delay, 0ms);
+}
+[data-reveal-pending] {
+  opacity: 0;
+  translate: 0 8px;
+  transition: none;
+}
+.product-demo-note {
+  text-align: center;
+  margin: 16px 0 0;
+  font-size: 0.8125rem;
+  line-height: 1.8;
+  color: var(--muted-foreground);
+}
+.product-video {
+  width: 100%;
+  margin-inline: auto;
+  margin-top: var(--product-section-gap);
+}
+.product-video h2 {
+  margin: 0 0 24px;
+  color: #111;
+  font-size: 1.375rem;
+  font-weight: 500;
+  letter-spacing: -0.025em;
+  text-align: center;
+}
+.product-video-surface {
+  overflow: hidden;
+  border-radius: 16px;
+}
+.product-video iframe {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  border: 0;
+}
+.product-install {
+  display: flex;
+  justify-content: center;
+  padding-block: 40px 24px;
+}
+@media (max-width: 640px) {
+  .product-page {
+    width: calc(100% - 2rem);
+  }
+  .product-intro {
+    padding-block: 32px 48px;
+  }
+  .product-actions {
+    gap: 16px;
+    margin-top: 20px;
+  }
+  .product-description {
+    font-size: 16px;
+  }
+  .product-demo h2 {
+    font-size: 1.25rem;
+  }
+  .product-demo-description {
+    margin-bottom: 24px;
+  }
+  .product-video h2 {
+    font-size: 1.25rem;
+  }
+  .product-video-surface {
+    border-radius: 16px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  [data-reveal] {
+    opacity: 1;
+    translate: none;
+    transition: none;
+  }
+  .product-github {
+    transition: none;
+  }
+  .product-github:active {
+    scale: none;
+  }
+}

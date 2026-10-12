@@ -8,6 +8,10 @@
     "clientKind": "git",
     "useIgnoreFile": true
   },
+  "files": {
+    // 公式配布のロゴ素材は無加工で保持する。
+    "includes": ["**", "!!website/public/brand/**"]
+  },
   "formatter": {
     // Indentation, line endings and the final newline are declared in
     // .editorconfig, which the editor reads too. This is off by default, so
@@ -41,7 +45,19 @@
   },
   "overrides": [
     {
-      // Playwrightが管理する比較基準は、同ツールのシリアライズを維持する。
+      // BiomeはAstroのテンプレート内参照を解析しない。型と未使用参照はastro checkで確認する。
+      "includes": ["website/**/*.astro"],
+      "linter": {
+        "rules": {
+          "correctness": {
+            "noUnusedImports": "off",
+            "noUnusedVariables": "off"
+          }
+        }
+      }
+    },
+    {
+      // 比較基準は検証時のシリアライズを維持する。
       "includes": ["test/compatibility-baselines/**/*.json"],
       "formatter": { "enabled": false }
     },

@@ -1,0 +1,24 @@
+{
+  "name": "sift-website",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24.12.0"
+  },
+  "scripts": {
+    "dev": "astro dev --host 127.0.0.1",
+    "check": "astro check && tsc --noEmit",
+    "build": "astro build && node scripts/check-build.mjs && node scripts/check-replay.mjs",
+    "preview": "astro preview --host 127.0.0.1"
+  },
+  "dependencies": {
+    "@lucide/astro": "1.55.0",
+    "astro": "7.3.5"
+  },
+  "devDependencies": {
+    "@astrojs/check": "0.9.10",
+    "@types/node": "26.6.4",
+    "typescript": "6.0.3"
+  }
+}

@@ -1,0 +1,78 @@
+---
+import Layout from "../layouts/Layout.astro";
+import ReplayDemo from "./ReplayDemo.astro";
+
+const base = `${import.meta.env.BASE_URL.replace(/\/$/, "")}/`;
+const repository = "https://github.com/apricot-cake/sift";
+const store =
+  "https://chromewebstore.google.com/detail/sift/jglehalaegleehefcefnfmmbblgkomeh";
+---
+
+<Layout>
+  <main id="main" tabindex="-1" class="product-page">
+    <section class="product-intro" aria-labelledby="product-introduction-sentence">
+      <h1 id="product-introduction-sentence" class="product-page-title"><img src={`${base}icon-128.png`} width="56" height="56" alt="" />sift</h1>
+      <div class="product-description" data-reveal>
+        <p>siftは、投稿や動画を条件で絞り込むChrome拡張機能です。</p>
+      </div>
+      <div class="product-actions" data-reveal style="--reveal-delay: 160ms">
+        <a href={store} class="product-store" aria-label="Chrome ウェブストアでsiftを入手"><img src={`${base}brand/cws-badge.png`} width="206" height="58" alt="Available in the Chrome Web Store" /></a>
+        <a href={repository} class="product-github"><img src={`${base}brand/github-mark.svg`} width="24" height="24" alt="" />GitHub</a>
+      </div>
+    </section>
+
+    <section class="product-demo" data-reveal aria-labelledby="product-social-heading">
+      <h2 id="product-social-heading">X・Bluesky</h2>
+      <p class="product-demo-description">いいね数でタイムラインを絞り込み、イラストなど気になる投稿を見つける。</p>
+      <ReplayDemo mode="social" />
+    </section>
+
+    <section class="product-demo" data-reveal aria-labelledby="product-youtube-heading">
+      <h2 id="product-youtube-heading">YouTube・ニコニコ動画</h2>
+      <p class="product-demo-description">再生数順の一覧を投稿期間で絞り込み、新しく人気のある動画を見つける。</p>
+      <ReplayDemo mode="youtube" />
+      <p class="product-demo-note">※投稿内容・数値はデモ用です。</p>
+    </section>
+
+    <section class="product-video" data-reveal aria-labelledby="product-introduction-heading">
+      <h2 id="product-introduction-heading">紹介動画</h2>
+      <div class="product-video-surface"><iframe src="https://www.youtube-nocookie.com/embed/KqO-4fv2Qsw" title="siftの紹介動画 — YouTube" loading="lazy" allow="accelerometer; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe></div>
+    </section>
+
+    <div class="product-install" data-reveal>
+      <a href={store} class="product-store" aria-label="Chrome ウェブストアでsiftを入手"><img src={`${base}brand/cws-badge.png`} width="206" height="58" loading="lazy" alt="Available in the Chrome Web Store" /></a>
+    </div>
+  </main>
+</Layout>
+
+<script>
+  const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
+  if (!reducedMotion.matches && "IntersectionObserver" in window) {
+    const observer = new IntersectionObserver((entries) => {
+      for (const entry of entries) {
+        if (!entry.isIntersecting) continue;
+        entry.target.removeAttribute("data-reveal-pending");
+        observer.unobserve(entry.target);
+      }
+    }, { rootMargin: "0px 0px -40px 0px" });
+    document.querySelectorAll<HTMLElement>("[data-reveal]").forEach((element) => {
+      // 復元したスクロール位置より上の内容だけ、再表示を省く。
+      if (element.getBoundingClientRect().bottom <= 0) return;
+      element.setAttribute("data-reveal-pending", "");
+      // 初期表示でも、フェード開始前のスタイルを確定する。
+      void element.offsetHeight;
+      observer.observe(element);
+      element.addEventListener("focusin", () => {
+        element.removeAttribute("data-reveal-pending");
+        observer.unobserve(element);
+      });
+    });
+    reducedMotion.addEventListener("change", () => {
+      if (!reducedMotion.matches) return;
+      observer.disconnect();
+      document.querySelectorAll("[data-reveal-pending]").forEach((element) => {
+        element.removeAttribute("data-reveal-pending");
+      });
+    });
+  }
+</script>

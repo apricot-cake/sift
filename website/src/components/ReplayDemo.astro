@@ -1,0 +1,95 @@
+---
+import { demoPosts, demoVideos } from "../data/demo-posts";
+import "../styles/replay-demo.css";
+import {
+  ArrowLeft,
+  Bell,
+  Calendar,
+  ChevronDown,
+  CircleMinus,
+  Heart,
+  House,
+  Image,
+  List,
+  ListFilter,
+  Mail,
+  MessageCircle,
+  Quote,
+  Repeat2,
+  Search,
+} from "@lucide/astro";
+
+interface Props {
+  mode: "social" | "youtube";
+}
+const { mode } = Astro.props;
+
+const base = `${import.meta.env.BASE_URL.replace(/\/$/, "")}/`;
+const image = (path: string) => `${base}${path.replace(/^\//, "")}`;
+const stages = ["絞り込み前", "パネル表示", "条件設定", "絞り込み結果"];
+const navigation = [House, Search, Bell, Mail, List];
+---
+<div class="replay-demo" data-replay-demo data-mode={mode} data-stage="0">
+  <div class="replay-controls">
+  <fieldset class="replay-timeline" aria-label="操作デモの再生位置">
+    {stages.map((stage, index) => <button type="button" data-step={index} aria-label={`${stage}の場面から再生`} aria-current={index === 0 ? "step" : undefined}><span>{stage}</span><span class="replay-track" aria-hidden="true"><span class="replay-progress"></span></span></button>)}
+  </fieldset>
+  </div>
+  <div class="replay-viewport">
+    <div class="replay-screen" aria-label="siftの操作デモ">
+      <div class="replay-browser" aria-hidden="true"><ArrowLeft aria-hidden="true" /><span class="replay-address"></span><span class="replay-extension"><img src={`${base}icon-128.png`} width="24" height="24" alt="" /></span><span>···</span></div>
+      <div class="replay-workspace">
+        {mode === "social" && <div class="replay-social">
+          <div class="replay-nav" aria-hidden="true">{navigation.map((Icon) => <Icon aria-hidden="true" />)}</div>
+          <div class="replay-feed">
+            <div class="replay-feed-title">ホーム</div>
+            <div class="replay-feed-tabs" aria-hidden="true"><span>おすすめ</span><span class="selected">フォロー中</span></div>
+            <div class="replay-summary"><span>投稿一覧</span><span data-social-count>{demoPosts.length} / {demoPosts.length}件を表示</span></div>
+            <div class="replay-posts">{demoPosts.map((post, index) => <article class="replay-post" data-likes={post.likes}><span class={`replay-avatar avatar-${demoPosts.findIndex((entry) => entry.handle === post.handle) % 3}`} aria-hidden="true"></span><div class="replay-author"><strong>{post.name}</strong><span>{post.handle}</span><span>· {index + 1}時間</span></div><p>{post.text}</p>{post.image && <img class="replay-post-image" src={image(post.image)} width="132" height="78" alt={post.alt} />}<div class="replay-metrics"><span><MessageCircle aria-hidden="true" />{post.replies}</span><span><Repeat2 aria-hidden="true" />{post.reposts.toLocaleString("ja-JP")}</span><span><Heart aria-hidden="true" />{post.likes.toLocaleString("ja-JP")}</span></div></article>)}</div>
+          </div>
+        </div>}
+        {mode === "youtube" && <div class="replay-youtube">
+          <div class="replay-channel"><span class="replay-channel-avatar" aria-hidden="true"></span><div><h3>こむぎ</h3><p>@sample_komugi · チャンネル登録者数 2.4万人 · 6本の動画</p></div></div>
+          <div class="replay-video-tabs" aria-hidden="true"><span>ホーム</span><span class="selected">動画</span><span>ショート</span><span>投稿</span></div>
+          <div class="replay-video-sort"><span>新しい順</span><span class="selected">人気の動画</span><span>古い順</span><span data-video-count>6 / 6件を表示</span></div>
+          <div class="replay-videos">{demoVideos.map((video) => <article class="replay-video" data-days={video.publishedDays}><div class="replay-thumbnail"><img src={image(video.image)} width="320" height="180" alt={video.alt} style={{ objectPosition: video.imagePosition }} fetchpriority="low" /><span>{video.duration}</span></div><h4>{video.title}</h4><p>{video.views.toLocaleString("ja-JP")} 回視聴 · {video.age}</p></article>)}</div>
+        </div>}
+        <aside class="replay-panel" aria-hidden="true">
+          <div class="replay-panel-content">
+            <section class="replay-panel-minimum">
+              <h3 class="replay-label">
+                <ListFilter data-mode-fields="social" aria-hidden="true" />
+                <Calendar data-mode-fields="youtube" aria-hidden="true" />
+                <span data-label>最低いいね数</span>
+              </h3>
+              <p class="replay-panel-hint" data-mode-fields="youtube">再生数順の一覧を、投稿期間で絞り込みます</p>
+              <div class="replay-field">
+                <div class="replay-picker"><span class="replay-selected"><span data-value>指定なし</span><span data-selected-count>6件</span></span><ChevronDown aria-hidden="true" /></div>
+                <div class="replay-menu" hidden aria-hidden="true"></div>
+              </div>
+              <p class="replay-panel-note" data-panel-note>読み込み済み投稿6件を集計しています</p>
+            </section>
+            <section class="replay-panel-group" data-mode-fields="social">
+              <h3 class="replay-label"><Image aria-hidden="true" />コンテンツタイプ</h3>
+              <div class="replay-static-select">すべて<ChevronDown aria-hidden="true" /></div>
+            </section>
+            <section class="replay-panel-group" data-mode-fields="social">
+              <h3 class="replay-label"><CircleMinus aria-hidden="true" />除外条件</h3>
+              <div data-mode-fields="social">
+                <div class="replay-setting-row"><span><MessageCircle aria-hidden="true" />返信を除外</span><span class="replay-switch"></span></div>
+                <div class="replay-setting-row"><span><Quote aria-hidden="true" />引用投稿を除外</span><span class="replay-switch"></span></div>
+                <div class="replay-setting-row"><span><Repeat2 aria-hidden="true" />リポストを除外</span><span class="replay-switch"></span></div>
+              </div>
+            </section>
+          </div>
+          <div class="replay-panel-footer">設定をリセット</div>
+        </aside>
+      </div>
+      <span class="replay-cursor" aria-hidden="true"></span>
+    </div>
+  </div>
+</div>
+<script>
+  import { initializeReplayDemos } from "../scripts/replay-demo";
+  initializeReplayDemos();
+</script>
