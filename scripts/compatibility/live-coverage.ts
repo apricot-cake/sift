@@ -1,52 +1,59 @@
-import type {
-  JSONReport,
-  JSONReportSpec,
-  JSONReportSuite,
-} from "@playwright/test/reporter";
+import type { JsonTestResults } from "vitest/node";
 import {
   type CompatibilityCase,
   requiredFilterEvidence,
 } from "../../e2e/cases.ts";
 
+export interface LiveEvidence {
+  name: string;
+  data: Record<string, unknown>;
+}
+
+declare module "vitest" {
+  interface TaskMeta {
+    liveEvidence?: LiveEvidence[];
+  }
+}
+
 /** 起動や最低値だけの成功を、ページの全フィルター検証完了として扱わない。 */
 export function assertLiveCoverage(
-  report: JSONReport,
+  report: JsonTestResults,
   cases: readonly CompatibilityCase[],
   lifecycle: readonly { id: string }[] = [],
   empty: readonly { id: string }[] = [],
   unsupported: readonly { id: string }[] = [],
+  lightbox: readonly { id: string }[] = [],
 ): void {
-  const flatten = (suites: JSONReportSuite[]): JSONReportSpec[] =>
-    suites.flatMap((suite) => [...suite.specs, ...flatten(suite.suites ?? [])]);
-  const specs = flatten(report.suites);
+  const specs = report.testResults.flatMap((suite) => suite.assertionResults);
   if (
     specs.length !==
-    cases.length + lifecycle.length + empty.length + unsupported.length
+    cases.length +
+      lifecycle.length +
+      empty.length +
+      unsupported.length +
+      lightbox.length
   )
     throw new Error("対象マトリクスが一致しません。");
   const requiredEffects = new Set<string>();
   const verifiedEffects = new Set<string>();
   for (const target of cases) {
     const matches = specs.filter((spec) => spec.title === target.id);
-    const result = matches[0]?.tests[0]?.results[0];
+    const result = matches[0];
     if (
       matches.length !== 1 ||
-      matches[0]?.tests.length !== 1 ||
-      matches[0]?.tests[0]?.results.length !== 1 ||
       result?.status !== "passed" ||
-      result.errors.length
+      result.failureMessages?.length
     )
       throw new Error(`${target.id}: 完全な成功結果ではありません。`);
     for (const name of requiredFilterEvidence(target)) {
       const effect = `${target.site}: ${name}`;
       requiredEffects.add(effect);
-      const attachments = result.attachments.filter(
+      const attachments = (result.meta.liveEvidence ?? []).filter(
         (item) => item.name === name,
       );
-      const body = attachments[0]?.body;
-      if (attachments.length !== 1 || !body)
+      const evidence = attachments[0]?.data;
+      if (attachments.length !== 1 || !evidence)
         throw new Error(`${target.id}: ${name} の検証記録がありません。`);
-      const evidence = JSON.parse(Buffer.from(body, "base64").toString("utf8"));
       if (
         evidence.applied !== true ||
         evidence.cleared !== true ||
@@ -56,9 +63,9 @@ export function assertLiveCoverage(
           `${target.id}: ${name} の操作・解除・誤除外の確認が不足しています。`,
         );
       const count = evidence.hidden ?? evidence.excluded;
-      if (!Number.isInteger(count) || count < 0)
+      if (!Number.isInteger(count) || typeof count !== "number" || count < 0)
         throw new Error(`${target.id}: ${name} の除外件数が不正です。`);
-      if (count > 0) verifiedEffects.add(effect);
+      if (typeof count === "number" && count > 0) verifiedEffects.add(effect);
     }
   }
   const missing = [...requiredEffects].filter(
@@ -66,23 +73,19 @@ export function assertLiveCoverage(
   );
   for (const target of lifecycle) {
     const matches = specs.filter((spec) => spec.title === target.id);
-    const test = matches[0]?.tests[0];
-    const result = test?.results[0];
-    const attachments = result?.attachments.filter(
+    const result = matches[0];
+    const attachments = result?.meta.liveEvidence?.filter(
       (item) => item.name === "lifecycle",
     );
-    const body = attachments?.[0]?.body;
+    const evidence = attachments?.[0]?.data;
     if (
       matches.length !== 1 ||
-      matches[0]?.tests.length !== 1 ||
-      test?.results.length !== 1 ||
       result?.status !== "passed" ||
-      result.errors.length ||
+      result.failureMessages?.length ||
       attachments?.length !== 1 ||
-      !body
+      !evidence
     )
       throw new Error(`${target.id}: 遷移の検証記録が不足しています。`);
-    const evidence = JSON.parse(Buffer.from(body, "base64").toString("utf8"));
     if (
       JSON.stringify(evidence.stages) !==
       JSON.stringify([
@@ -101,25 +104,21 @@ export function assertLiveCoverage(
     ...unsupported.map((item) => ({ ...item, state: "unsupported" })),
   ]) {
     const matches = specs.filter((spec) => spec.title === target.id);
-    const test = matches[0]?.tests[0];
-    const result = test?.results[0];
-    const attachments = result?.attachments.filter(
+    const result = matches[0];
+    const attachments = result?.meta.liveEvidence?.filter(
       (item) => item.name === `${target.state}-state`,
     );
-    const body = attachments?.[0]?.body;
+    const evidence = attachments?.[0]?.data;
     if (
       matches.length !== 1 ||
-      matches[0]?.tests.length !== 1 ||
-      test?.results.length !== 1 ||
       result?.status !== "passed" ||
-      result.errors.length ||
+      result.failureMessages?.length ||
       attachments?.length !== 1 ||
-      !body
+      !evidence
     )
       throw new Error(
         `${target.id}: ${target.state} の検証記録が不足しています。`,
       );
-    const evidence = JSON.parse(Buffer.from(body, "base64").toString("utf8"));
     if (
       evidence.state !== target.state ||
       (target.state === "empty"
@@ -134,4 +133,27 @@ export function assertLiveCoverage(
   }
   if (missing.length)
     throw new Error(`代表ページで除外効果が未確認です: ${missing.join(", ")}`);
+  for (const target of lightbox) {
+    const matches = specs.filter((spec) => spec.title === target.id);
+    const result = matches[0];
+    const attachments = result?.meta.liveEvidence?.filter(
+      (item) => item.name === "lightbox-gate",
+    );
+    const evidence = attachments?.[0]?.data;
+    if (
+      matches.length !== 1 ||
+      result?.status !== "passed" ||
+      result.failureMessages?.length ||
+      attachments?.length !== 1 ||
+      !evidence ||
+      evidence.settingPreserved !== true ||
+      evidence.contextPreserved !== true ||
+      evidence.modalVisible !== true ||
+      evidence.closedRestored !== true ||
+      evidence.directUnsupported !== true
+    )
+      throw new Error(
+        `${target.id}: ライトボックスの検証記録が不足しています。`,
+      );
+  }
 }

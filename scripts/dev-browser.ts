@@ -2,7 +2,6 @@
 import { spawn } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
-import { readDevBrowserEndpoint } from "./dev-browser-endpoint.ts";
 import {
   assertDevBrowserProfile,
   secureDevBrowserProfile,
@@ -15,14 +14,10 @@ if (args.length > 1 || (args[0] && args[0] !== "--print"))
   throw new Error("利用できる引数は --print だけです。");
 if (args[0] === "--print") {
   assertDevBrowserProfile(profile);
-  const endpoint = await readDevBrowserEndpoint(profile);
   console.log(`プロファイル: ${profile}`);
-  console.log(`CDP ポート:  ${endpoint?.url ?? "無効（自動検証中だけ有効）"}`);
+  console.log("ブラウザ接続: 起動元の内部 pipe（TCP 待受なし）");
 } else {
   secureDevBrowserProfile(profile);
-  const endpoint = await readDevBrowserEndpoint(profile);
-  if (endpoint)
-    throw new Error("CDP が有効な開発用 Chrome を先に閉じてください。");
   const log = fs.openSync(path.join(profile, "chrome-stderr.log"), "a");
   try {
     const child = spawn(

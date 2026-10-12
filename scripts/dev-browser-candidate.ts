@@ -1,84 +1,106 @@
 import fs from "node:fs";
 import path from "node:path";
-import { type Browser, type BrowserContext, expect } from "@playwright/test";
+import { type Browser, ProtocolError } from "puppeteer-core";
+import { getExtensionWorker } from "./browser-worker.ts";
 import { artifactHash } from "./compatibility/artifact.ts";
+import type { VerifiedCandidate } from "./compatibility/verification.ts";
 
-/** 実際に再起動したworkerの値を確認し、ファイルの読出しだけで成功にしない。 */
-export async function reloadCandidateWorker(
-  context: BrowserContext,
-  extensionId: string,
+/** 実行中のビルドを照合し、Chrome に残る旧ビルドだけを再読み込みする。 */
+export async function installCandidateWorker(
+  browser: Browser,
+  output: string,
   buildId: string,
   timeout = 10000,
 ) {
-  const url = `chrome-extension://${extensionId}/background.js`;
-  const previous =
-    context.serviceWorkers().find((worker) => worker.url() === url) ??
-    (await context.waitForEvent("serviceworker", {
-      predicate: (worker) => worker.url() === url,
-      timeout,
-    }));
+  const root = await browser.target().createCDPSession();
+  const { targetInfos: previousTargets } = await root
+    .send("Target.getTargets")
+    .finally(() => root.detach());
+  const extensionId = await browser.installExtension(output);
+  const previousTargetId = previousTargets.find(
+    (target) =>
+      target.type === "service_worker" &&
+      target.url === `chrome-extension://${extensionId}/background.js`,
+  )?.targetId;
+  let next = await getExtensionWorker(
+    browser,
+    extensionId,
+    timeout,
+    previousTargetId,
+  );
   try {
-    await previous.evaluate("chrome.runtime.reload()");
-  } catch (error) {
-    // reloadで元の実行コンテキストが失われる場合だけ、新workerの照合へ進む。
-    if (
-      !(error instanceof Error) ||
-      !/Execution context was destroyed|Service worker restarted|Target closed|Target page, context or browser has been closed/.test(
-        error.message,
+    const runningBuild = () =>
+      next.evaluate(
+        () =>
+          (
+            globalThis as typeof globalThis & {
+              __SIFT_RUNNING_BUILD_ID__?: string;
+            }
+          ).__SIFT_RUNNING_BUILD_ID__ ?? null,
+      );
+    let actual = await runningBuild();
+    if (actual !== buildId) {
+      const previous = next;
+      let reloadError: unknown;
+      let workerError: unknown;
+      // reload は worker 自身を終了するため、その応答より新 worker を待つ。
+      const reload = previous
+        .evaluate("chrome.runtime.reload()")
+        .catch((error) => {
+          reloadError = error;
+        });
+      try {
+        next = await getExtensionWorker(
+          browser,
+          extensionId,
+          timeout,
+          previous.targetId,
+        );
+      } catch (error) {
+        workerError = error;
+      } finally {
+        await previous.dispose();
+        await reload;
+      }
+      if (
+        reloadError &&
+        !(
+          reloadError instanceof ProtocolError &&
+          /Target closed|Session closed/.test(reloadError.message)
+        )
       )
-    )
-      throw error;
+        throw reloadError;
+      if (workerError) throw workerError;
+      actual = await runningBuild();
+    }
+    if (actual !== buildId)
+      throw new Error("読み込んだ worker が候補ビルドと一致しません。");
+    return { id: extensionId, worker: next };
+  } catch (error) {
+    await next.dispose().catch(() => {});
+    throw error;
   }
-  await expect
-    .poll(
-      async () => {
-        const worker = context
-          .serviceWorkers()
-          .find((worker) => worker !== previous && worker.url() === url);
-        if (!worker) return null;
-        return await worker
-          .evaluate(
-            () =>
-              (
-                globalThis as typeof globalThis & {
-                  __SIFT_RUNNING_BUILD_ID__?: string;
-                }
-              ).__SIFT_RUNNING_BUILD_ID__ ?? null,
-          )
-          .catch(() => null);
-      },
-      {
-        timeout,
-        intervals: [50, 100, 250],
-        message: "再読み込みしたworkerが候補ビルドと一致しません",
-      },
-    )
-    .toBe(buildId);
 }
 
 export async function loadDevCandidate(browser: Browser) {
   const root = path.resolve(import.meta.dirname, "..");
   const candidate = JSON.parse(
     fs.readFileSync(path.join(root, ".output", "candidate.json"), "utf8"),
-  );
+  ) as VerifiedCandidate;
   const expected = path.join(root, ".output", "candidate", "chrome-mv3");
   if (
     candidate.output !== expected ||
     artifactHash(expected) !== candidate.sha256
   )
     throw new Error("検証用成果物が作成時と一致しません");
-  const client = await browser.newBrowserCDPSession();
-  try {
-    const loaded = await client.send("Extensions.loadUnpacked", {
-      path: expected,
-    });
-    const context = browser.contexts()[0];
-    if (!context) throw new Error("開発用Chromeのコンテキストがありません");
-    await reloadCandidateWorker(context, loaded.id, candidate.buildId);
-    if (artifactHash(expected) !== candidate.sha256)
-      throw new Error("読み込み中に検証用成果物が変更されました");
-    return { ...candidate, loaded };
-  } finally {
-    await client.detach();
+  const { id, worker } = await installCandidateWorker(
+    browser,
+    expected,
+    candidate.buildId,
+  );
+  if (artifactHash(expected) !== candidate.sha256) {
+    await worker.dispose();
+    throw new Error("読み込み中に検証用成果物が変更されました");
   }
+  return { ...candidate, loaded: { id }, worker };
 }

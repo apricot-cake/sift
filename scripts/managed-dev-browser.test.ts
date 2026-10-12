@@ -1,183 +1,128 @@
 // @vitest-environment node
-
-import { chromium } from "@playwright/test";
+import { launch } from "puppeteer-core";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
-import { readDevBrowserEndpoint } from "./dev-browser-endpoint.ts";
-import {
-  assertDevBrowserProfile,
-  secureDevBrowserProfile,
-} from "./dev-browser-profile.ts";
+import { secureDevBrowserProfile } from "./dev-browser-profile.ts";
 import {
   devBrowserProfile,
   launchDevBrowser,
-  readManagedDevBrowserEndpoint,
   withDevBrowser,
 } from "./managed-dev-browser.ts";
 
-vi.mock("@playwright/test", () => ({
-  chromium: { launchPersistentContext: vi.fn() },
-}));
-vi.mock("./dev-browser-endpoint.ts", () => ({
-  readDevBrowserEndpoint: vi.fn(),
-}));
+vi.mock("puppeteer-core", () => ({ launch: vi.fn() }));
 vi.mock("./chrome-path.ts", () => ({ findChromePath: () => "chrome" }));
 vi.mock("./dev-browser-profile.ts", () => ({
-  assertDevBrowserProfile: vi.fn(),
   secureDevBrowserProfile: vi.fn(),
 }));
 
-describe("検証中だけ有効な開発用 Chrome", () => {
-  const read = vi.mocked(readDevBrowserEndpoint);
-  const launch = vi.mocked(chromium.launchPersistentContext);
+describe("起動元の pipe だけで管理する開発用 Chrome", () => {
+  const start = vi.mocked(launch);
   const close = vi.fn();
-  const endpoint = {
-    url: "http://127.0.0.1:49152",
-    webSocketDebuggerUrl: "ws://127.0.0.1:49152/devtools/browser/owned",
-  };
-
   beforeEach(() => {
     vi.resetAllMocks();
-    vi.stubEnv("SIFT_DEV_BROWSER_SESSION", "");
     vi.stubEnv("SIFT_DEV_PROFILE", "test-profile");
-    launch.mockResolvedValue({ close } as unknown as Awaited<
-      ReturnType<typeof chromium.launchPersistentContext>
+    start.mockResolvedValue({ close } as unknown as Awaited<
+      ReturnType<typeof launch>
     >);
-    read.mockResolvedValueOnce(null).mockResolvedValue(endpoint);
   });
   afterEach(() => vi.unstubAllEnvs());
-
-  test("正常終了後に所有ブラウザを閉じ、セッションを破棄する", async () => {
+  test.each([true, false])(
+    "自動・手動とも TCP を開かず、sandbox を無効にしない: %s",
+    async (headless) => {
+      await launchDevBrowser(headless);
+      const options = start.mock.calls[0]?.[0];
+      expect(options).toMatchObject({
+        headless,
+        pipe: true,
+        enableExtensions: true,
+        defaultViewport: null,
+        userDataDir: devBrowserProfile(),
+      });
+      expect(
+        options?.args?.some((arg) =>
+          /remote-debugging|no-sandbox|disable-setuid-sandbox/.test(arg),
+        ),
+      ).toBe(false);
+      expect(options?.ignoreDefaultArgs).toEqual(
+        expect.arrayContaining(["--hide-scrollbars"]),
+      );
+      expect(options?.args).not.toContain("--hide-scrollbars");
+      if (headless) expect(options?.args).toContain("--window-size=1280,720");
+    },
+  );
+  test("成功後に所有ブラウザを閉じる", async () => {
     expect(
-      await withDevBrowser(async () => {
-        expect(await readManagedDevBrowserEndpoint()).toEqual(endpoint);
+      await withDevBrowser(async (browser) => {
+        expect(browser).toHaveProperty("close");
         return 7;
       }),
     ).toBe(7);
     expect(close).toHaveBeenCalledOnce();
-    expect(process.env.SIFT_DEV_BROWSER_SESSION).toBeUndefined();
-    expect(launch).toHaveBeenCalledWith(
-      devBrowserProfile(),
-      expect.objectContaining({ chromiumSandbox: true, viewport: null }),
-    );
   });
-
-  test("検証が失敗してもブラウザを閉じる", async () => {
+  test("Puppeteer の環境変数が追加する sandbox 無効化を除去する", async () => {
+    const sdk =
+      await vi.importActual<typeof import("puppeteer-core")>("puppeteer-core");
+    vi.stubEnv("PUPPETEER_DANGEROUS_NO_SANDBOX", "true");
+    await launchDevBrowser(true);
+    const options = start.mock.calls[0]?.[0];
+    expect(options).toBeDefined();
+    const defaults = await sdk.defaultArgs(options);
+    expect(defaults).toContain("--no-sandbox");
+    const ignored = options?.ignoreDefaultArgs;
+    expect(Array.isArray(ignored)).toBe(true);
+    const effective = defaults.filter(
+      (arg) => !(ignored as string[]).includes(arg),
+    );
+    expect(effective).not.toContain("--no-sandbox");
+    expect(effective).not.toContain("--disable-setuid-sandbox");
+  });
+  test("失敗後にも所有ブラウザを閉じる", async () => {
     await expect(
       withDevBrowser(async () => {
-        throw new Error("child failure");
+        throw new Error("failure");
       }),
-    ).rejects.toThrow("child failure");
+    ).rejects.toThrow("failure");
     expect(close).toHaveBeenCalledOnce();
-    expect(process.env.SIFT_DEV_BROWSER_SESSION).toBeUndefined();
   });
-
-  test("自動検証はウィンドウを表示せず、通常のスクロールバーで検証する", async () => {
+  test("旧セッション環境変数から外部 Chrome を採用しない", async () => {
+    vi.stubEnv(
+      "SIFT_DEV_BROWSER_SESSION",
+      JSON.stringify({
+        profile: devBrowserProfile(),
+        endpoint: "ws://127.0.0.1:49152/devtools/browser/foreign",
+      }),
+    );
     await withDevBrowser(async () => 0);
-    const options = launch.mock.calls[0]?.[1];
-    expect(options).toMatchObject({ headless: true, viewport: null });
-    expect(options?.args).toEqual(
-      expect.arrayContaining([
-        "--headless=new",
-        "--remote-debugging-address=127.0.0.1",
-        "--remote-debugging-port=0",
-      ]),
-    );
-    expect(options?.ignoreDefaultArgs).toEqual(
-      expect.arrayContaining(["--headless", "--hide-scrollbars"]),
-    );
-    expect(options?.args).not.toContain("--hide-scrollbars");
-    expect(options?.args).toContain("--window-size=1280,720");
+    expect(start).toHaveBeenCalledOnce();
     expect(close).toHaveBeenCalledOnce();
   });
-
-  test("手動確認は可視ウィンドウを使い、CDP の TCP ポートを開かない", async () => {
-    await launchDevBrowser(false);
-    const options = launch.mock.calls[0]?.[1];
-    expect(options).toMatchObject({ headless: false, viewport: null });
-    expect(options?.args?.some((arg) => arg.startsWith("--headless"))).toBe(
-      false,
-    );
-    expect(
-      options?.args?.some((arg) => arg.startsWith("--remote-debugging-")),
-    ).toBe(false);
-    expect(options?.args?.some((arg) => arg.startsWith("--window-size="))).toBe(
-      false,
-    );
-  });
-
-  test("起動後の接続先確認が失敗してもブラウザを閉じる", async () => {
-    read.mockReset().mockResolvedValue(null);
-    await expect(withDevBrowser(async () => 0)).rejects.toThrow(
-      "接続先を確認できません",
-    );
-    expect(close).toHaveBeenCalledOnce();
-  });
-
-  test("不正な profile は endpoint probe と Chrome 起動の前に拒否する", async () => {
+  test("不正な profile は Chrome 起動前に拒否する", async () => {
     vi.mocked(secureDevBrowserProfile).mockImplementationOnce(() => {
       throw new Error("unsafe profile");
     });
     await expect(withDevBrowser(async () => 0)).rejects.toThrow(
       "unsafe profile",
     );
-    expect(read).not.toHaveBeenCalled();
-    expect(launch).not.toHaveBeenCalled();
+    expect(start).not.toHaveBeenCalled();
   });
-
-  test("読取接続は endpoint probe の前に profile を検査する", async () => {
-    vi.mocked(assertDevBrowserProfile).mockImplementationOnce(() => {
-      throw new Error("unsafe read profile");
-    });
-    await expect(readManagedDevBrowserEndpoint()).rejects.toThrow(
-      "unsafe read profile",
-    );
-    expect(read).not.toHaveBeenCalled();
-  });
-
-  test("常設された CDP を所有セッションとして流用しない", async () => {
-    read.mockReset().mockResolvedValue(endpoint);
-    const run = vi.fn();
-    await expect(withDevBrowser(run)).rejects.toThrow("先に閉じてください");
-    expect(launch).not.toHaveBeenCalled();
-    expect(run).not.toHaveBeenCalled();
-  });
-
-  test("子コマンドは所有ブラウザを閉じずに共有する", async () => {
-    await withDevBrowser(async () => {
-      await withDevBrowser(async () => 0);
-      expect(close).not.toHaveBeenCalled();
-    });
-    expect(launch).toHaveBeenCalledOnce();
-    expect(close).toHaveBeenCalledOnce();
-  });
-
-  test("中断済みなら Chrome の起動を始めない", async () => {
+  test("中断済みなら Chrome を起動しない", async () => {
     const controller = new AbortController();
-    const reason = new Error("interrupted startup");
-    controller.abort(reason);
+    controller.abort(new Error("interrupted"));
+    await expect(
+      withDevBrowser(async () => 0, controller.signal),
+    ).rejects.toThrow("interrupted");
+    expect(start).not.toHaveBeenCalled();
+  });
+  test("起動中の中断でも callback を実行せず Chrome を閉じる", async () => {
+    const controller = new AbortController();
+    start.mockImplementationOnce(async () => {
+      controller.abort(new Error("interrupted"));
+      return { close } as unknown as Awaited<ReturnType<typeof launch>>;
+    });
     const run = vi.fn();
     await expect(withDevBrowser(run, controller.signal)).rejects.toThrow(
-      "interrupted startup",
+      "interrupted",
     );
     expect(run).not.toHaveBeenCalled();
-    expect(launch).not.toHaveBeenCalled();
-  });
-
-  test.each([
-    "",
-    JSON.stringify({
-      profile: "other",
-      endpoint: endpoint.webSocketDebuggerUrl,
-    }),
-    JSON.stringify({
-      profile: "test-profile",
-      endpoint: "ws://127.0.0.1:49152/devtools/browser/other",
-    }),
-  ])("未管理または別セッションでは接続しない: %s", async (session) => {
-    read.mockReset().mockResolvedValue(endpoint);
-    vi.stubEnv("SIFT_DEV_BROWSER_SESSION", session);
-    await expect(readManagedDevBrowserEndpoint()).rejects.toThrow(
-      "管理中の開発用 Chrome がありません",
-    );
+    expect(close).toHaveBeenCalledOnce();
   });
 });

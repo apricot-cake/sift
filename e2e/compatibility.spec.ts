@@ -1,4 +1,5 @@
-import { expect, type Locator, type Page, test } from "@playwright/test";
+import type { ElementHandle, Page } from "puppeteer-core";
+import { afterAll, beforeAll, expect, type RunnerTask, test } from "vitest";
 import { retryNameResolution } from "../scripts/compatibility/navigation.ts";
 import {
   captureRoute,
@@ -7,6 +8,14 @@ import {
   type StructureSnapshot,
 } from "../scripts/compatibility/structure.ts";
 import { parseMetric } from "../utils/filter-core.ts";
+import {
+  aria,
+  element,
+  evidence,
+  fillNumber,
+  text,
+  visible,
+} from "./browser-queries.ts";
 import { type CompatibilityCase, cases } from "./cases.ts";
 import {
   closePanel,
@@ -21,15 +30,17 @@ let session: LiveSession;
 
 // サイドパネルでは背景タブ扱いでrequestAnimationFrameが停止することがある。
 // 可視・有効を確認し、安定性待ちだけを省いてCDPの実ポインター入力を送る。
-async function panelClick(locator: Locator) {
-  await expect(locator).toBeVisible();
-  await expect(locator).toBeEnabled();
-  await locator.click({ force: true });
+async function panelClick(handle: ElementHandle<Element>) {
+  expect(await handle.isVisible()).toBe(true);
+  expect(await handle.evaluate((node) => !node.hasAttribute("disabled"))).toBe(
+    true,
+  );
+  await handle.click();
 }
-test.beforeAll(async () => {
+beforeAll(async () => {
   session = await connectLive();
 });
-test.afterAll(async () => {
+afterAll(async () => {
   if (session) await finishLive(session);
 });
 
@@ -42,7 +53,7 @@ const regions = {
   },
   niconico: {
     card: "[data-decoration-video-id], [data-video-id], .NC-VideoMediaObject, main article",
-    metric: ".NC-VideoMetaCount_view, time + *, p span",
+    metric: "time[datetime], .NC-VideoRegisteredAtText-text",
     sort: ".Selectbox-label",
   },
   x: {
@@ -57,27 +68,78 @@ const regions = {
   },
 };
 
+function regionFor(target: CompatibilityCase) {
+  if (target.niconicoSearch)
+    return {
+      card: '[data-decoration-video-id][data-anchor-page="search"][data-anchor-area="main"]',
+      metric: "time[datetime], .NC-VideoRegisteredAtText-text",
+      sort: aria("combobox", "ソートキーを選択"),
+    };
+  return regions[target.site];
+}
+
 async function selectTab(page: Page, target: CompatibilityCase) {
   if (target.tab) {
+    // ホームの初期一覧が表示されてから、対象のタブへ切り替える。
+    if (
+      target.id === "x-following" ||
+      (target.site === "bluesky" && target.destination === "/")
+    )
+      await page.locator(regionFor(target).card).wait();
     const navigation =
-      target.site === "niconico"
-        ? page.getByRole("link", { name: target.tab, exact: true })
-        : page.getByRole("tab", { name: target.tab, exact: true });
-    await navigation.first().click();
+      target.site === "x" && target.tab === "ポスト"
+        ? `a[role="tab"][href=${JSON.stringify(target.destination)}]`
+        : target.site === "bluesky" && target.destination === "/search"
+          ? `::-p-xpath(//*[@data-testid="searchScreen"]//*[@role="tab" and normalize-space(.)=${JSON.stringify(target.tab)}])`
+          : aria(target.site === "niconico" ? "link" : "tab", target.tab);
+    const locator = page.locator(navigation);
+    // Bluesky の読み込みoverlayを待つ。再取得とスクロールはLocatorに任せる。
     if (target.site === "bluesky")
-      await expect(
-        navigation.first().locator('[style*="background-color"]').first(),
-      ).toBeVisible();
+      await locator
+        .filter((node) => {
+          if (!node.isConnected) throw new Error("対象タブが再描画されました");
+          const rect = node.getBoundingClientRect();
+          const x = rect.x + rect.width / 2;
+          const y = rect.y + rect.height / 2;
+          // 画面外ならクリック側の自動スクロールに任せる。
+          if (x < 0 || y < 0 || x >= innerWidth || y >= innerHeight)
+            return true;
+          const hit = document.elementFromPoint(x, y);
+          return !!hit && node.contains(hit);
+        })
+        .click();
+    else await locator.click();
+    if (target.site === "bluesky")
+      await expect
+        .poll(async () =>
+          page.$eval(navigation, (node) => {
+            const mark = node.querySelector('[style*="background-color"]');
+            return (
+              !!mark &&
+              getComputedStyle(mark).display !== "none" &&
+              mark.getBoundingClientRect().height > 0
+            );
+          }),
+        )
+        .toBe(true);
     else if (target.site === "x")
-      await expect(navigation.first()).toHaveAttribute("aria-selected", "true");
+      await expect
+        .poll(() =>
+          page.$eval(navigation, (node) => node.getAttribute("aria-selected")),
+        )
+        .toBe("true");
   }
 }
 
-async function navigate(page: Page, target: CompatibilityCase) {
+async function navigate(
+  page: Page,
+  target: CompatibilityCase,
+  task: RunnerTask,
+) {
   await retryNameResolution(
     () => page.goto(target.start, { waitUntil: "domcontentloaded" }),
     (message) =>
-      test.info().attach("navigation-dns-retry", {
+      evidence(task, "navigation-dns-retry", {
         body: JSON.stringify({ url: target.start, message, retries: 1 }),
         contentType: "application/json",
       }),
@@ -85,31 +147,62 @@ async function navigate(page: Page, target: CompatibilityCase) {
   if (target.linkHref)
     await page.locator(`a[href="${target.linkHref}"]`).click();
   if (target.linkLabel) {
-    const link = page
-      .getByRole("link")
-      .filter({ has: page.getByText(target.linkLabel, { exact: true }) });
+    const link = `::-p-xpath(//*[@role="link" or self::a][descendant::*[normalize-space(text()) = ${JSON.stringify(target.linkLabel)}]])`;
     // 一覧内容の取得はページ読み込みと同じ上限で待ち、操作時間と分ける。
-    await expect(link).toBeVisible({ timeout: 30_000 });
-    await link.click();
+    await expect.poll(() => visible(page, link), { timeout: 30000 }).toBe(true);
+    await page.locator(link).click();
   }
   await selectTab(page, target);
-  if (target.channelSearch) {
-    await page.locator("ytd-expandable-tab-renderer button").click();
-    const input = page.locator("ytd-expandable-tab-renderer input");
-    await input.fill(target.channelSearch);
-    await input.press("Enter");
-  }
+  if (target.site === "bluesky" && target.destination === "/search")
+    await evidence(task, "search-tabs", {
+      body: JSON.stringify({
+        tabs: await page.$$eval(
+          '[data-testid="searchScreen"] [role="tab"]',
+          (nodes) =>
+            nodes.map((node) => {
+              const mark = node.querySelector('[style*="background-color"]');
+              return {
+                text: node.textContent?.trim(),
+                selected: node.getAttribute("aria-selected"),
+                marked:
+                  !!mark &&
+                  getComputedStyle(mark).display !== "none" &&
+                  mark.getBoundingClientRect().height > 0,
+              };
+            }),
+        ),
+      }),
+      contentType: "application/json",
+    });
+
   await expect
     .poll(() => new URL(page.url()).pathname)
     .toBe(target.destination);
-  if (target.niconicoSort) {
-    const sort = page.locator(".Selectbox-button");
-    await expect(sort).toBeVisible();
-    if ((await sort.innerText()).trim() !== target.niconicoSort) {
-      await sort.click();
-      await page.getByText(target.niconicoSort, { exact: true }).click();
+
+  if (target.niconicoSearch) {
+    const sort = aria("combobox", "ソートキーを選択");
+    await expect
+      .poll(() => page.$eval(sort, (node) => (node.textContent ?? "").trim()))
+      .toBe(target.niconicoSearch === "registeredAt" ? "投稿日時" : "再生数");
+    const query = new URL(page.url()).searchParams;
+    expect(query.get("sort")).toBe(target.niconicoSearch);
+    expect(query.get("order")).toBe("desc");
+  } else if (target.niconicoSort) {
+    const sort = ".Selectbox-button";
+    await expect.poll(() => visible(page, sort)).toBe(true);
+    if (
+      (
+        await (
+          await element(page, sort)
+        ).evaluate((node) => (node as HTMLElement).innerText)
+      ).trim() !== target.niconicoSort
+    ) {
+      await page.locator(sort).click();
+      await page.locator(text(target.niconicoSort)).click();
     }
-    await expect(sort).toHaveText(target.niconicoSort);
+    await expect
+      .poll(() => page.$eval(sort, (node) => (node.textContent ?? "").trim()))
+      .toBe(target.niconicoSort);
     const query = new URL(page.url()).searchParams;
     expect(query.get("sortKey") ?? "registeredAt").toBe(
       target.niconicoSort === "再生数が多い順" ? "viewCount" : "registeredAt",
@@ -117,116 +210,95 @@ async function navigate(page: Page, target: CompatibilityCase) {
     expect(query.get("sortOrder") ?? "desc").toBe("desc");
   }
   if (target.sort && target.sort !== "default") {
+    const names =
+      target.sort === "popular"
+        ? ["人気の動画", "Popular", "Most popular"]
+        : ["新しい順", "Latest", "Newest"];
     const label =
       target.sort === "popular"
         ? /^(人気の動画|Popular|Most popular)$/
         : /^(新しい順|Latest|Newest)$/;
-    const combo = page.locator('ytd-browse:not([hidden]) [role="combobox"]');
-    await expect(
-      combo.or(page.getByRole("tab", { name: label })).first(),
-    ).toBeVisible();
-    if (await combo.count()) {
-      if (!label.test((await combo.first().innerText()).trim())) {
-        await combo.first().click();
-        await page.getByRole("menuitem", { name: label }).click();
+    const combo = 'ytd-browse:not([hidden]) [role="combobox"]';
+    await expect
+      .poll(() => visible(page, `${combo}, ${aria("tab", names)}`))
+      .toBe(true);
+    if (await page.$$eval(combo, (nodes) => nodes.length)) {
+      if (
+        !label.test(
+          (
+            await (
+              await element(page, combo)
+            ).evaluate((node) => (node as HTMLElement).innerText)
+          ).trim(),
+        )
+      ) {
+        await page.locator(combo).click();
+        await page.locator(aria("menuitem", names)).click();
       }
     } else {
-      await page.getByRole("tab", { name: label }).click();
+      await page.locator(aria("tab", names)).click();
     }
   }
-  if (target.membersOnly) {
-    const tab = page.getByRole("tab", { name: "メンバー限定", exact: true });
-    await tab.click();
-    await expect(tab).toHaveAttribute("aria-selected", "true");
-    await expect
-      .poll(
-        async () =>
-          await page
-            .locator(regions.youtube.card)
-            .filter({ visible: true })
-            .first()
-            .innerText(),
-      )
-      .toContain("メンバー限定");
-  }
-  await expect(
-    page.locator(regions[target.site].card).filter({ visible: true }).first(),
-  ).toBeVisible();
+
+  await expect
+    .poll(() => visible(page, regionFor(target).card), { timeout: 30000 })
+    .toBe(true);
 }
 
 async function snapshot(
   page: Page,
   target: CompatibilityCase,
 ): Promise<StructureSnapshot> {
-  const selection = regions[target.site];
+  const selection = regionFor(target);
   const result: StructureSnapshot = {
     schema: 1,
     caseId: target.id,
     route: captureRoute(page.url()),
     regions: {},
   };
-  const selections: [string, Locator][] = [
-    target.channelSearch
-      ? ["navigation", page.locator("ytd-expandable-tab-renderer input")]
-      : target.feed
-        ? ["navigation", page.locator('[data-testid="customFeedScreen"]')]
-        : target.list
-          ? [
-              "navigation",
-              target.site === "bluesky"
-                ? page.locator(
-                    '[data-testid="profileListScreen"] [data-testid="headerTitle"]',
-                  )
-                : page.getByRole("heading"),
-            ]
-          : [
-              "sort",
-              page.locator(
-                target.sort === "default"
-                  ? "ytd-browse:not([hidden]) ytd-rich-grid-renderer #header"
-                  : selection.sort,
-              ),
-            ],
-    ["card", page.locator(selection.card)],
-    target.membersOnly
-      ? [
-          "members",
-          page
-            .locator(selection.card)
-            .filter({ visible: true })
-            .getByText(/^(メンバー限定|Members only)$/i),
-        ]
-      : [
-          "metric",
-          (target.site === "youtube"
-            ? page.locator(selection.card).filter({ visible: true })
-            : page.locator(selection.card).filter({ visible: true }).first()
-          ).locator(selection.metric),
-        ],
+  const selections: [string, string][] = [
+    target.feed
+      ? ["navigation", '[data-testid="customFeedScreen"]']
+      : target.list
+        ? [
+            "navigation",
+            target.site === "bluesky"
+              ? '[data-testid="profileListScreen"] [data-testid="headerTitle"]'
+              : aria("heading"),
+          ]
+        : [
+            "sort",
+            target.sort === "default"
+              ? "ytd-browse:not([hidden]) ytd-rich-grid-renderer #header"
+              : selection.sort,
+          ],
+    ["card", selection.card],
+    ...(target.period
+      ? []
+      : ([["metric", selection.metric]] as [string, string][])),
   ];
-  if (target.site === "youtube" && !target.destination.endsWith("/shorts")) {
-    selections.push([
-      "date",
-      page
-        .locator(selection.card)
-        .first()
-        .locator(selection.metric)
-        .filter({ hasText: /前|ago/i }),
-    ]);
-  }
+
+  if (target.site === "youtube" && !target.destination.endsWith("/shorts"))
+    selections.push(["date", selection.metric]);
+  const cards = await page.$$(selection.card);
+  const visibleCards: ElementHandle<Element>[] = [];
+  for (const card of cards) if (await card.isVisible()) visibleCards.push(card);
   for (const [name, locator] of selections) {
     const shapes: StructureNode[] = [];
-    for (const element of await locator.all()) {
-      // 共同投稿者名や投稿日は再生数の構造に含めない。
-      // 先頭がメンバー限定などで再生数を持たない場合も、表示中のカードを調べる。
+    const selectedCards =
+      name === "date" || (name === "metric" && target.site !== "youtube")
+        ? visibleCards.slice(0, 1)
+        : visibleCards;
+    const elements = ["metric", "date"].includes(name)
+      ? (
+          await Promise.all(selectedCards.map((card) => card.$$(locator)))
+        ).flat()
+      : await page.$$(locator);
+    for (const element of elements) {
       if (
-        target.site === "youtube" &&
-        !target.channelSearch &&
-        name === "metric" &&
+        name === "date" &&
         !(await element.evaluate((node) =>
-          /views?|回視聴|回再生|조회수|次觀看|次观看|visualizaciones?|visualiza(?:ç|c)[õo]es?/i.test(
-            node.getAttribute("aria-label") || node.textContent || "",
-          ),
+          /前|ago/i.test(node.textContent ?? ""),
         ))
       )
         continue;
@@ -260,8 +332,9 @@ async function snapshot(
 }
 
 async function observations(page: Page, target: CompatibilityCase) {
-  const selection = regions[target.site];
-  const rows = await page.locator(selection.card).evaluateAll(
+  const selection = regionFor(target);
+  const rows = await page.$$eval(
+    selection.card,
     (cards, metric) =>
       cards
         .filter((card) => {
@@ -349,11 +422,13 @@ async function observations(page: Page, target: CompatibilityCase) {
               ),
             ),
             id:
+              card.getAttribute("href") ??
               card
                 .querySelector(
                   'a[href*="/status/"], a[href*="/post/"], a[href*="/watch"], a[href*="/shorts/"]',
                 )
-                ?.getAttribute("href") ?? null,
+                ?.getAttribute("href") ??
+              null,
             date:
               card.querySelector("time[datetime]")?.getAttribute("datetime") ||
               card.querySelector(".NC-VideoRegisteredAtText-text")
@@ -362,9 +437,6 @@ async function observations(page: Page, target: CompatibilityCase) {
             metrics: [...card.querySelectorAll(metric)].map(
               (e) => e.getAttribute("aria-label") || e.textContent || "",
             ),
-            compactViews: card
-              .querySelector("#metadata-line > span:first-of-type")
-              ?.textContent?.trim(),
             display: getComputedStyle(cell).display,
             visibility: getComputedStyle(cell).visibility,
             filterReason: cell.getAttribute("data-sift-filter-reason"),
@@ -406,34 +478,13 @@ async function observations(page: Page, target: CompatibilityCase) {
                 '[data-testid="tweetPhoto"], a[href*="/photo/"] img[src*="pbs.twimg.com/media/"], [data-testid="videoPlayer"], [data-testid="nestedQuotePreviewMedia"], button img[src*="/img/feed_thumbnail/"], [style*="video.bsky.app"], video[src*="t.gifs.bsky.app"]',
               ),
             ),
-            members: [
-              ...card.querySelectorAll(
-                "[aria-label], yt-badge-view-model, .badge",
-              ),
-            ].some((node) =>
-              /^(メンバー限定|Members only)$/i.test(
-                (
-                  node.getAttribute("aria-label") ||
-                  node.textContent ||
-                  ""
-                ).trim(),
-              ),
-            ),
           };
         }),
     selection.metric,
   );
   return rows.map((row) => ({
     ...row,
-    count:
-      target.site === "youtube"
-        ? (() => {
-            const views =
-              row.metrics.find((t) => /回視聴|views/i.test(t)) ??
-              (target.channelSearch ? row.compactViews : undefined);
-            return views ? parseMetric(views) : Number.NaN;
-          })()
-        : parseMetric(row.metrics[0] ?? ""),
+    count: target.period ? Number.NaN : parseMetric(row.metrics[0] ?? ""),
     ageDays:
       target.site === "niconico"
         ? (Date.now() - Date.parse(row.date)) / 86400000
@@ -464,17 +515,18 @@ function youtubeAge(text: string): number {
   return Number(match[1]) * multiplier;
 }
 
-async function minimumFilter(
+async function inclusionFilter(
   page: Page,
   panel: Page,
   target: CompatibilityCase,
+  task: RunnerTask,
 ) {
   const before = await observations(page, target);
-  const combo = panel.locator("[data-minimum-picker]").getByRole("combobox");
-  await panelClick(combo);
-  const options = panel.getByRole("option");
-  await expect(options.first()).toBeVisible();
-  const available = await options.evaluateAll((elements) =>
+  const combo = `[data-minimum-picker] >>> ${aria("combobox")}`;
+  await panelClick(await element(panel, combo));
+  const options = aria("option");
+  await expect.poll(() => visible(panel, options)).toBe(true);
+  const available = await panel.$$eval(options, (elements) =>
     elements.map((e, index) => ({
       index,
       label: [...(e.querySelector("[id]") ?? e).childNodes]
@@ -490,7 +542,7 @@ async function minimumFilter(
     })),
   );
   const total = available[0]?.count ?? 0;
-  await test.info().attach("filter-options", {
+  await evidence(task, "filter-options", {
     body: JSON.stringify(available),
     contentType: "application/json",
   });
@@ -508,7 +560,7 @@ async function minimumFilter(
     threshold = target.period
       ? periodDays(choice.label)
       : parseMetric(choice.label);
-    await panelClick(options.nth(choice.index));
+    await panelClick(await element(panel, options, choice.index));
   } else if (target.period) {
     const ages = [
       ...new Set(
@@ -522,13 +574,11 @@ async function minimumFilter(
       "期間の適用を確認できる投稿日が必要です",
     ).toBeGreaterThan(1);
     threshold = Math.ceil(((ages[0] ?? 0) + (ages[1] ?? 0)) / 2);
-    await panelClick(options.getByText("期間を入力", { exact: true }));
-    const input = panel.getByRole("spinbutton", {
-      name: "投稿期間",
-      exact: true,
-    });
-    await input.fill(String(threshold));
-    await input.press("Enter");
+    await panelClick(
+      await element(panel, `${options} >>> ${text("期間を入力")}`),
+    );
+    const input = aria("spinbutton", "投稿期間");
+    await fillNumber(panel, input, threshold);
   } else {
     const counts = before.map((row) => row.count).filter(Number.isFinite);
     expect(
@@ -538,14 +588,16 @@ async function minimumFilter(
     // 同値の投稿しかない場合は、全件が条件を満たす値で操作・誤除外・解除を確認する。
     // 除外効果は0件として記録し、別の代表ページでの確認を配備条件に残す。
     threshold = Math.min(...counts);
-    await panelClick(options.getByText("数値を入力", { exact: true }));
-    const input = panel.getByRole("spinbutton", {
-      name: "数値を入力",
-      exact: true,
-    });
-    await input.fill(String(threshold));
-    await input.press("Enter");
-    await expect(input).toHaveValue(String(threshold));
+    await panelClick(
+      await element(panel, `${options} >>> ${text("数値を入力")}`),
+    );
+    const input = aria("spinbutton", "数値を入力");
+    await fillNumber(panel, input, threshold);
+    await expect
+      .poll(() =>
+        panel.$eval(input, (node) => (node as HTMLInputElement).value),
+      )
+      .toBe(String(threshold));
   }
   let lastRows: Awaited<ReturnType<typeof observations>> = [];
   try {
@@ -566,12 +618,13 @@ async function minimumFilter(
       })
       .toBe(true);
   } finally {
-    await test.info().attach("filter-observations", {
+    await evidence(task, "filter-observations", {
       body: JSON.stringify({ threshold, rows: lastRows }),
       contentType: "application/json",
     });
   }
-  const filtered = await observations(page, target);
+  // 非同期で入れ替わる一覧は、条件と表示の一致を確認した同じ観測で判定する。
+  const filtered = lastRows;
   const excludedBefore = before.filter((r) =>
     target.period ? r.ageDays > threshold : r.count < threshold,
   );
@@ -581,9 +634,13 @@ async function minimumFilter(
         r.id && !filtered.some((after) => after.id === r.id && after.visible),
     ),
   ).toBe(true);
-  expect(filtered.some((r) => r.visible)).toBe(true);
-  await panelClick(combo);
-  await panelClick(panel.getByRole("option").first());
+  expect(filtered.some((r) => r.visible)).toBe(
+    filtered.some((r) =>
+      target.period ? r.ageDays <= threshold : r.count >= threshold,
+    ),
+  );
+  await panelClick(await element(panel, combo));
+  await panelClick(await element(panel, aria("option")));
   await expect
     .poll(async () =>
       (await observations(page, target)).every(
@@ -610,157 +667,12 @@ function periodDays(label: string): number {
     : Number.NaN;
 }
 
-async function maximumFilter(
-  page: Page,
-  panel: Page,
-  target: CompatibilityCase,
-) {
-  const before = await observations(page, target);
-  const counts = before.map((row) => row.count).filter(Number.isFinite);
-  expect(new Set(counts).size, "上限の内外に実動画が必要です").toBeGreaterThan(
-    1,
-  );
-  const maximum = Math.min(...counts);
-  const group = panel.getByRole("group", {
-    name: "再生回数の上限",
-    exact: true,
-  });
-  const input = group.getByRole("spinbutton");
-  const toggle = group.getByRole("switch");
-  await input.fill(String(maximum));
-  await input.press("Enter");
-  await expect(input).toHaveValue(String(maximum));
-  try {
-    await panelClick(toggle);
-    await expect(toggle).toHaveAttribute("aria-checked", "true");
-    await expect
-      .poll(async () => {
-        const rows = await observations(page, target);
-        return (
-          rows.length > 0 &&
-          rows.every((row) =>
-            Number.isFinite(row.count) && row.count > maximum
-              ? !row.visible
-              : row.visible,
-          )
-        );
-      })
-      .toBe(true);
-    const after = await observations(page, target);
-    expect(after.some((row) => row.visible && row.count <= maximum)).toBe(true);
-    expect(
-      before
-        .filter((row) => row.count > maximum)
-        .every(
-          (row) =>
-            row.id && !after.some((item) => item.id === row.id && item.visible),
-        ),
-    ).toBe(true);
-  } finally {
-    if ((await toggle.getAttribute("aria-checked")) === "true")
-      await panelClick(toggle);
-  }
-  await expect(toggle).toHaveAttribute("aria-checked", "false");
-  await expect
-    .poll(async () => {
-      const rows = await observations(page, target);
-      return (
-        rows.length > 0 && rows.every((row) => row.visible && row.height > 0)
-      );
-    })
-    .toBe(true);
-  await test.info().attach("maximum-filter", {
-    body: JSON.stringify({
-      maximum,
-      excluded: before.filter((row) => row.count > maximum).length,
-      applied: true,
-      cleared: true,
-      noOverfilter: true,
-    }),
-    contentType: "application/json",
-  });
-}
-
-async function newerFilter(page: Page, panel: Page, target: CompatibilityCase) {
-  const before = await observations(page, target);
-  const ages = [
-    ...new Set(before.map((row) => row.ageDays).filter(Number.isFinite)),
-  ].sort((a, b) => a - b);
-  expect(
-    ages.length,
-    "新しい動画の除外を確認できる投稿日が必要です",
-  ).toBeGreaterThan(1);
-  const wantedHours = Math.max(
-    1,
-    Math.round(((ages[0] ?? 0) + (ages[1] ?? 0)) * 12),
-  );
-  const unitHours = wantedHours <= 1000 ? 1 : wantedHours <= 24000 ? 24 : 168;
-  const amount = Math.max(1, Math.round(wantedHours / unitHours));
-  const hours = amount * unitHours;
-  const group = panel.getByRole("group", {
-    name: "新しい動画を除外",
-    exact: true,
-  });
-  const input = group.getByRole("spinbutton");
-  await input.fill(String(amount));
-  await input.press("Enter");
-  await panelClick(group.getByRole("combobox"));
-  await panelClick(
-    panel.getByRole("option", {
-      name: unitHours === 1 ? "時間" : unitHours === 24 ? "日" : "週間",
-      exact: true,
-    }),
-  );
-  await expect(input).toHaveValue(String(amount));
-  const toggle = group.getByRole("switch");
-  await panelClick(toggle);
-  await expect(toggle).toHaveAttribute("aria-checked", "true");
-  await expect
-    .poll(async () =>
-      (await observations(page, target)).every(
-        (row) =>
-          Number.isFinite(row.ageDays) &&
-          (row.ageDays * 24 < hours ? !row.visible : row.visible),
-      ),
-    )
-    .toBe(true);
-  const filtered = await observations(page, target);
-  const excluded = before.filter((row) => row.ageDays * 24 < hours);
-  expect(excluded.length).toBeGreaterThan(0);
-  expect(
-    excluded.every(
-      (row) =>
-        row.id &&
-        !filtered.some((after) => after.id === row.id && after.visible),
-    ),
-  ).toBe(true);
-  expect(filtered.some((row) => row.visible)).toBe(true);
-  await panelClick(toggle);
-  await expect(toggle).toHaveAttribute("aria-checked", "false");
-  await expect
-    .poll(async () =>
-      (await observations(page, target)).every(
-        (row) => row.visible && row.height > 0,
-      ),
-    )
-    .toBe(true);
-  await test.info().attach("newer-filter", {
-    body: JSON.stringify({
-      hours,
-      excluded: excluded.length,
-      applied: true,
-      cleared: true,
-      noOverfilter: true,
-    }),
-    contentType: "application/json",
-  });
-}
-
 async function categoricalFilter(
   page: Page,
   panel: Page,
   target: CompatibilityCase,
-  kind: "media" | "members" | "reply" | "quote" | "repost",
+  kind: "media" | "reply" | "quote" | "repost",
+  task: RunnerTask,
 ) {
   const before = await observations(page, target);
   expect(before.length, "操作前の投稿が必要です").toBeGreaterThan(0);
@@ -770,30 +682,46 @@ async function categoricalFilter(
   const apply = async (enabled: boolean) => {
     if (kind === "media") {
       await panelClick(
-        panel.getByRole("combobox", { name: "コンテンツタイプ", exact: true }),
+        await element(panel, aria("combobox", "コンテンツタイプ")),
       );
       await panelClick(
-        panel.getByRole("option", {
-          name: enabled ? "画像・動画のみ" : "すべて",
-          exact: true,
-        }),
+        await element(
+          panel,
+          aria("option", enabled ? "画像・動画のみ" : "すべて"),
+        ),
       );
-      await expect(
-        panel.getByRole("combobox", { name: "コンテンツタイプ", exact: true }),
-      ).toHaveText(enabled ? "画像・動画のみ" : "すべて");
+      await expect
+        .poll(() =>
+          panel.$eval(aria("combobox", "コンテンツタイプ"), (node) =>
+            (node.textContent ?? "").trim(),
+          ),
+        )
+        .toBe(enabled ? "画像・動画のみ" : "すべて");
     } else {
-      const toggle = panel.getByRole("switch", {
-        name: {
-          members: "メンバー限定を除外",
+      const toggle = aria(
+        "switch",
+        {
           reply: "返信を除外",
           quote: "引用投稿を除外",
           repost: "リポストを除外",
         }[kind],
-        exact: true,
-      });
-      if ((await toggle.getAttribute("aria-checked")) !== String(enabled))
-        await panelClick(toggle);
-      await expect(toggle).toHaveAttribute("aria-checked", String(enabled));
+      );
+      if (
+        (await (
+          await element(panel, toggle)
+        ).evaluate((node, name) => node.getAttribute(name), "aria-checked")) !==
+        String(enabled)
+      )
+        await panelClick(await element(panel, toggle));
+      await expect
+        .poll(() =>
+          panel.$eval(
+            toggle,
+            (node, name) => node.getAttribute(name),
+            "aria-checked",
+          ),
+        )
+        .toBe(String(enabled));
     }
   };
   try {
@@ -818,7 +746,7 @@ async function categoricalFilter(
       ),
     ).toBe(true);
   } finally {
-    await test.info().attach(`${kind}-observations`, {
+    await evidence(task, `${kind}-observations`, {
       body: JSON.stringify({
         before,
         after: await observations(page, target),
@@ -836,7 +764,7 @@ async function categoricalFilter(
       );
     })
     .toBe(true);
-  await test.info().attach(`${kind}-filter`, {
+  await evidence(task, `${kind}-filter`, {
     body: JSON.stringify({
       excluded: excluded.length,
       status: excluded.length ? "verified" : "operation-only",
@@ -849,90 +777,101 @@ async function categoricalFilter(
 }
 
 for (const target of cases) {
-  // biome-ignore lint/correctness/noEmptyPattern: Playwrightはfixture引数の分割代入を要求する。
-  test(target.id, async ({}, testInfo) => {
+  test(target.id, async ({ task }) => {
     const page = await session.context.newPage();
+    page.setDefaultTimeout(10000);
+    page.setDefaultNavigationTimeout(30000);
     let cleanupError: unknown;
     try {
       await page.bringToFront();
-      await navigate(page, target);
+      await navigate(page, target, task);
+
       const panel = await openPanel(session, page);
-      await expect(
-        panel.getByRole("heading", {
-          name: target.period
-            ? "投稿期間"
-            : target.site === "x" || target.site === "bluesky"
-              ? "最低いいね数"
-              : "最低再生回数",
-          exact: true,
-        }),
-      ).toBeVisible();
+      await expect
+        .poll(() =>
+          visible(
+            panel,
+            aria(
+              "heading",
+              target.period
+                ? "投稿期間"
+                : target.site === "x" || target.site === "bluesky"
+                  ? "最低いいね数"
+                  : "最低再生回数",
+            ),
+          ),
+        )
+        .toBe(true);
       await expect
         .poll(async () => (await readContext(session, page)).health?.state)
-        .toBe(target.membersOnly ? "degraded" : "ready");
+        .toBe("ready");
       const context = await readContext(session, page);
       expect(context.site).toBe(target.site);
       expect(context.timelineAvailable).toBe(true);
+
       if (target.sort) expect(context.sortOrder).toBe(target.sort);
-      for (const toggle of await panel.getByRole("switch").all()) {
-        if ((await toggle.getAttribute("aria-checked")) === "true") {
+      if (target.site === "youtube" || target.site === "niconico") {
+        await expect
+          .poll(() =>
+            panel.$$eval(
+              aria("heading", "最低再生回数"),
+              (nodes) => nodes.length,
+            ),
+          )
+          .toBe(0);
+        expect(
+          await panel.$$eval(aria("switch"), (nodes) => nodes.length),
+        ).toBe(0);
+      }
+      for (const toggle of await panel.$$(aria("switch"))) {
+        if (
+          (await toggle.evaluate((node) =>
+            node.getAttribute("aria-checked"),
+          )) === "true"
+        ) {
           await panelClick(toggle);
-          await expect(toggle).toHaveAttribute("aria-checked", "false");
+          await expect
+            .poll(() =>
+              toggle.evaluate((node) => node.getAttribute("aria-checked")),
+            )
+            .toBe("false");
         }
       }
       if (target.site === "x" || target.site === "bluesky") {
         await panelClick(
-          panel.getByRole("combobox", {
-            name: "コンテンツタイプ",
-            exact: true,
-          }),
+          await element(panel, aria("combobox", "コンテンツタイプ")),
         );
-        await panelClick(
-          panel.getByRole("option", { name: "すべて", exact: true }),
-        );
+        await panelClick(await element(panel, aria("option", "すべて")));
       }
       const structure = await snapshot(page, target);
-      // 基準未登録も失敗。更新は明示的な --update-snapshots だけで行う。
-      expect
+      await evidence(task, "structure", {
+        body: JSON.stringify(structure),
+        contentType: "application/json",
+      });
+      // 基準未登録も失敗。更新は明示的な --update だけで行う。
+      await expect
         .soft(JSON.stringify(structure, null, 2))
-        .toMatchSnapshot(`${target.id}.json`);
-      if (
-        (target.site === "youtube" &&
-          !target.membersOnly &&
-          !target.period &&
-          !target.destination.endsWith("/shorts")) ||
-        target.site === "niconico"
-      ) {
-        await newerFilter(page, panel, target);
-      }
-      if (target.site === "youtube")
-        await categoricalFilter(page, panel, target, "members");
-      const hasMaximum =
-        target.sort === "popular" || target.niconicoSort === "再生数が多い順";
-      await expect(panel.locator("[data-maximum-views]")).toHaveCount(
-        hasMaximum ? 1 : 0,
-      );
-      if (hasMaximum) await maximumFilter(page, panel, target);
+        .toMatchFileSnapshot(
+          `../test/compatibility-baselines/${target.id}.json`,
+        );
       if (target.site === "x" || target.site === "bluesky") {
         for (const kind of ["media", "reply", "quote", "repost"] as const)
-          await categoricalFilter(page, panel, target, kind);
+          await categoricalFilter(page, panel, target, kind, task);
         // 仮想化で差し替わった表示範囲を戻し、最低値を独立した一覧で検証する。
         await page.reload({ waitUntil: "domcontentloaded" });
         await selectTab(page, target);
-        await expect(
-          page
-            .locator(regions[target.site].card)
-            .filter({ visible: true })
-            .first(),
-        ).toBeVisible();
+        await expect
+          .poll(() => visible(page, regionFor(target).card), { timeout: 30000 })
+          .toBe(true);
         await expect
           .poll(async () => (await readContext(session, page)).health?.state)
           .toBe("ready");
       }
       // 最低値は追加読み込みを大きく進めることがあるため、種別の確認後に行う。
-      if (!target.membersOnly) {
-        const result = await minimumFilter(page, panel, target);
-        await testInfo.attach(
+      {
+        const result = await inclusionFilter(page, panel, target, task);
+        await evidence(
+          task,
           target.period ? "period-filter" : "minimum-filter",
           {
             body: JSON.stringify(result),
@@ -940,46 +879,104 @@ for (const target of cases) {
           },
         );
       }
-      await testInfo.attach("candidate", {
+      if (
+        target.id === "niconico-popular" ||
+        target.id === "niconico-search-popular"
+      ) {
+        const requests: string[] = [];
+        const track = (request: import("puppeteer-core").HTTPRequest) => {
+          const url = new URL(request.url());
+          if (
+            url.pathname.includes("/videos") ||
+            url.pathname.startsWith("/search/")
+          )
+            requests.push(request.url());
+        };
+        const before = (await observations(page, target)).map((row) => row.id);
+        const pager = 'a[href*="page="]';
+        expect(
+          await page.$(pager),
+          "サイトのページ送りが残ること",
+        ).not.toBeNull();
+        page.on("request", track);
+        try {
+          await page.evaluate(() =>
+            window.scrollTo(0, document.documentElement.scrollHeight),
+          );
+          await new Promise((resolve) => setTimeout(resolve, 800));
+          expect(requests, "スクロールで次ページを取得しないこと").toHaveLength(
+            0,
+          );
+          expect(
+            (await observations(page, target)).map((row) => row.id),
+          ).toEqual(before);
+          await evidence(task, "native-pagination", {
+            body: JSON.stringify({
+              requested: 0,
+              unchanged: true,
+              pager: true,
+            }),
+            contentType: "application/json",
+          });
+        } finally {
+          page.off("request", track);
+        }
+      }
+      await evidence(task, "candidate", {
         body: JSON.stringify(session.candidate),
         contentType: "application/json",
       });
-      if (target.channelSearch) {
-        const previousKey = (await readContext(session, page)).pageKey;
-        expect(previousKey).toContain("query=WARDOGS");
-        const input = page.locator("ytd-expandable-tab-renderer input");
-        await input.fill("Billion Egg Farm");
-        await input.press("Enter");
-        await expect(page.locator(regions.youtube.card).first()).toContainText(
-          "Billion Egg Farm",
-        );
-        await expect
-          .poll(async () => (await readContext(session, page)).pageKey)
-          .toContain("query=Billion+Egg+Farm");
-        const nextCounts = (await observations(page, target))
-          .map((row) => row.count)
-          .filter(Number.isFinite)
-          .sort((a, b) => a - b);
-        expect(nextCounts.length).toBeGreaterThan(0);
-        await expect
-          .poll(async () =>
-            (await readContext(session, page)).metricCounts.toSorted(
-              (a, b) => a - b,
-            ),
-          )
-          .toEqual(nextCounts);
-        await expect
-          .poll(async () => (await readContext(session, page)).health?.state)
-          .toBe("ready");
-        await expect(
-          panel.getByRole("heading", { name: "最低再生回数", exact: true }),
-        ).toBeVisible();
-      }
+    } catch (error) {
+      await evidence(task, "failure-cause", {
+        body: JSON.stringify({ message: String(error) }),
+        contentType: "application/json",
+      });
+      await evidence(task, "failure-navigation", {
+        body: JSON.stringify({
+          url: page.url(),
+          title: await page.title(),
+          visibility: await page.evaluate(() => document.visibilityState),
+          tabs: await page.$$eval('[role="tab"]', (nodes) =>
+            nodes.map((node) => {
+              const r = node.getBoundingClientRect();
+              const hit = document.elementFromPoint(
+                r.x + r.width / 2,
+                r.y + r.height / 2,
+              );
+              return {
+                text: node.textContent,
+                href: node.getAttribute("href"),
+                rect: { x: r.x, y: r.y, width: r.width, height: r.height },
+                hit: hit?.outerHTML.slice(0, 500),
+              };
+            }),
+          ),
+        }),
+        contentType: "application/json",
+      });
+      await evidence(task, "failure-tabs", {
+        body: JSON.stringify({
+          pageUrl: page.url(),
+          tabs: await session.worker.evaluate(
+            "chrome.tabs.query({}).then(tabs=>tabs.map(({id,url,active})=>({id,url,active})))",
+          ),
+        }),
+        contentType: "application/json",
+      });
+      await evidence(task, "failure-context", {
+        body: JSON.stringify(
+          await readContext(session, page).catch((problem) => ({
+            error: String(problem),
+          })),
+        ),
+        contentType: "application/json",
+      });
+      throw error;
     } finally {
       try {
         await closePanel(session, page);
       } catch (error) {
-        await testInfo.attach("cleanup-error", {
+        await evidence(task, "cleanup-error", {
           body: String(error),
           contentType: "text/plain",
         });

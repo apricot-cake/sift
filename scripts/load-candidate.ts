@@ -1,11 +1,11 @@
-import { chromium } from "@playwright/test";
 import { loadDevCandidate } from "./dev-browser-candidate.ts";
-import { readManagedDevBrowserEndpoint } from "./managed-dev-browser.ts";
+import { withDevBrowser } from "./managed-dev-browser.ts";
 
-const endpoint = await readManagedDevBrowserEndpoint();
-const browser = await chromium.connectOverCDP(endpoint.url);
-try {
-  console.log(JSON.stringify(await loadDevCandidate(browser), null, 2));
-} finally {
-  await browser.close();
-}
+await withDevBrowser(async (browser) => {
+  const { worker, ...candidate } = await loadDevCandidate(browser);
+  try {
+    console.log(JSON.stringify(candidate, null, 2));
+  } finally {
+    await worker.dispose();
+  }
+});

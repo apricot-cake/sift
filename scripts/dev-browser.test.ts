@@ -18,9 +18,6 @@ vi.mock("node:child_process", () => ({
     return child;
   }),
 }));
-vi.mock("./dev-browser-endpoint.ts", () => ({
-  readDevBrowserEndpoint: vi.fn().mockResolvedValue(null),
-}));
 vi.mock("./managed-dev-browser.ts", () => ({
   devBrowserProfile: () => state.profile,
 }));

@@ -1,4 +1,5 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "vitest";
+import { aria, evidence } from "./browser-queries.ts";
 import { emptyCases } from "./cases.ts";
 import {
   closePanel,
@@ -10,54 +11,69 @@ import {
 
 // 実サイトが空と明示する一覧を使う。投稿が読み込まれないだけでは合格にしない。
 for (const target of emptyCases) {
-  // biome-ignore lint/correctness/noEmptyPattern: Playwright requires destructured fixture arguments.
-  test(target.id, async ({}, info) => {
-    const youtube = target.id === "empty-youtube-channel-search";
+  test(target.id, async ({ task }) => {
     const session = await connectLive();
     const page = await session.context.newPage();
+    page.setDefaultTimeout(10000);
+    page.setDefaultNavigationTimeout(30000);
     try {
       await page.bringToFront();
       await page.goto(
-        youtube
-          ? "https://www.youtube.com/@zunda_drop/search?query=sift_empty_7d649d20"
-          : "https://x.com/search?q=from%3Auowata94%20sift_empty_7d649d20&f=live",
+        "https://x.com/search?q=from%3Auowata94%20sift_empty_7d649d20&f=live",
         {
           waitUntil: "domcontentloaded",
         },
       );
-      if (!youtube) {
-        const latest = page.getByRole("tab", { name: "最新", exact: true });
-        await latest.click();
-        await expect(latest).toHaveAttribute("aria-selected", "true");
+      {
+        const latest = aria("tab", "最新");
+        await page.locator(latest).click();
+        await expect
+          .poll(() =>
+            page.$eval(
+              latest,
+              (node, name) => node.getAttribute(name),
+              "aria-selected",
+            ),
+          )
+          .toBe("true");
       }
-      const empty = page.locator(
-        youtube
-          ? "ytd-browse:not([hidden]) ytd-message-renderer"
-          : '[data-testid="primaryColumn"] [data-testid="emptyState"]',
-      );
-      await expect(empty).toContainText(
-        youtube
-          ? /一致するコンテンツはありません/
-          : /検索結果はありません|No results/i,
-      );
-      await expect(
-        page.locator(
-          youtube ? "ytd-video-renderer" : 'article[data-testid="tweet"]',
-        ),
-      ).toHaveCount(0);
+      const empty = '[data-testid="primaryColumn"] [data-testid="emptyState"]';
+      await expect
+        .poll(() =>
+          page.$eval(empty, (node) => (node.textContent ?? "").trim()),
+        )
+        .toMatch(/検索結果はありません|No results/i);
+      await expect
+        .poll(() =>
+          page.$$eval('article[data-testid="tweet"]', (nodes) => nodes.length),
+        )
+        .toBe(0);
       const panel = await openPanel(session, page);
       await expect
         .poll(async () => (await readContext(session, page)).health?.state)
         .toBe("empty");
-      await expect(panel.locator('[data-page-health="empty"]')).toHaveText(
-        "この一覧には投稿がありません",
-      );
-      await expect(panel.getByRole("combobox")).toHaveCount(0);
-      await expect(panel.getByRole("switch")).toHaveCount(0);
-      await expect(
-        page.locator('[data-sift-filter-state="hidden"]'),
-      ).toHaveCount(0);
-      await info.attach("empty-state", {
+      await expect
+        .poll(() =>
+          panel.$eval('[data-page-health="empty"]', (node) =>
+            (node.textContent ?? "").trim(),
+          ),
+        )
+        .toBe("この一覧には投稿がありません");
+      await expect
+        .poll(() => panel.$$eval(aria("combobox"), (nodes) => nodes.length))
+        .toBe(0);
+      await expect
+        .poll(() => panel.$$eval(aria("switch"), (nodes) => nodes.length))
+        .toBe(0);
+      await expect
+        .poll(() =>
+          page.$$eval(
+            '[data-sift-filter-state="hidden"]',
+            (nodes) => nodes.length,
+          ),
+        )
+        .toBe(0);
+      await evidence(task, "empty-state", {
         body: JSON.stringify({
           state: "empty",
           siteEmpty: true,
@@ -70,8 +86,11 @@ for (const target of emptyCases) {
       try {
         if (session.panelTargetId) await closePanel(session, page);
       } finally {
-        await page.close();
-        await finishLive(session);
+        try {
+          await page.close();
+        } finally {
+          await finishLive(session);
+        }
       }
     }
   });

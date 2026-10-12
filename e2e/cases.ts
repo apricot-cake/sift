@@ -11,8 +11,7 @@ export interface CompatibilityCase {
   sort?: "newest" | "popular" | "default";
   period: boolean;
   niconicoSort?: "投稿日時が新しい順" | "再生数が多い順";
-  membersOnly?: boolean;
-  channelSearch?: string;
+  niconicoSearch?: "registeredAt" | "viewCount";
 }
 
 export const lifecycleCases = [
@@ -24,7 +23,7 @@ export const lifecycleCases = [
   {
     id: "transition-niconico",
     site: "niconico",
-    url: "https://www.nicovideo.jp/user/129217273/video?sortKey=registeredAt&sortOrder=desc",
+    url: "https://www.nicovideo.jp/user/129217273/video?sortKey=viewCount&sortOrder=desc",
   },
   { id: "transition-x", site: "x", url: "https://x.com/uowata94" },
   {
@@ -34,12 +33,45 @@ export const lifecycleCases = [
   },
 ] as const;
 
-export const emptyCases = [
-  { id: "empty-x-search" },
-  { id: "empty-youtube-channel-search" },
+export const emptyCases = [{ id: "empty-x-search" }] as const;
+
+export const lightboxCases = [
+  { id: "lightbox-x", url: "https://x.com/AdamasMC" },
 ] as const;
 
-export const unsupportedCases = [
+export interface UnsupportedCase {
+  id: string;
+  site: "youtube" | "niconico" | "x" | "bluesky" | "none";
+  url: string;
+  label?: string;
+  profileMedia?: boolean;
+  tab?: string;
+  sort?: "newest" | "popular" | "default";
+  membersOnly?: boolean;
+  channelSearch?: string;
+  empty?: boolean;
+}
+export const unsupportedCases: readonly UnsupportedCase[] = [
+  {
+    id: "unsupported-niconico-search-default",
+    site: "niconico",
+    url: "https://www.nicovideo.jp/search/%E5%88%9D%E9%9F%B3%E3%83%9F%E3%82%AF",
+  },
+  {
+    id: "unsupported-niconico-search-oldest",
+    site: "niconico",
+    url: "https://www.nicovideo.jp/search/%E5%88%9D%E9%9F%B3%E3%83%9F%E3%82%AF?sort=registeredAt&order=asc",
+  },
+  {
+    id: "unsupported-niconico-search-least-views",
+    site: "niconico",
+    url: "https://www.nicovideo.jp/search/%E5%88%9D%E9%9F%B3%E3%83%9F%E3%82%AF?sort=viewCount&order=asc",
+  },
+  {
+    id: "unsupported-niconico-tag",
+    site: "niconico",
+    url: "https://www.nicovideo.jp/tag/%E5%88%9D%E9%9F%B3%E3%83%9F%E3%82%AF?sort=registeredAt&order=desc",
+  },
   {
     id: "unsupported-x-replies",
     site: "x",
@@ -73,14 +105,24 @@ export const unsupportedCases = [
     site: "youtube",
     url: "https://www.youtube.com/@Google/videos",
   },
-  ...["投稿日時が古い順", "再生数が少ない順", "コメントが新しい順"].map(
-    (label, index) => ({
-      id: `unsupported-niconico-sort-${index}`,
-      site: "niconico",
-      url: "https://www.nicovideo.jp/user/129217273/video",
-      label,
-    }),
-  ),
+  {
+    id: "unsupported-niconico-sort-0",
+    site: "niconico",
+    url: "https://www.nicovideo.jp/user/129217273/video",
+    label: "投稿日時が古い順",
+  },
+  {
+    id: "unsupported-niconico-sort-1",
+    site: "niconico",
+    url: "https://www.nicovideo.jp/user/129217273/video",
+    label: "再生数が少ない順",
+  },
+  {
+    id: "unsupported-niconico-sort-2",
+    site: "niconico",
+    url: "https://www.nicovideo.jp/user/129217273/video",
+    label: "コメントが新しい順",
+  },
   {
     id: "unsupported-x-recommended",
     site: "x",
@@ -100,89 +142,130 @@ export const unsupportedCases = [
     label: "トップ",
   },
   {
+    id: "unsupported-fanbox",
+    site: "none",
+    url: "https://official.fanbox.cc/posts",
+  },
+  {
     id: "unsupported-site",
     site: "none",
     url: "https://apricot-cake.com/",
   },
-] as const;
+  {
+    id: "unsupported-niconico-search-newest",
+    site: "niconico",
+    url: "https://www.nicovideo.jp/search/%E5%88%9D%E9%9F%B3%E3%83%9F%E3%82%AF?sort=registeredAt&order=desc",
+  },
+  {
+    id: "unsupported-youtube-videos-without-sort",
+    site: "youtube",
+    url: "https://www.youtube.com/@SAYOSAYOCh/videos",
+    sort: "default",
+  },
+  {
+    id: "unsupported-youtube-channel-search",
+    site: "youtube",
+    url: "https://www.youtube.com/@zunda_drop/videos",
+    channelSearch: "WARDOGS",
+  },
+  {
+    id: "unsupported-youtube-members-representative",
+    site: "youtube",
+    url: "https://www.youtube.com/@sutehage_channel/videos",
+    sort: "newest",
+    membersOnly: true,
+  },
+  {
+    id: "unsupported-youtube-videos-newest",
+    site: "youtube",
+    url: "https://www.youtube.com/@sutehage_channel",
+    tab: "動画",
+    sort: "newest",
+  },
+  {
+    id: "unsupported-youtube-shorts-newest",
+    site: "youtube",
+    url: "https://www.youtube.com/@sutehage_channel",
+    tab: "ショート",
+    sort: "newest",
+  },
+  {
+    id: "unsupported-youtube-shorts-popular",
+    site: "youtube",
+    url: "https://www.youtube.com/@sutehage_channel",
+    tab: "ショート",
+    sort: "popular",
+  },
+  {
+    id: "unsupported-youtube-streams-newest",
+    site: "youtube",
+    url: "https://www.youtube.com/@sutehage_channel",
+    tab: "ライブ",
+    sort: "newest",
+  },
+  {
+    id: "unsupported-youtube-chip-newest",
+    site: "youtube",
+    url: "https://www.youtube.com/@Google",
+    tab: "動画",
+    sort: "newest",
+  },
+  {
+    id: "unsupported-niconico-videos",
+    site: "niconico",
+    url: "https://www.nicovideo.jp/user/129217273",
+    tab: "動画・シリーズ",
+  },
+  {
+    id: "unsupported-empty-youtube-channel-search",
+    site: "youtube",
+    url: "https://www.youtube.com/@zunda_drop/search?query=sift_empty_7d649d20",
+    empty: true,
+  },
+];
 
 export function requiredFilterEvidence(target: CompatibilityCase): string[] {
-  if (target.membersOnly) return ["members-filter"];
-  if (target.site === "x" || target.site === "bluesky")
-    return [
-      "minimum-filter",
-      "media-filter",
-      "reply-filter",
-      "quote-filter",
-      "repost-filter",
-    ];
-  if (target.site === "niconico")
-    return [
-      "minimum-filter",
-      "newer-filter",
-      ...(target.niconicoSort === "再生数が多い順" ? ["maximum-filter"] : []),
-    ];
+  if (target.site === "youtube" || target.site === "niconico")
+    return ["period-filter"];
   return [
-    target.period ? "period-filter" : "minimum-filter",
-    "members-filter",
-    ...(target.sort === "popular" ? ["maximum-filter"] : []),
-    ...(!target.period && !target.destination.endsWith("/shorts")
-      ? ["newer-filter"]
-      : []),
+    "minimum-filter",
+    "media-filter",
+    "reply-filter",
+    "quote-filter",
+    "repost-filter",
   ];
 }
 
 // 期待値は対応仕様から定義する。Siftの判定結果から作らない。
 export const cases: CompatibilityCase[] = [
   {
-    id: "youtube-videos-without-sort",
-    site: "youtube",
-    start: "https://www.youtube.com/@SAYOSAYOCh/videos",
-    destination: "/@SAYOSAYOCh/videos",
-    sort: "default",
-    period: false,
+    id: "niconico-search-popular",
+    site: "niconico",
+    start:
+      "https://www.nicovideo.jp/search/%E3%83%A1%E3%82%BA%E3%83%9E%E3%83%A9%E3%82%A4%E3%82%B6%E3%83%BC?sort=viewCount&order=desc",
+    destination:
+      "/search/%E3%83%A1%E3%82%BA%E3%83%9E%E3%83%A9%E3%82%A4%E3%82%B6%E3%83%BC",
+    niconicoSearch: "viewCount",
+    niconicoSort: "再生数が多い順",
+    period: true,
   },
   {
-    id: "youtube-channel-search",
+    id: "youtube-videos-popular",
     site: "youtube",
-    start: "https://www.youtube.com/@zunda_drop/videos",
-    destination: "/@zunda_drop/search",
-    channelSearch: "WARDOGS",
-    period: false,
-  },
-  {
-    id: "youtube-members-representative",
-    site: "youtube",
-    start: "https://www.youtube.com/@sutehage_channel/videos",
+    start: "https://www.youtube.com/@sutehage_channel",
     destination: "/@sutehage_channel/videos",
-    sort: "newest",
-    period: false,
-    membersOnly: true,
-  },
-  ...(["videos", "shorts", "streams"] as const).flatMap((section) =>
-    (["newest", "popular"] as const).map((sort) => ({
-      id: `youtube-${section}-${sort}`,
-      site: "youtube" as const,
-      start: "https://www.youtube.com/@sutehage_channel",
-      destination: `/@sutehage_channel/${section}`,
-      tab:
-        section === "videos"
-          ? "動画"
-          : section === "shorts"
-            ? "ショート"
-            : "ライブ",
-      sort,
-      period: section !== "shorts" && sort === "popular",
-    })),
-  ),
-  {
-    id: "youtube-chip-newest",
-    site: "youtube",
-    start: "https://www.youtube.com/@Google",
-    destination: "/@Google/videos",
     tab: "動画",
-    sort: "newest",
-    period: false,
+    sort: "popular",
+    period: true,
+  },
+  {
+    id: "youtube-streams-popular",
+    site: "youtube",
+    start: "https://www.youtube.com/@sutehage_channel",
+    destination: "/@sutehage_channel/streams",
+    tab: "ライブ",
+    sort: "popular",
+    period: true,
   },
   {
     id: "youtube-chip-popular",
@@ -194,22 +277,22 @@ export const cases: CompatibilityCase[] = [
     period: true,
   },
   {
-    id: "niconico-videos",
-    site: "niconico",
-    start: "https://www.nicovideo.jp/user/129217273",
-    destination: "/user/129217273/video",
-    tab: "動画・シリーズ",
-    niconicoSort: "投稿日時が新しい順",
-    period: false,
-  },
-  {
     id: "niconico-popular",
     site: "niconico",
     start: "https://www.nicovideo.jp/user/129217273",
     destination: "/user/129217273/video",
     tab: "動画・シリーズ",
     niconicoSort: "再生数が多い順",
-    period: false,
+    period: true,
+  },
+  {
+    id: "niconico-period-representative",
+    site: "niconico",
+    start:
+      "https://www.nicovideo.jp/user/53559097/video?sortKey=viewCount&sortOrder=desc",
+    destination: "/user/53559097/video",
+    niconicoSort: "再生数が多い順",
+    period: true,
   },
   {
     id: "x-following",
@@ -224,7 +307,7 @@ export const cases: CompatibilityCase[] = [
     site: "x",
     start: "https://x.com/home",
     destination: "/home",
-    tab: "e",
+    tab: "t",
     period: false,
   },
   {
@@ -308,19 +391,22 @@ export const cases: CompatibilityCase[] = [
     tab: "投稿",
     period: false,
   },
-  ...(
-    [
-      ["media", "メディア"],
-      ["video", "ビデオ"],
-    ] as const
-  ).map(([section, tab]) => ({
-    id: `bluesky-${section}`,
-    site: "bluesky" as const,
+  {
+    id: "bluesky-media",
+    site: "bluesky",
     start: "https://bsky.app/profile/bsky.app",
     destination: "/profile/bsky.app",
-    tab,
+    tab: "メディア",
     period: false,
-  })),
+  },
+  {
+    id: "bluesky-video",
+    site: "bluesky",
+    start: "https://bsky.app/profile/bsky.app",
+    destination: "/profile/bsky.app",
+    tab: "ビデオ",
+    period: false,
+  },
   {
     id: "bluesky-list",
     site: "bluesky",

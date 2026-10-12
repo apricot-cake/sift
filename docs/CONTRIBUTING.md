@@ -86,19 +86,19 @@ npm run browser:open
 npm run browser:open
 ```
 
-`browser:open` は CDP ポートを開かずに Chrome を起動し、候補を読み込みます。事前に `build:candidate` を実行してください。コマンドが終了した後も Chrome は開いたままになります。候補を読み込むため、バックグラウンドの保持プロセスが Playwright の pipe 接続を維持します。Chrome のウィンドウを閉じると、保持プロセスも終了します。
+`browser:open` は Puppeteer の pipe 接続で Chrome を起動し、候補を読み込みます。事前に `build:candidate` を実行してください。コマンドが終了した後も Chrome は開いたままになります。候補を読み込むため、バックグラウンドの保持プロセスが pipe 接続を維持します。Chrome のウィンドウを閉じると、保持プロセスも終了します。
 
-自動検証と同じプロファイルを使い、前回のタブを復元するので、ログイン状態を引き継げます。開発用 Chrome が既に開いている場合は、プロファイルの競合を避けるため起動をエラーにします。閉じてから再実行してください。
+自動検証と同じプロファイルを使うため、保存されたログイン状態を引き継げます。手動確認では前回のタブを復元します。開発用 Chrome が既に開いている場合は、プロファイルの競合を避けるため起動をエラーにします。閉じてから再実行してください。
 
-`test:live`、`smoke:panel`、`smoke:connection`、`browser:candidate` は、実行中だけローカル CDP ポートを有効にします。`verify:candidate` は全検証を通して1つの Chrome を共有します。正常終了・検証失敗のどちらでも、終了処理で Chrome を閉じます。プロセスの強制終了で終了処理が実行されなかった場合は、残った開発用 Chrome を閉じてください。再検証するときは同じコマンドを実行し、終了後に手動確認する場合は `browser:open` で開き直してください。
+`smoke:panel`、`smoke:connection`、`browser:candidate` は、それぞれ自分が起動した Chrome を pipe 接続で操作します。`test:live` は Vitest で実行し、テストファイルごとに Chrome を起動して終了処理で閉じます。`verify:candidate` は各検証コマンドを順番に実行します。各起動で同じ開発プロファイルを使い、ログイン状態を引き継ぎます。正常終了・検証失敗のどちらでも、終了処理で Chrome を閉じます。プロセスの強制終了で終了処理が実行されなかった場合は、残った開発用 Chrome を閉じてください。再検証するときは同じコマンドを実行し、終了後に手動確認する場合は `browser:open` で開き直してください。
 
-CDP ポートを有効にしたセッションが実行中の場合だけ、次のコマンドで TCP の接続先を表示できます。このコマンドは Chrome を起動しません。
+次のコマンドで開発プロファイルと pipe 接続の設定を表示できます。このコマンドは Chrome を起動せず、起動状況も取得しません。
 
 ```powershell
 npm run browser:status
 ```
 
-自動検証の接続には専用プロファイルとローカルの待受アドレスを使い、ポートは Chrome が選びます。[Chrome のリモートデバッグ](https://developer.chrome.com/blog/remote-debugging-port)では、通常利用するプロファイルとは別のデータディレクトリが必要です。検証中はローカルプロセスから CDP に接続できるため、この方式は接続の有効期間を限定する対策です。
+自動検証と手動起動は、専用プロファイルと Puppeteer の `pipe: true` を使います。TCP の CDP ポートは開きません。この接続方法は [Chrome の Puppeteer による拡張機能テスト](https://developer.chrome.com/docs/extensions/how-to/test/puppeteer)で紹介されています。
 
 ## ストア提出用ZIPを作る
 

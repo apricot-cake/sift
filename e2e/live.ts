@@ -1,15 +1,11 @@
 import fs from "node:fs";
 import path from "node:path";
-import {
-  type Browser,
-  type BrowserContext,
-  chromium,
-  expect,
-  type Page,
-  type Worker,
-} from "@playwright/test";
+import type { Browser, BrowserContext, Page } from "puppeteer-core";
+import { expect } from "vitest";
+import type { ExtensionWorker } from "../scripts/browser-worker.ts";
 import { artifactHash } from "../scripts/compatibility/artifact.ts";
-import { readManagedDevBrowserEndpoint } from "../scripts/managed-dev-browser.ts";
+import { loadDevCandidate } from "../scripts/dev-browser-candidate.ts";
+import { launchDevBrowser } from "../scripts/managed-dev-browser.ts";
 import type { FilterContextResponse } from "../utils/filter-context.ts";
 
 export const extensionId = "bohbpocokkfioejlabmeaimpkpmablkm";
@@ -20,17 +16,14 @@ export interface Candidate {
 }
 export interface LiveSession {
   browser: Browser;
-  endpoint: string;
-  panelBrowser?: Browser;
   panelTargetId?: string;
   context: BrowserContext;
-  worker: Worker;
+  worker: ExtensionWorker;
   candidate: Candidate;
   settings: unknown;
 }
 
 export async function connectLive(): Promise<LiveSession> {
-  const endpoint = await readManagedDevBrowserEndpoint();
   const candidate: Candidate = JSON.parse(
     fs.readFileSync(".output/candidate.json", "utf8"),
   );
@@ -38,33 +31,33 @@ export async function connectLive(): Promise<LiveSession> {
   expect(artifactHash(candidate.output), "検証用成果物が変更されています").toBe(
     candidate.sha256,
   );
-  const browser = await chromium.connectOverCDP(endpoint.url);
-  const context = browser.contexts()[0];
-  if (!context) throw new Error("開発用Chromeのコンテキストがありません");
-  const worker =
-    context
-      .serviceWorkers()
-      .find(
-        (w) => w.url() === `chrome-extension://${extensionId}/background.js`,
-      ) ??
-    (await context.waitForEvent("serviceworker", {
-      predicate: (w) =>
-        w.url() === `chrome-extension://${extensionId}/background.js`,
-    }));
-  const settings = await worker.evaluate("chrome.storage.sync.get('settings')");
-  fs.mkdirSync("test-results", { recursive: true });
-  fs.writeFileSync(
-    "test-results/compatibility-settings-before.json",
-    JSON.stringify(settings, null, 2),
-  );
-  return {
-    browser,
-    endpoint: endpoint.url,
-    context,
-    worker,
-    candidate,
-    settings,
-  };
+  const browser = await launchDevBrowser(true);
+  try {
+    const loaded = await loadDevCandidate(browser).catch((cause) => {
+      throw new Error("実機検証用の候補を読み込めません", { cause });
+    });
+    expect(loaded.loaded.id).toBe(extensionId);
+    const context = browser.defaultBrowserContext();
+    const worker = loaded.worker;
+    const settings = await worker.evaluate(
+      "chrome.storage.sync.get('settings')",
+    );
+    fs.mkdirSync("test-results", { recursive: true });
+    fs.writeFileSync(
+      "test-results/compatibility-settings-before.json",
+      JSON.stringify(settings, null, 2),
+    );
+    return {
+      browser,
+      context,
+      worker,
+      candidate,
+      settings,
+    };
+  } catch (error) {
+    await browser.close();
+    throw error;
+  }
 }
 
 export async function finishLive(session: LiveSession) {
@@ -76,18 +69,23 @@ export async function finishLive(session: LiveSession) {
         : "chrome.storage.sync.remove('settings')",
     );
   } finally {
-    await session.panelBrowser?.close();
-    await session.browser.close();
+    try {
+      await session.worker.dispose();
+    } finally {
+      await session.browser.close();
+    }
   }
 }
 
 export async function tabId(session: LiveSession, page: Page): Promise<number> {
   const url = page.url();
-  return await session.worker.evaluate(
-    "(async()=>{const tabs=(await chrome.tabs.query({active:true,lastFocusedWindow:true})).filter(t=>t.url===" +
+  const id = await session.worker.evaluate(
+    "(async()=>{const tabs=(await chrome.tabs.query({})).filter(t=>t.url===" +
       JSON.stringify(url) +
       ");if(tabs.length!==1)throw Error('対象タブが一意ではありません');return tabs[0].id;})()",
   );
+  if (typeof id !== "number") throw new Error("対象タブの ID を取得できません");
+  return id;
 }
 
 export async function closePanel(session: LiveSession, page: Page) {
@@ -112,7 +110,7 @@ export async function closePanel(session: LiveSession, page: Page) {
     );
   }
   if (session.panelTargetId) {
-    const cdp = await session.browser.newBrowserCDPSession();
+    const cdp = await session.browser.target().createCDPSession();
     try {
       const targets = await cdp.send("Target.getTargets");
       if (
@@ -134,11 +132,11 @@ export async function readContext(
   session: LiveSession,
   page: Page,
 ): Promise<FilterContextResponse> {
-  return await session.worker.evaluate(
+  return (await session.worker.evaluate(
     "chrome.tabs.sendMessage(" +
       (await tabId(session, page)) +
       ",{type:'sift:get-filter-context'})",
-  );
+  )) as FilterContextResponse;
 }
 
 /** 閉じた状態からの起動。通知・ページ幅・可視パネル・接続先を照合する。 */
@@ -147,23 +145,11 @@ export async function openPanel(
   page: Page,
 ): Promise<Page> {
   await page.bringToFront();
-  const cdp = await session.browser.newBrowserCDPSession();
+  const cdp = await session.browser.target().createCDPSession();
   const action = async () => {
-    const targets = await cdp.send("Target.getTargets", {
-      filter: [{ type: "tab" }, { exclude: true }],
-    });
-    const matching = targets.targetInfos.filter(
-      (t) =>
-        t.url === page.url() &&
-        (t as typeof t & { embedderData?: { tabActive?: boolean } })
-          .embedderData?.tabActive,
-    );
-    expect(matching).toHaveLength(1);
-    if (!matching[0]) throw new Error("対象タブがありません");
-    await cdp.send("Extensions.triggerAction", {
-      id: extensionId,
-      targetId: matching[0].targetId,
-    });
+    const extension = (await session.browser.extensions()).get(extensionId);
+    if (!extension) throw new Error("拡張機能がありません");
+    await page.triggerExtensionAction(extension);
   };
   try {
     const originalTargets = new Set(
@@ -232,36 +218,35 @@ export async function openPanel(
     const openedTargetId = newPanels[0]?.targetId;
     if (!openedTargetId) throw new Error("今回開いたパネルを特定できません");
     session.panelTargetId = openedTargetId;
-    let panel: Page | undefined;
-    // Chromeのサイドパネルは生成時の自動接続対象に入らない場合がある。
-    // 生成後にCDP接続を作り直して、実パネルのPageを取得する。
-    await session.panelBrowser?.close();
-    session.panelBrowser = await chromium.connectOverCDP(session.endpoint);
-    const panelContext = session.panelBrowser.contexts()[0];
-    if (!panelContext) throw new Error("パネルのコンテキストがありません");
-    await expect
-      .poll(async () => {
-        for (const candidate of panelContext
-          .pages()
-          .filter((p) => p.url().endsWith("/sidepanel.html"))) {
-          const identity = await panelContext.newCDPSession(candidate);
-          const target = await identity.send("Target.getTargetInfo");
+    const panelTarget = await session.browser.waitForTarget(
+      async (target) => {
+        if (target.url() !== `chrome-extension://${extensionId}/sidepanel.html`)
+          return false;
+        const identity = await target.createCDPSession();
+        try {
+          return (
+            (await identity.send("Target.getTargetInfo")).targetInfo
+              .targetId === openedTargetId
+          );
+        } finally {
           await identity.detach();
-          if (target.targetInfo.targetId !== openedTargetId) continue;
-          if (
-            await candidate.evaluate(
-              () =>
-                document.visibilityState === "visible" &&
-                innerWidth > 0 &&
-                innerHeight > 0,
-            )
-          )
-            panel = candidate;
         }
-        return Boolean(panel);
-      })
+      },
+      { timeout: 10000 },
+    );
+    const panel = await panelTarget.asPage();
+    panel.setDefaultTimeout(10000);
+    panel.setDefaultNavigationTimeout(30000);
+    await expect
+      .poll(() =>
+        panel.evaluate(
+          () =>
+            document.visibilityState === "visible" &&
+            innerWidth > 0 &&
+            innerHeight > 0,
+        ),
+      )
       .toBe(true);
-    if (!panel) throw new Error("可視パネルがありません");
     const running = await panel.evaluate(
       "chrome.runtime.sendMessage({type:'sift:get-local-build'})",
     );

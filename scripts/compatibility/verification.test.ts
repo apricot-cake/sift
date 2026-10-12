@@ -1,9 +1,14 @@
+import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, test } from "vitest";
 import { artifactHash } from "./artifact.ts";
-import { assertVerified, promoteCandidate } from "./verification.ts";
+import {
+  assertVerified,
+  promoteCandidate,
+  sourceHash,
+} from "./verification.ts";
 
 const temporary: string[] = [];
 function fixture() {
@@ -34,6 +39,32 @@ afterEach(() => {
 });
 
 describe("検証済み成果物の配備", () => {
+  test("別ビルドのサイト編集は除き、拡張機能の実装・テスト・未追跡ファイルの変更は検出する", () => {
+    const { root } = fixture();
+    execFileSync("git", ["init", "--quiet"], { cwd: root });
+    fs.mkdirSync(path.join(root, "website"));
+    fs.writeFileSync(path.join(root, "website", "page.html"), "website");
+    fs.writeFileSync(path.join(root, "runtime.ts"), "runtime");
+    fs.writeFileSync(path.join(root, "runtime.test.ts"), "test");
+    execFileSync("git", ["add", "runtime.ts", "runtime.test.ts"], {
+      cwd: root,
+    });
+    const initial = sourceHash(root);
+    fs.writeFileSync(
+      path.join(root, "website", "page.html"),
+      "changed website",
+    );
+    fs.writeFileSync(path.join(root, "website", "new.ts"), "new website");
+    expect(sourceHash(root)).toBe(initial);
+    fs.writeFileSync(path.join(root, "runtime.ts"), "changed runtime");
+    expect(sourceHash(root)).not.toBe(initial);
+    fs.writeFileSync(path.join(root, "runtime.ts"), "runtime");
+    fs.writeFileSync(path.join(root, "runtime.test.ts"), "changed test");
+    expect(sourceHash(root)).not.toBe(initial);
+    fs.writeFileSync(path.join(root, "runtime.test.ts"), "test");
+    fs.writeFileSync(path.join(root, "new-runtime.ts"), "untracked runtime");
+    expect(sourceHash(root)).not.toBe(initial);
+  });
   test.each(["running", "failed", "incomplete"])(
     "%sは配備できない",
     (status) => {

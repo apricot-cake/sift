@@ -1,10 +1,12 @@
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
+import type { JsonTestResults } from "vitest/node";
 import {
   cases,
   emptyCases,
   lifecycleCases,
+  lightboxCases,
   unsupportedCases,
 } from "../e2e/cases.ts";
 import { artifactHash } from "./compatibility/artifact.ts";
@@ -42,7 +44,7 @@ recordVerification(
         stdio: "inherit",
       });
     });
-    const report = JSON.parse(
+    const report: JsonTestResults = JSON.parse(
       fs.readFileSync(
         path.join(root, "test-results", "compatibility-report.json"),
         "utf8",
@@ -60,17 +62,24 @@ recordVerification(
       lifecycleCases,
       emptyCases,
       unsupportedCases,
+      lightboxCases,
     );
     if (
-      report.stats.expected !==
+      report.numPassedTests !==
         cases.length +
           lifecycleCases.length +
           emptyCases.length +
-          unsupportedCases.length ||
-      report.stats.unexpected ||
-      report.stats.skipped ||
-      report.stats.flaky ||
-      report.errors.length ||
+          unsupportedCases.length +
+          lightboxCases.length ||
+      !report.success ||
+      report.numFailedTests ||
+      report.numFailedTestSuites ||
+      report.numPendingTests ||
+      report.numPendingTestSuites ||
+      report.numTodoTests ||
+      report.testResults.some(
+        (suite) => suite.status !== "passed" || suite.message,
+      ) ||
       !connection.pass ||
       connection.cleanupErrors.length
     )
@@ -98,6 +107,7 @@ recordVerification(
             ...lifecycleCases,
             ...emptyCases,
             ...unsupportedCases,
+            ...lightboxCases,
           ].map((c) => c.id),
         },
         null,

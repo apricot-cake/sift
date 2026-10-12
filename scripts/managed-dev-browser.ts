@@ -1,25 +1,14 @@
 import { homedir } from "node:os";
 import path from "node:path";
-import { chromium } from "@playwright/test";
+import { type Browser, launch } from "puppeteer-core";
 import { findChromePath } from "./chrome-path.ts";
-import {
-  type DevBrowserEndpoint,
-  readDevBrowserEndpoint,
-} from "./dev-browser-endpoint.ts";
-
-import {
-  assertDevBrowserProfile,
-  secureDevBrowserProfile,
-} from "./dev-browser-profile.ts";
-
-const sessionKey = "SIFT_DEV_BROWSER_SESSION";
+import { secureDevBrowserProfile } from "./dev-browser-profile.ts";
 
 export function devBrowserProfile(): string {
   return path.resolve(
     process.env.SIFT_DEV_PROFILE || path.join(homedir(), ".sift-ext-profile"),
   );
 }
-
 export function devBrowserArgs(profile: string): string[] {
   return [
     `--user-data-dir=${profile}`,
@@ -32,87 +21,53 @@ export function devBrowserArgs(profile: string): string[] {
     "--disable-renderer-backgrounding",
   ];
 }
-
-export async function launchDevBrowser(debug: boolean) {
+/** 接続を起動元の匿名 pipe に限定し、既存 Chrome には接続しない。 */
+export async function launchDevBrowser(headless: boolean): Promise<Browser> {
   const profile = devBrowserProfile();
   secureDevBrowserProfile(profile);
-  return await chromium.launchPersistentContext(profile, {
+  return await launch({
     executablePath: process.env.SIFT_CHROME || findChromePath(),
-    headless: debug,
-    viewport: null,
-    chromiumSandbox: true,
+    userDataDir: profile,
+    headless,
+    pipe: true,
+    enableExtensions: true,
+    defaultViewport: null,
+    protocolTimeout: 30000,
     ignoreDefaultArgs: [
-      "--disable-extensions",
+      // SDK の環境変数からも Chrome の sandbox を無効にさせない。
+      "--no-sandbox",
+      "--disable-setuid-sandbox",
       "--password-store=basic",
       "--use-mock-keychain",
-      // 通常のスクロールバーを保ち、現行 Chrome の非表示モードを明示する。
-      ...(debug ? ["--headless", "--hide-scrollbars"] : []),
+      "--hide-scrollbars",
     ],
     args: [
       ...devBrowserArgs(profile).filter(
         (arg) => !arg.startsWith("--user-data-dir="),
       ),
-      ...(debug
-        ? [
-            "--headless=new",
-            "--window-size=1280,720",
-            "--remote-debugging-address=127.0.0.1",
-            "--remote-debugging-port=0",
-          ]
-        : []),
+      ...(headless ? ["--window-size=1280,720"] : []),
     ],
-  });
-}
-
-/** セッションの記録は認証ではなく、所有ラッパーの取り違え防止に使う。 */
-export async function readManagedDevBrowserEndpoint(): Promise<DevBrowserEndpoint> {
-  const profile = devBrowserProfile();
-  assertDevBrowserProfile(profile);
-  const session = process.env[sessionKey];
-  const endpoint = await readDevBrowserEndpoint(profile);
-  if (
-    !session ||
-    !endpoint ||
-    session !==
-      JSON.stringify({ profile, endpoint: endpoint.webSocketDebuggerUrl })
-  )
+  }).catch((cause) => {
     throw new Error(
-      "管理中の開発用 Chrome がありません。npm の検証コマンドから実行してください。",
-    );
-  return endpoint;
-}
-
-/** 呼び出し中だけ CDP を有効にし、子コマンドでは同じ Chrome を共有する。 */
-export async function withDevBrowser<T>(
-  run: (owned: boolean) => Promise<T>,
-  signal?: AbortSignal,
-): Promise<T> {
-  signal?.throwIfAborted();
-  const profile = devBrowserProfile();
-  secureDevBrowserProfile(profile);
-  if (process.env[sessionKey]) {
-    await readManagedDevBrowserEndpoint();
-    return await run(false);
-  }
-  if (await readDevBrowserEndpoint(profile))
-    throw new Error("CDP が有効な開発用 Chrome を先に閉じてください。");
-  const context = await launchDevBrowser(true).catch((cause) => {
-    throw new Error(
-      "検証用 Chrome を起動できません。手動確認用の開発用 Chrome が開いていれば閉じてから再実行してください。",
+      "開発用 Chrome を起動できません。手動確認用の Chrome が開いていれば閉じてから再実行してください。",
       { cause },
     );
   });
+}
+/** 各コマンドが所有する Chrome は、正常終了・失敗のどちらでも終了する。 */
+export async function withDevBrowser<T>(
+  run: (browser: Browser) => Promise<T>,
+  signal?: AbortSignal,
+): Promise<T> {
+  signal?.throwIfAborted();
+  const browser = await launchDevBrowser(true);
+  const abort = () => void browser.close();
+  signal?.addEventListener("abort", abort, { once: true });
   try {
-    const endpoint = await readDevBrowserEndpoint(profile);
-    if (!endpoint)
-      throw new Error("検証用 Chrome の CDP 接続先を確認できません。");
-    process.env[sessionKey] = JSON.stringify({
-      profile,
-      endpoint: endpoint.webSocketDebuggerUrl,
-    });
-    return await run(true);
+    signal?.throwIfAborted();
+    return await run(browser);
   } finally {
-    delete process.env[sessionKey];
-    await context.close();
+    signal?.removeEventListener("abort", abort);
+    await browser.close();
   }
 }

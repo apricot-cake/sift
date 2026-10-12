@@ -11,7 +11,7 @@ export interface VerifiedCandidate {
   sourceHash: string;
 }
 
-/** 未追跡の実装・テストも含め、検証後の変更を検出する。内容は外部に送らない。 */
+/** 拡張機能の未追跡の実装・テストも含めて変更を検出する。独立ビルドのWebサイトは除く。 */
 export function sourceHash(root: string): string {
   const names = execFileSync(
     "git",
@@ -20,8 +20,10 @@ export function sourceHash(root: string): string {
   )
     .split("\0")
     .filter(Boolean)
+    .filter((name) => !name.startsWith("website/"))
     .sort();
   const hash = createHash("sha256");
+  hash.update("sift-extension-source-v2");
   for (const name of names) {
     const file = path.join(root, name);
     hash.update(JSON.stringify(name));
