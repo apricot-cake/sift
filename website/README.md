@@ -24,7 +24,7 @@ npm run build
 
 ## 公開
 
-公開先は <https://apricot-cake.com/sift/> です。リポジトリの Settings → Pages → Source を GitHub Actions に設定します。
+公開先は <https://apricot-cake.github.io/sift/> です。リポジトリの Settings → Pages → Source を GitHub Actions に設定します。
 
 `.github/workflows/website.yml` がサイトを検査・ビルドします。`main` へのサイト変更の push または手動実行で GitHub Pages に公開します。pull request では検査とビルドだけを行います。
 
