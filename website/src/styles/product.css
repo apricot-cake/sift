@@ -129,13 +129,6 @@
   font-weight: 600;
   letter-spacing: -0.025em;
 }
-.product-platforms {
-  margin: 0 0 18px;
-  text-align: center;
-  color: var(--muted-foreground);
-  font-size: 15px;
-  font-weight: 500;
-}
 .product-demo-description {
   margin: 0 auto 44px;
   max-width: 720px;
