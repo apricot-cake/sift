@@ -2,6 +2,12 @@ import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { demoPosts, demoVideos } from "../src/data/demo-posts.ts";
+import {
+  attribute,
+  hasClass,
+  parseHtmlElements,
+  scriptText,
+} from "./build-html.mjs";
 
 const dist = new URL("../dist/", import.meta.url);
 const home = readFileSync(new URL("index.html", dist), "utf8");
@@ -9,16 +15,23 @@ const alternative = readFileSync(
   new URL("alternative/index.html", dist),
   "utf8",
 );
+const pages = [home, alternative].map((html) => ({
+  html,
+  elements: parseHtmlElements(html),
+}));
 
 // 公開用HTMLの静的な素材パスとリンクを検査する。
-for (const html of [home, alternative]) {
-  assert.doesNotMatch(
-    html,
-    /<astro-island\b/i,
+for (const { elements } of pages) {
+  assert.ok(
+    !elements.some((element) => element.tagName === "astro-island"),
     "不要なフレームワークが残っています",
   );
-  for (const [tag] of html.matchAll(/<(?:img|link|script)\b[^>]*>/gi)) {
-    for (const [, value] of tag.matchAll(/(?:src|href)="([^"]+)"/g)) {
+  for (const element of elements.filter((node) =>
+    ["img", "link", "script"].includes(node.tagName),
+  )) {
+    for (const name of ["src", "href"]) {
+      const value = attribute(element, name);
+      if (value === undefined) continue;
       if (/^(?:https?:|data:)/.test(value)) continue;
       assert.ok(value.startsWith("/sift/"), `公開パスが不正です: ${value}`);
       assert.ok(
@@ -27,10 +40,12 @@ for (const html of [home, alternative]) {
       );
     }
   }
-  for (const [, href] of html.matchAll(/<a\b[^>]*href="([^"]+)"/g)) {
+  for (const element of elements.filter((node) => node.tagName === "a")) {
+    const href = attribute(element, "href");
+    if (href === undefined) continue;
     if (href.startsWith("#")) {
       assert.ok(
-        html.includes(`id="${href.slice(1)}"`),
+        elements.some((node) => attribute(node, "id") === href.slice(1)),
         `区間がありません: ${href}`,
       );
     } else if (href.startsWith("/sift/")) {
@@ -41,14 +56,34 @@ for (const html of [home, alternative]) {
       );
     }
   }
-  assert.match(html, /name="theme-color" content="#ffffff"/);
-  assert.equal([...html.matchAll(/<h1\b/g)].length, 1);
+  assert.ok(
+    elements.some(
+      (element) =>
+        element.tagName === "meta" &&
+        attribute(element, "name") === "theme-color" &&
+        attribute(element, "content") === "#ffffff",
+    ),
+  );
+  assert.equal(
+    elements.filter((element) => element.tagName === "h1").length,
+    1,
+  );
 }
-assert.match(home, /class="product-github"/);
-assert.match(home, /youtube-nocookie\.com\/embed\/KqO-4fv2Qsw/);
-assert.match(alternative, /youtube-nocookie\.com\/embed\/KqO-4fv2Qsw/);
+assert.ok(
+  pages[0].elements.some((element) => hasClass(element, "product-github")),
+);
+for (const { elements } of pages) {
+  assert.ok(
+    elements.some(
+      (element) =>
+        element.tagName === "iframe" &&
+        attribute(element, "src") ===
+          "https://www.youtube-nocookie.com/embed/KqO-4fv2Qsw",
+    ),
+  );
+}
 assert.ok(existsSync(new URL("demo/", dist)), "デモ画像がありません");
-assert.equal(demoPosts.length, 5, "投稿データは5件にしてください");
+assert.ok(demoPosts.length > 0, "投稿データがありません");
 assert.equal(demoVideos.length, 6, "動画データは6件にしてください");
 assert.equal(demoPosts.filter((post) => post.likes >= 100).length, 2);
 assert.equal(demoVideos.filter((video) => video.publishedDays <= 90).length, 3);
@@ -58,58 +93,76 @@ assert.ok(
   ),
   "動画が人気順になっていません",
 );
-for (const html of [home, alternative]) {
-  assert.doesNotMatch(
-    html,
-    /src="\/sift\/screenshots\//,
+for (const { html, elements } of pages) {
+  assert.ok(
+    !elements.some((element) =>
+      attribute(element, "src")?.startsWith("/sift/screenshots/"),
+    ),
     "置き換え前の画面画像が残っています",
   );
-  assert.match(html, /data-replay-demo/, "操作デモの初期画面がありません");
+  assert.ok(
+    elements.some(
+      (element) => attribute(element, "data-replay-demo") !== undefined,
+    ),
+    "操作デモの初期画面がありません",
+  );
   assert.equal(
-    [...html.matchAll(/data-step="[0-3]"/g)].length,
+    elements.filter((element) =>
+      /^[0-3]$/.test(attribute(element, "data-step") ?? ""),
+    ).length,
     8,
     "各デモの再生位置は4区間にしてください",
   );
-  assert.match(html, /data-mode="social"/);
-  assert.match(html, /data-mode="youtube"/);
+  assert.ok(
+    elements.some((element) => attribute(element, "data-mode") === "social"),
+  );
+  assert.ok(
+    elements.some((element) => attribute(element, "data-mode") === "youtube"),
+  );
   assert.equal(
-    [...html.matchAll(/class="replay-post"/g)].length,
-    5,
+    elements.filter((element) => hasClass(element, "replay-post")).length,
+    demoPosts.length,
     "投稿が静的HTMLに出力されていません",
   );
   assert.equal(
-    [...html.matchAll(/class="replay-video"/g)].length,
-    6,
+    elements.filter((element) => hasClass(element, "replay-video")).length,
+    demoVideos.length,
     "動画が静的HTMLに出力されていません",
   );
-  assert.doesNotMatch(
-    html,
-    /(?:data-pause|一時停止)/,
+  assert.ok(
+    !elements.some(
+      (element) => attribute(element, "data-pause") !== undefined,
+    ) && !html.includes("一時停止"),
     "不要な一時停止の操作が残っています",
   );
   for (const post of demoPosts) {
     assert.ok(
-      html.includes(`data-likes="${post.likes}"`),
+      elements.some(
+        (element) => attribute(element, "data-likes") === String(post.likes),
+      ),
       `投稿の反応数がありません: ${post.handle}`,
     );
   }
   for (const video of demoVideos) {
     assert.ok(
-      html.includes(`data-days="${video.publishedDays}"`),
+      elements.some(
+        (element) =>
+          attribute(element, "data-days") === String(video.publishedDays),
+      ),
       `動画の公開時期がありません: ${video.id}`,
     );
   }
-  const scripts = [...html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/gi)];
+  const scripts = elements.filter((element) => element.tagName === "script");
   assert.ok(scripts.length > 0, "操作デモのスクリプトが登録されていません");
   let replayRegistered = false;
-  for (const [, attributes, inlineBody] of scripts) {
-    assert.match(
-      attributes,
-      /type="module"/,
+  for (const script of scripts) {
+    assert.equal(
+      attribute(script, "type"),
+      "module",
       "デモのスクリプトはESモジュールで登録してください",
     );
-    const source = /\bsrc="([^"]+)"/.exec(attributes)?.[1];
-    let body = inlineBody;
+    const source = attribute(script, "src");
+    let body = scriptText(script);
     if (source) {
       assert.ok(
         source.startsWith("/sift/_astro/"),

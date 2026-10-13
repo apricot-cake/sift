@@ -9,7 +9,7 @@
   "scripts": {
     "dev": "astro dev --host 127.0.0.1",
     "check": "astro check && tsc --noEmit",
-    "build": "astro build && node scripts/check-build.mjs && node scripts/check-replay.mjs",
+    "build": "astro build && node --test scripts/build-html.test.mjs && node scripts/check-build.mjs && node scripts/check-replay.mjs",
     "preview": "astro preview --host 127.0.0.1"
   },
   "dependencies": {
@@ -20,6 +20,7 @@
   "devDependencies": {
     "@astrojs/check": "0.9.10",
     "@types/node": "26.6.4",
+    "parse5": "8.0.1",
     "typescript": "6.0.3"
   }
 }
