@@ -48,9 +48,11 @@ const base = `${import.meta.env.BASE_URL.replace(/\/$/, "")}/`;
       </div>
     </section>
 
-    <div class="product-install" data-reveal>
+    <section class="product-install" data-reveal aria-labelledby="product-install-heading">
+      <h2 id="product-install-heading">使ってみる</h2>
+      <p class="product-availability">無料で使えるオープンソースの拡張機能です。</p>
       <InstallLinks />
-    </div>
+    </section>
   </main>
 </Layout>
 

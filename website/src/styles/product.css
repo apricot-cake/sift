@@ -83,12 +83,11 @@
   margin: 16px 0 0;
   text-align: center;
   color: var(--muted-foreground);
-  font-size: 15px;
-  line-height: 1.6;
+  font-size: 0.875rem;
+  line-height: 1.8;
 }
-.product-availability a {
-  text-decoration: underline;
-  text-underline-offset: 3px;
+.product-install .product-actions {
+  margin-top: 24px;
 }
 .product-store img {
   display: block;
@@ -207,6 +206,14 @@
 }
 .product-install {
   padding-block: 40px 192px;
+  text-align: center;
+}
+.product-install h2 {
+  margin: 0;
+  color: var(--foreground);
+  font-size: var(--product-heading-size);
+  font-weight: 600;
+  letter-spacing: -0.025em;
 }
 @media (max-width: 900px) {
   :root {
