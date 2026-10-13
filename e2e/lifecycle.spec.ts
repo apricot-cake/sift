@@ -70,21 +70,32 @@ for (const target of lifecycleCases) {
       await panel.locator(picker).setWaitForStableBoundingBox(false).click();
       const options = aria("option");
       await expect.poll(() => visible(panel, options)).toBe(true);
-      const counts = await panel.$$eval(options, (nodes) =>
-        nodes.map((node) =>
-          Number(
-            node
-              .querySelector("[data-choice-count]")
-              ?.textContent?.replace(/[^\d]/g, ""),
+      const readCounts = () =>
+        panel.$$eval(options, (nodes) =>
+          nodes.map((node) =>
+            Number(
+              node
+                .querySelector("[data-choice-count]")
+                ?.textContent?.replace(/[^\d]/g, ""),
+            ),
           ),
-        ),
-      );
-      const index = counts.findIndex(
-        (count, i) => i > 0 && count > 0 && count < (counts[0] ?? 0),
-      );
-      expect(index, "遷移前に投稿を除外できる条件が必要です").toBeGreaterThan(
-        0,
-      );
+        );
+      const partialIndex = (counts: number[]) =>
+        counts.findIndex(
+          (count, i) => i > 0 && count > 0 && count < (counts[0] ?? 0),
+        );
+      // 一覧の取得と候補件数の更新は、パネルの表示より後に完了する。
+      await expect
+        .poll(async () => partialIndex(await readCounts()), {
+          message: "遷移前に投稿を除外できる条件が必要です",
+        })
+        .toBeGreaterThan(0);
+      const counts = await readCounts();
+      const index = partialIndex(counts);
+      await evidence(task, "lifecycle-filter-counts", {
+        body: JSON.stringify({ counts, index }),
+        contentType: "application/json",
+      });
       await (await element(panel, options, index)).click();
       await expect
         .poll(() =>

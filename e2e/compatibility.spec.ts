@@ -80,12 +80,8 @@ function regionFor(target: CompatibilityCase) {
 
 async function selectTab(page: Page, target: CompatibilityCase) {
   if (target.tab) {
-    // ホームの初期一覧が表示されてから、対象のタブへ切り替える。
-    if (
-      target.id === "x-following" ||
-      (target.site === "bluesky" && target.destination === "/")
-    )
-      await page.locator(regionFor(target).card).wait();
+    // 初期タブが空でも、対象タブへの切り替えは可能。
+    // 投稿カードの確認は切り替え後の navigate で行う。
     const navigation =
       target.site === "x" && target.tab === "ポスト"
         ? `a[role="tab"][href=${JSON.stringify(target.destination)}]`
@@ -928,7 +924,10 @@ for (const target of cases) {
       });
     } catch (error) {
       await evidence(task, "failure-cause", {
-        body: JSON.stringify({ message: String(error) }),
+        body: JSON.stringify({
+          message: String(error),
+          stack: error instanceof Error ? error.stack : undefined,
+        }),
         contentType: "application/json",
       });
       await evidence(task, "failure-navigation", {
