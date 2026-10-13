@@ -24,7 +24,7 @@ sift は、対応サイトの一覧に表示された投稿や動画を、その
 
 判定はブラウザー内で行います。開発者へのデータ送信、解析、広告、トラッキングは行いません。
 
-掲載画像には『崩壊：スターレイル』公式X・YouTubeの投稿を使用しています。siftはHoYoverseの公式製品ではありません。
+掲載画像には架空の投稿・動画を使った操作デモを使用しています。
 
 ### カテゴリ
 
@@ -53,6 +53,8 @@ sift filters posts and videos in supported website lists as you browse. Open the
 sift does not change the website's sort order. YouTube Shorts, channel search, and lists without a confirmed Popular order are unsupported. Niconico lists in other sort orders are also unsupported.
 
 All filtering happens within the browser. sift does not send data to the developer or use analytics, advertising, or tracking.
+
+The screenshots show an operation demo with fictional posts and videos.
 
 ### Category
 
@@ -83,7 +85,7 @@ Productivity
 
 ### URL
 
-- ホームページ: <https://github.com/apricot-cake/sift>
+- ホームページ: <https://apricot-cake.github.io/sift/>
 - サポート: <https://github.com/apricot-cake/sift/issues>
 - プライバシーポリシー: <https://raw.githubusercontent.com/apricot-cake/sift/main/PRIVACY.md>
 
