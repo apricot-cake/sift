@@ -64,7 +64,11 @@ function initialize(root: HTMLElement) {
   const viewport = get(".replay-viewport");
   const cursor = get(".replay-cursor");
   const menu = get(".replay-menu");
+  const startOverlay = get(".replay-start-overlay");
+  const startButton = get<HTMLButtonElement>(".replay-start");
+  const timeline = get<HTMLFieldSetElement>(".replay-timeline");
   const reduced = window.matchMedia("(prefers-reduced-motion: reduce)");
+  let started = false;
   let elapsed = 0;
   let last = performance.now();
   let visible = true;
@@ -122,6 +126,7 @@ function initialize(root: HTMLElement) {
   }
   const resize = new ResizeObserver(() => {
     screen.style.transform = `scale(${viewport.clientWidth / screen.offsetWidth})`;
+    optionOffset = undefined;
     render(elapsed);
   });
   resize.observe(viewport);
@@ -140,6 +145,7 @@ function initialize(root: HTMLElement) {
   };
   function render(time: number) {
     const { stage, menuOpen, chosen, clicked } = getReplayState(time);
+    cursor.hidden = !started || stage === 3;
     const youtube = root.dataset.mode === "youtube";
     const state = `${stage}:${menuOpen}:${chosen}:${clicked}`;
     const changed = state !== renderedState;
@@ -197,25 +203,23 @@ function initialize(root: HTMLElement) {
       const count = items.filter((item) =>
         youtube ? !item.hidden : !item.classList.contains("removed"),
       ).length;
-      get(youtube ? "[data-video-count]" : "[data-social-count]").textContent =
-        `${count} / ${items.length}件を表示`;
+      if (youtube) {
+        get("[data-video-count]").textContent =
+          `${count} / ${items.length}件を表示`;
+      }
       get("[data-selected-count]").textContent =
         `${count}${youtube ? "本" : "件"}`;
-      cursor.hidden = stage === 3;
     }
     if (stage === 3) return;
     const icon = point(get(".replay-extension"));
     const picker = point(get(".replay-picker"));
-    if (!optionOffset) {
-      const wasHidden = menu.hidden;
-      menu.hidden = false;
+    if (!optionOffset && menuOpen) {
       const option = point(get(".replay-option"));
       optionOffset = { x: option.x - picker.x, y: option.y - picker.y };
-      menu.hidden = wasHidden;
     }
     const option = {
-      x: picker.x + optionOffset.x,
-      y: picker.y + optionOffset.y,
+      x: picker.x + (optionOffset?.x ?? 0),
+      y: picker.y + (optionOffset?.y ?? 0),
     };
     const start = { x: icon.x * 0.6, y: 110 };
     let from = start;
@@ -244,6 +248,7 @@ function initialize(root: HTMLElement) {
   }
   root.querySelectorAll<HTMLElement>("[data-step]").forEach((button) => {
     button.addEventListener("click", () => {
+      if (!started) return;
       const index = Number(button.dataset.step);
       elapsed = seekReplayTime(index, reduced.matches);
       render(elapsed);
@@ -253,7 +258,7 @@ function initialize(root: HTMLElement) {
     const next = advanceReplayTime(
       elapsed,
       now - last,
-      !reduced.matches && visible && !document.hidden,
+      started && !reduced.matches && visible && !document.hidden,
     );
     last = now;
     if (next !== elapsed) {
@@ -264,5 +269,21 @@ function initialize(root: HTMLElement) {
   }
   updatePanel();
   render(0);
+  startButton.disabled = false;
+  startButton.addEventListener("click", () => {
+    if (started) return;
+    const keyboardFocus = startButton.matches(":focus-visible");
+    started = true;
+    elapsed = 0;
+    last = performance.now();
+    timeline.disabled = false;
+    startOverlay.hidden = true;
+    render(0);
+    if (keyboardFocus) {
+      timeline
+        .querySelector<HTMLButtonElement>("[data-step]")
+        ?.focus({ preventScroll: true });
+    }
+  });
   requestAnimationFrame(frame);
 }

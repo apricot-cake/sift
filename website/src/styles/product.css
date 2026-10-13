@@ -1,10 +1,18 @@
 :root {
   view-transition-name: none;
+  --product-page-width: 960px;
+  --product-page-gutter: 64px;
+}
+.product-header,
+.product-page {
+  width: min(
+    var(--product-page-width),
+    calc(100% - var(--product-page-gutter))
+  );
+  margin-inline: auto;
 }
 .product-header {
-  width: min(100% - 3rem, 1080px);
   min-height: 80px;
-  margin-inline: auto;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -15,10 +23,9 @@
   align-items: center;
   gap: 8px;
   min-height: 44px;
-  color: var(--foreground);
+  color: #3a3f4a;
   font-size: 25px;
   font-weight: 650;
-  letter-spacing: -0.04em;
 }
 .product-brand img {
   width: 36px;
@@ -27,13 +34,11 @@
 .product-page {
   --product-heading-size: clamp(23px, 2.5vw, 30px);
   --product-section-gap: clamp(64px, 7vw, 96px);
-  width: min(100% - 3rem, 960px);
-  margin-inline: auto;
 }
 .product-intro {
   width: min(100%, 960px);
   margin-inline: auto;
-  padding-block: 36px 88px;
+  padding-block: 52px 88px;
   text-align: center;
 }
 .product-page-title {
@@ -74,10 +79,21 @@
   display: inline-flex;
   flex-shrink: 0;
 }
+.product-availability {
+  margin: 16px 0 0;
+  text-align: center;
+  color: var(--muted-foreground);
+  font-size: 15px;
+  line-height: 1.6;
+}
+.product-availability a {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
 .product-store img {
   display: block;
   width: auto;
-  height: 52px;
+  height: 64px;
   object-fit: contain;
 }
 .product-github {
@@ -95,11 +111,11 @@
   background: var(--muted);
 }
 .product-github img {
-  width: 24px;
-  height: 24px;
+  width: 36px;
+  height: 36px;
 }
 .product-demo {
-  width: min(100%, 960px);
+  width: 100%;
   margin-inline: auto;
 }
 .product-demo + .product-demo {
@@ -154,6 +170,8 @@
   text-align: center;
 }
 .product-video-surface {
+  width: 100%;
+  margin-inline: auto;
   overflow: hidden;
   border-radius: 16px;
 }
@@ -197,17 +215,23 @@
 .product-install {
   padding-block: 40px 192px;
 }
+@media (max-width: 900px) {
+  :root {
+    --product-page-gutter: 48px;
+  }
+}
 @media (max-width: 640px) {
+  :root {
+    --product-page-gutter: 32px;
+  }
   .product-header {
-    width: calc(100% - 2rem);
     min-height: 72px;
   }
   .product-page {
     --product-heading-size: 1.25rem;
-    width: calc(100% - 2rem);
   }
   .product-intro {
-    padding-block: 28px 64px;
+    padding-block: 44px 64px;
   }
   .product-actions {
     gap: 16px;
