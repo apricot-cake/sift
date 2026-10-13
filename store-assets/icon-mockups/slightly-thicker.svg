@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-60 -5 1320 1320" role="img" aria-labelledby="title">
+  <title id="title">sift</title>
+  <defs>
+    <linearGradient id="color" x1="600" y1="150" x2="600" y2="1160" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#d8baff"/>
+      <stop offset=".17" stop-color="#8597ff"/>
+      <stop offset=".34" stop-color="#4a7cff"/>
+      <stop offset=".55" stop-color="#649aff"/>
+      <stop offset=".72" stop-color="#518aff"/>
+      <stop offset="1" stop-color="#3c45ff"/>
+    </linearGradient>
+    <radialGradient id="light">
+      <stop stop-color="#d9edff" stop-opacity=".73"/>
+      <stop offset="1" stop-color="#b7d4ff" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="violet">
+      <stop stop-color="#b49fff" stop-opacity=".65"/>
+      <stop offset="1" stop-color="#9899ff" stop-opacity="0"/>
+    </radialGradient>
+    <filter id="soft" x="-30%" y="-100%" width="160%" height="300%">
+      <feGaussianBlur stdDeviation="17"/>
+    </filter>
+    <path id="chevron" d="M380.94432371503285 507.8184661364362 L600 340.9189032526517 L819.0556762849671 507.8184661364362"/>
+    <path id="lower" d="M267 653 L556 908 Q600 947 644 908 L928 653 L1024 727 Q1072 775 1024 823 L640 1146 Q600 1179 560 1146 L176 823 Q128 775 176 727 Z"/>
+    <mask id="mark" maskUnits="userSpaceOnUse" x="0" y="0" width="1200" height="1300">
+      <path fill="none" stroke="white" stroke-width="64" stroke-linejoin="round" d="M600 180 L1020 500 L600 875 L180 500 Z"/>
+      
+      <use href="#chevron" fill="none" stroke="white" stroke-width="64" stroke-linejoin="round" stroke-linecap="round"/>
+      <use href="#lower" fill="white" transform="translate(0 53.37565288541801)"/>
+    </mask>
+  </defs>
+  <g mask="url(#mark)">
+    <path fill="url(#color)" d="M120 100H1080V1300H120Z"/>
+    <ellipse cx="392" cy="695" rx="245" ry="110" fill="url(#light)" transform="rotate(-28 392 695)"/>
+    <ellipse cx="890" cy="780" rx="185" ry="165" fill="url(#violet)"/>
+    <ellipse cx="400" cy="951" rx="195" ry="140" fill="url(#light)" opacity=".32"/>
+    <path d="M135 791 C310 738 348 782 483 714 S748 690 929 740" fill="none" stroke="#d3e6ff" stroke-width="43" opacity=".38" filter="url(#soft)"/>
+    <path d="M401 1116 C461 989 522 930 680 937 S889 1040 1033 1000" fill="none" stroke="#a6baff" stroke-width="34" opacity=".29" filter="url(#soft)"/>
+    <path d="M203 341 C381 296 403 213 625 174" fill="none" stroke="#eadbff" stroke-width="29" opacity=".21" filter="url(#soft)"/>
+  </g>
+</svg>
