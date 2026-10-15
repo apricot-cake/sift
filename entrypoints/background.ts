@@ -7,6 +7,14 @@ import {
 } from "../utils/filter-context.ts";
 import { startLocalBuildReload } from "../utils/local-build-reload.ts";
 import {
+  hasLeftPanelPage,
+  isXMediaNavigation,
+  type PanelPage,
+  panelPageContext,
+  panelPageKey,
+  panelPageUrl,
+} from "../utils/panel-navigation.ts";
+import {
   isSidePanelTabId,
   SIDE_PANEL_CONTROL,
   SIDE_PANEL_TAB_STORAGE_KEY,
@@ -80,9 +88,14 @@ export default defineBackground(() => {
 
     // 非同期のページ判定を待つと action のユーザー操作が失われるため、
     // 全サイトで最初の await より前に開く。
+    const opening: PanelPage = {
+      id: crypto.randomUUID(),
+      url: panelPageUrl(tab.url),
+    };
     const savedTab = browser.storage.session.set({
       [SIDE_PANEL_TAB_STORAGE_KEY]: tab.id,
       [sidePanelOriginKey(tab.id)]: sidePanelOrigin(tab.url),
+      [panelPageKey(tab.id)]: opening,
     });
     const configured = sidePanel?.setOptions({
       tabId: tab.id,
@@ -96,7 +109,22 @@ export default defineBackground(() => {
       await browser.scripting.insertCSS({ target, css: contentStyle });
       await browser.scripting.executeScript({ target, files: ["/sift.js"] });
       // カードが未描画でも閉じない。対応状況はパネルが継続して取得する。
-      await readFilterContext(tab.id);
+      const context = await readFilterContext(tab.id);
+      const current = await browser.storage.session.get(panelPageKey(tab.id));
+      const latestTab = await browser.tabs.get(tab.id).catch(() => null);
+      if (
+        context &&
+        (current[panelPageKey(tab.id)] as PanelPage | undefined)?.id ===
+          opening.id &&
+        panelPageUrl(latestTab?.url) === opening.url
+      ) {
+        await browser.storage.session.set({
+          [panelPageKey(tab.id)]: {
+            ...opening,
+            context: panelPageContext(context),
+          },
+        });
+      }
     }
     // 既存のパネルを開き直す場合は onOpened が発火しないことがある。
     // 注入後にも所有タブを通知し、開き直したパネルの接続を更新する。
@@ -107,6 +135,80 @@ export default defineBackground(() => {
         resetMinimum: true,
       })
       .catch(() => {});
+  }
+
+  async function checkOpenPage(tabId: number): Promise<boolean> {
+    const key = panelPageKey(tabId);
+    const record = await browser.storage.session.get(key);
+    const opening = record[key] as PanelPage | undefined;
+    if (!opening) return false;
+    const tab = await browser.tabs.get(tabId).catch(() => null);
+    if (!tab) return false;
+    const url = panelPageUrl(tab.url);
+    const context = isSupportedSiteUrl(tab.url)
+      ? await readFilterContext(tabId)
+      : null;
+    let close =
+      url === null ||
+      sidePanelOrigin(url ?? undefined) !==
+        sidePanelOrigin(opening.url ?? undefined);
+    if (!close && context && opening.context)
+      close = hasLeftPanelPage(opening, context);
+    if (!close && !opening.context && url !== opening.url) close = true;
+    if (!close && !context && url !== opening.url) close = true;
+    // SPAではURL更新がモーダル描画より先に届く。背景一覧が確認できるまで短く猶予する。
+    if (
+      close &&
+      isXMediaNavigation(url) &&
+      sidePanelOrigin(url ?? undefined) ===
+        sidePanelOrigin(opening.url ?? undefined)
+    ) {
+      const pending =
+        opening.pendingMedia?.url === url
+          ? opening.pendingMedia
+          : { url: url as string, since: Date.now() };
+      if (Date.now() - pending.since < 1500) {
+        const latest = await browser.storage.session.get(key);
+        if ((latest[key] as PanelPage | undefined)?.id === opening.id)
+          await browser.storage.session.set({
+            [key]: { ...opening, pendingMedia: pending },
+          });
+        return false;
+      }
+    }
+    const latest = await browser.storage.session.get(key);
+    const latestTab = await browser.tabs.get(tabId).catch(() => null);
+    if (
+      (latest[key] as PanelPage | undefined)?.id !== opening.id ||
+      panelPageUrl(latestTab?.url) !== url
+    )
+      return false;
+    if (close) {
+      await sidePanel?.setOptions({ tabId, enabled: false });
+      const after = await browser.storage.session.get(key);
+      if ((after[key] as PanelPage | undefined)?.id === opening.id)
+        await browser.storage.session.remove(key);
+      await browser.tabs
+        .sendMessage(tabId, {
+          type: TIMELINE_CONTROL.setFiltering,
+          enabled: false,
+        })
+        .catch(() => {});
+      return true;
+    }
+    const { pendingMedia: _pending, ...confirmed } = opening;
+    const fillContext =
+      context &&
+      (!opening.context ||
+        (!opening.context.timelineKey && context.timelineKey));
+    if (opening.pendingMedia || fillContext)
+      await browser.storage.session.set({
+        [key]: {
+          ...confirmed,
+          ...(fillContext ? { context: panelPageContext(context) } : {}),
+        },
+      });
+    return false;
   }
 
   async function refreshOpenPanelForNavigation(
@@ -165,6 +267,7 @@ export default defineBackground(() => {
       await sidePanel?.setOptions({ tabId, enabled: false });
       return;
     }
+    if (await checkOpenPage(tabId)) return;
     await refreshOpenPanelForNavigation(tabId, tab);
   }
 
@@ -192,6 +295,12 @@ export default defineBackground(() => {
     )
       return Promise.resolve({ buildId: __SIFT_BUILD_ID__ });
     if (
+      panelSender &&
+      message?.type === SIDE_PANEL_CONTROL.checkPage &&
+      message.tabId === owner
+    )
+      return checkOpenPage(owner).catch(() => false);
+    if (
       !panelSender ||
       message?.type !== SIDE_PANEL_CONTROL.connectTab ||
       !isSidePanelTabId(message.tabId) ||
@@ -217,6 +326,7 @@ export default defineBackground(() => {
 
   browser.tabs.onRemoved.addListener((tabId) => {
     void browser.storage.session.remove(sidePanelOriginKey(tabId));
+    void browser.storage.session.remove(panelPageKey(tabId));
   });
 
   sidePanel?.onOpened.addListener((panel) => {

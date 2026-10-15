@@ -2,6 +2,7 @@ export const SIDE_PANEL_CONTROL = {
   connectTab: "sift:sidepanel-connect-tab",
   configureForTab: "sift:sidepanel-configure-for-tab",
   setPanelTab: "sift:sidepanel-set-panel-tab",
+  checkPage: "sift:sidepanel-check-page",
 } as const;
 
 // background が最後に開いたタブを記録する。各パネルの所有者はURLで確定する。

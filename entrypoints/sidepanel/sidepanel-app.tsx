@@ -258,6 +258,15 @@ export function SidepanelApp(): React.JSX.Element {
         ) {
           return;
         }
+        if (tab?.id !== undefined) {
+          const closed = await browser.runtime
+            .sendMessage({
+              type: SIDE_PANEL_CONTROL.checkPage,
+              tabId: tab.id,
+            })
+            .catch(() => false);
+          if (!isCurrent() || closed === true) return;
+        }
         const nextPage =
           tab?.id !== undefined && context?.timelineAvailable
             ? { tabId: tab.id, pageKey: context.pageKey, url: tab.url }

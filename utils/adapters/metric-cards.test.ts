@@ -104,6 +104,21 @@ describe("上限付きの集計対象", () => {
     };
     expect(isFilterContextResponse(response)).toBe(true);
     expect(
+      isFilterContextResponse({
+        ...response,
+        timelineKey: "/home:1:Following",
+      }),
+    ).toBe(true);
+    expect(isFilterContextResponse({ ...response, timelineKey: null })).toBe(
+      true,
+    );
+    expect(isFilterContextResponse({ ...response, timelineKey: 1 })).toBe(
+      false,
+    );
+    expect(isFilterContextResponse({ ...response, timelineKey: {} })).toBe(
+      false,
+    );
+    expect(
       isFilterContextResponse({ ...response, metricContextTruncated: "false" }),
     ).toBe(false);
     expect(

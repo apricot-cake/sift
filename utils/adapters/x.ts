@@ -179,6 +179,9 @@ export const xAdapter = Object.freeze({
     const selected = tabs.findIndex(
       (tab) => tab.getAttribute("aria-selected") === "true",
     );
+    // 専用リストには選択タブがない。ホーム・プロフィール・検索は描画を待つ。
+    if (selected < 0 && !/^\/i\/lists\/\d+\/?$/.test(page.pathname))
+      return null;
     return `${page.pathname}${page.search}:${selected}:${tabs[selected]?.textContent ?? ""}`;
   },
 

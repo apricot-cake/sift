@@ -10,14 +10,14 @@ const api = vi.hoisted(() => ({
   },
   storage: {
     session: {
-      set: vi.fn(async () => undefined),
+      set: vi.fn(async (_values?: Record<string, unknown>) => undefined),
       get: vi.fn(
         async (): Promise<Record<string, unknown>> => ({
           "sift:sidepanel-tab-id": 7,
           "sift:sidepanel-origin:7": "https://x.com",
         }),
       ),
-      remove: vi.fn(async () => undefined),
+      remove: vi.fn(async (_key?: string) => undefined),
     },
   },
   sidePanel: {
@@ -60,6 +60,21 @@ beforeEach(async () => {
   Reflect.deleteProperty(globalThis, "__SIFT_RUNNING_BUILD_ID__");
   vi.clearAllMocks();
   vi.resetModules();
+  api.storage.session.get.mockResolvedValue({
+    "sift:sidepanel-tab-id": 7,
+    "sift:sidepanel-origin:7": "https://x.com",
+  });
+  api.storage.session.set.mockImplementation(async () => undefined);
+  api.storage.session.remove.mockImplementation(async () => undefined);
+  api.tabs.get.mockResolvedValue({
+    id: 7,
+    active: false,
+    url: "https://example.com/",
+  });
+  api.tabs.sendMessage.mockResolvedValue({
+    site: "youtube",
+    timelineAvailable: false,
+  });
   vi.stubGlobal("__SIFT_LOCAL_DEPLOY__", false);
   const background = await import("../entrypoints/background.ts");
   background.default.main();
@@ -70,6 +85,135 @@ it("旧版で保存された自動開閉を起動時に解除する", () => {
     openPanelOnActionClick: false,
   });
   // onInstalled を待たず、worker の起動でも旧設定を移行する。
+  expect(api.sidePanel.setOptions).not.toHaveBeenCalled();
+});
+
+function trackedPage(url = "https://x.com/uowata94") {
+  const context = {
+    site: "x",
+    pageKey: url,
+    timelineKey: url,
+    sortOrder: "newest",
+    timelineAvailable: true,
+    filteringEnabled: true,
+  };
+  const stored: Record<string, unknown> = {
+    "sift:sidepanel-origin:7": "https://x.com",
+    "sift:sidepanel-page:7": { id: "opening-a", url, context: { ...context } },
+  };
+  api.storage.session.get.mockImplementation(async () => stored);
+  api.storage.session.set.mockImplementation(
+    async (values: Record<string, unknown> = {}) => {
+      Object.assign(stored, values);
+      return undefined;
+    },
+  );
+  api.storage.session.remove.mockImplementation(async (key = "") => {
+    delete stored[key];
+    return undefined;
+  });
+  api.tabs.get.mockResolvedValue({ id: 7, active: true, url });
+  api.tabs.sendMessage.mockImplementation(async () => context);
+  const check = () =>
+    api.runtime.onMessage.addListener.mock.calls[0]?.[0](
+      { type: "sift:sidepanel-check-page", tabId: 7 },
+      { url: "chrome-extension://test/sidepanel.html?tabId=7" },
+    );
+  return { context, stored, check };
+}
+
+it("元の一覧を離れると同じサイトでも閉じて絞り込みを解除する", async () => {
+  const { context, check } = trackedPage();
+  api.tabs.get.mockResolvedValue({
+    id: 7,
+    active: true,
+    url: "https://x.com/NASA",
+  });
+  context.pageKey = "https://x.com/NASA";
+  await expect(check()).resolves.toBe(true);
+  expect(api.sidePanel.setOptions).toHaveBeenCalledWith({
+    tabId: 7,
+    enabled: false,
+  });
+  expect(api.tabs.sendMessage).toHaveBeenCalledWith(7, {
+    type: "sift:timeline-set-filtering",
+    enabled: false,
+  });
+});
+
+it("ライトボックスを開いて閉じても背景一覧が同じなら維持する", async () => {
+  const { context, check } = trackedPage();
+  api.tabs.get.mockResolvedValue({
+    id: 7,
+    active: true,
+    url: "https://x.com/author/status/1/photo/1",
+  });
+  Object.assign(context, { timelineKey: null });
+  await expect(check()).resolves.toBe(false);
+  api.tabs.get.mockResolvedValue({
+    id: 7,
+    active: true,
+    url: "https://x.com/uowata94",
+  });
+  await expect(check()).resolves.toBe(false);
+  expect(api.sidePanel.setOptions).not.toHaveBeenCalled();
+});
+
+it("一時的な一覧キーの欠損後でも同じURLの別リストを検知する", async () => {
+  const { context, check } = trackedPage("https://x.com/home");
+  Object.assign(context, { timelineKey: null });
+  await expect(check()).resolves.toBe(false);
+  context.timelineKey = "/home:list-b";
+  await expect(check()).resolves.toBe(true);
+});
+
+it("背景一覧のない画像詳細は描画猶予後に閉じる", async () => {
+  const { context, check } = trackedPage();
+  const now = vi.spyOn(Date, "now").mockReturnValue(1000);
+  try {
+    const url = "https://x.com/author/status/1/photo/1";
+    api.tabs.get.mockResolvedValue({ id: 7, active: true, url });
+    context.pageKey = url;
+    await expect(check()).resolves.toBe(false);
+    now.mockReturnValue(2600);
+    await expect(check()).resolves.toBe(true);
+  } finally {
+    now.mockRestore();
+  }
+});
+
+it("ページや別タブのパネルから閉鎖判定を要求できない", () => {
+  trackedPage();
+  const listener = api.runtime.onMessage.addListener.mock.calls[0]?.[0];
+  for (const sender of [
+    { url: "https://x.com/home", tab: { id: 7 } },
+    { url: "chrome-extension://test/sidepanel.html?tabId=8" },
+    { url: "chrome-extension://test/sidepanel.html?tabId=7", tab: { id: 7 } },
+  ]) {
+    expect(
+      listener({ type: "sift:sidepanel-check-page", tabId: 7 }, sender),
+    ).toBeUndefined();
+  }
+  expect(api.tabs.get).not.toHaveBeenCalled();
+});
+
+it("古い遷移判定の応答で開き直したパネルを閉じない", async () => {
+  const { context, stored, check } = trackedPage();
+  let finish!: (value: typeof context) => void;
+  api.tabs.sendMessage.mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+  );
+  const pending = check();
+  await vi.waitFor(() => expect(finish).toBeTypeOf("function"));
+  stored["sift:sidepanel-page:7"] = {
+    id: "opening-b",
+    url: "https://x.com/NASA",
+  };
+  finish({ ...context, pageKey: "https://x.com/NASA" });
+  await expect(pending).resolves.toBe(false);
   expect(api.sidePanel.setOptions).not.toHaveBeenCalled();
 });
 
@@ -197,7 +341,7 @@ it("アクセス権を失いURLが読めないときも読み込み完了で閉�
 });
 
 it.each(["https://x.com/home", "https://x.com/uowata94?test=1"])(
-  "同じサイトの移動・再読み込みではパネルを維持する: %s",
+  "一覧記録のない旧パネルでは同じサイトへの再接続を維持する: %s",
   async (url) => {
     api.tabs.get.mockResolvedValueOnce({ id: 7, active: true, url });
     api.tabs.onUpdated.addListener.mock.calls[0]?.[0](7, {

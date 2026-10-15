@@ -100,10 +100,17 @@ export async function selectNiconicoSearchSort(
     page.$eval(key, (node) => (node.textContent ?? "").trim());
   if ((await readKey()) !== label) {
     await page.locator(key).click();
-    await page.locator(aria("option", label)).click();
+    await Promise.all([
+      page.waitForNavigation({ waitUntil: "domcontentloaded", timeout: 30000 }),
+      page.locator(aria("option", label)).click(),
+    ]);
     actions.push(`sort:${sort}`);
   }
   await expect.poll(readKey).toBe(label);
+  // 操作欄だけが先に変わるため、URLのソートキーも一致してから次へ進む。
+  await expect
+    .poll(() => new URL(page.url()).searchParams.get("sort") ?? "registeredAt")
+    .toBe(sort);
 
   // 保存済みの実ページでは、降順時に「昇順に切り替え」と表示される。
   // URL と反対方向への操作ラベルを両方照合する。
@@ -117,10 +124,22 @@ export async function selectNiconicoSearchSort(
         .map((node) => node.getAttribute("aria-label")),
     );
   await expect.poll(async () => (await readDirectionLabels()).length).toBe(1);
+  await expect
+    .poll(async () => {
+      const currentOrder =
+        new URL(page.url()).searchParams.get("order") ?? "desc";
+      const expectedLabel =
+        currentOrder === "asc" ? "降順に切り替え" : "昇順に切り替え";
+      return (await readDirectionLabels())[0] === expectedLabel;
+    })
+    .toBe(true);
   const currentDirectionLabel = (await readDirectionLabels())[0];
   expect(["昇順に切り替え", "降順に切り替え"]).toContain(currentDirectionLabel);
   if (currentDirectionLabel !== selectedOrderLabel) {
-    await page.locator(aria("button", currentDirectionLabel ?? "")).click();
+    await Promise.all([
+      page.waitForNavigation({ waitUntil: "domcontentloaded", timeout: 30000 }),
+      page.locator(aria("button", currentDirectionLabel ?? "")).click(),
+    ]);
     actions.push(`order:${order}`);
   }
   await expect.poll(readDirectionLabels).toEqual([selectedOrderLabel]);

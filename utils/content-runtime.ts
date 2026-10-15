@@ -578,6 +578,7 @@ export function startContentRuntime(
         sortOrder: adapter.readSortOrder?.(document, location) ?? "unknown",
         pageTitle: document.title,
         pageKey: pageKey(),
+        timelineKey: adapter.readTimelineKey?.(document, location) ?? null,
         timelineAvailable: timelineAvailable(),
         filteringEnabled: filteringEnabled(),
         continuousLoadingWarning:

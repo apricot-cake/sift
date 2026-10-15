@@ -81,6 +81,46 @@ function dispatchTrustedWheel(deltaY: number): void {
 }
 
 describe("タイムラインのフィルター", () => {
+  it("X の画像ライトボックスでは背景のページキーを保ち、一覧キーを未確定として返す", async () => {
+    history.replaceState({}, "", "/example");
+    document.body.innerHTML = `<div data-testid="primaryColumn"><div role="tablist"><div role="tab" aria-selected="true">ポスト</div></div>${timelineMarkup}</div>`;
+    const runtime = startContentRuntime(
+      new ContentScriptContext("sift-test"),
+      xAdapter,
+    );
+    try {
+      const before = await getFilterContext();
+      expect(before).toMatchObject({
+        pageKey: `${location.origin}/example`,
+        timelineAvailable: true,
+      });
+      expect(before.timelineKey).toBeTypeOf("string");
+      document.body.insertAdjacentHTML(
+        "beforeend",
+        '<div role="dialog"></div>',
+      );
+      history.pushState(
+        { state: { fromApp: true, previousPath: "/example" } },
+        "",
+        "/example/status/100/photo/1",
+      );
+      expect(await getFilterContext()).toMatchObject({
+        pageKey: before.pageKey,
+        timelineKey: null,
+        timelineAvailable: true,
+      });
+      document.querySelector('[role="dialog"]')?.remove();
+      history.replaceState({}, "", "/example");
+      expect(await getFilterContext()).toMatchObject({
+        pageKey: before.pageKey,
+        timelineKey: before.timelineKey,
+        timelineAvailable: true,
+      });
+    } finally {
+      runtime.dispose();
+    }
+  });
+
   it("YouTube の旧再生数・除外設定は適用せず、投稿期間だけで絞り込む", async () => {
     const now = Date.now();
     const clock = vi.spyOn(Date, "now").mockReturnValue(now);

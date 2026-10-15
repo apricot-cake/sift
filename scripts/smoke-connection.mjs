@@ -231,6 +231,8 @@ try {
   const closedWidth = await evaluate(first.client, "innerWidth");
   await action(first);
   await check("Xプロフィールに接続", first, x);
+  await first.page.reload({ waitUntil: "domcontentloaded" });
+  await check("同じX一覧の再読込後に復旧", first, x);
   first.url = "https://www.youtube.com/@Google/videos";
   await first.page.goto(first.url, { waitUntil: "domcontentloaded" });
   await check(
@@ -242,9 +244,6 @@ try {
   await selectPopular(first);
   await action(first);
   await check("アクション後にYouTubeへ再接続", first, youtube);
-  await first.page.reload({ waitUntil: "domcontentloaded" });
-  await selectPopular(first);
-  await check("再読込後に復旧", first, youtube);
   first.url = "https://www.youtube.com/@Google/streams";
   // 同一チャンネルの移動はサイト自身のタブを使い、文書全体を再取得しない。
   const streamsTab = ["ライブ", "Live"]
@@ -262,7 +261,14 @@ try {
     timeout: 10000,
   });
   await selectPopular(first);
-  await check("同じサイト内のページ移動では維持", first, youtube);
+  await check(
+    "同じサイト内でも元の一覧を離れたら閉じ、ページ幅が戻る",
+    first,
+    undefined,
+    closedWidth,
+  );
+  await action(first);
+  await check("明示アクションで移動先のYouTubeパネルを開く", first, youtube);
   // 未開封タブへの切替ではパネルを引き継がず、開封済みタブへ戻ると復帰する。
   // プロフィール固有資源は最初のタブと共用する。
   const second = await newPage("https://x.com/uowata94");

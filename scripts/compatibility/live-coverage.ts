@@ -91,8 +91,8 @@ export function assertLiveCoverage(
       JSON.stringify(evidence.stages) !==
       JSON.stringify([
         "filtered",
-        "unsupported-cleared",
-        "supported",
+        "navigation-closed-cleared",
+        "returned-inactive",
         "reopened-reset",
       ])
     )

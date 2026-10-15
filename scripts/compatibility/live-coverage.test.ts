@@ -229,8 +229,14 @@ test("同じ証跡を重ねた結果は受け付けない", () => {
 });
 
 test.each([
+  [
+    "filtered",
+    "navigation-closed-cleared",
+    "returned-inactive",
+    "reopened-reset",
+  ],
+  ["filtered", "returned-inactive", "reopened-reset"],
   ["filtered", "unsupported-cleared", "supported", "reopened-reset"],
-  ["filtered", "supported", "reopened-reset"],
 ])("遷移記録の全段階を照合する: %j", (...stages) => {
   const value = report(["lifecycle"]);
   specOf(value).title = "transition";
@@ -238,7 +244,7 @@ test.each([
   if (!attachment) throw new Error("テスト用の添付がありません");
   attachment.data = { stages };
   const check = () => assertLiveCoverage(value, [], [{ id: "transition" }]);
-  if (stages.length === 4) expect(check).not.toThrow();
+  if (stages[1] === "navigation-closed-cleared") expect(check).not.toThrow();
   else expect(check).toThrow("確認が不足");
 });
 

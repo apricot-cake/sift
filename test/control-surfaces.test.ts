@@ -86,7 +86,7 @@ describe("抽出の操作入口", () => {
     ).toBeLessThan(background.indexOf("await browser.scripting.insertCSS"));
     const actionHandler = background.slice(
       background.indexOf("async function openPanelForActiveTab"),
-      background.indexOf("async function refreshOpenPanelForNavigation"),
+      background.indexOf("async function checkOpenPage"),
     );
     expect(actionHandler.indexOf("const panelOpening")).toBeLessThan(
       actionHandler.search(/^\s*await /m),

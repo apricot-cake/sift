@@ -19,6 +19,7 @@ export interface FilterContextResponse {
   readonly site: SiteSettingsKey;
   readonly pageTitle: string;
   readonly pageKey: string;
+  readonly timelineKey?: string | null;
   readonly timelineAvailable: boolean;
   readonly filteringEnabled: boolean;
   readonly continuousLoadingWarning: boolean;
@@ -65,6 +66,9 @@ export function isFilterContextResponse(
       response.site === "niconico") &&
     typeof response.pageTitle === "string" &&
     typeof response.pageKey === "string" &&
+    (response.timelineKey === undefined ||
+      response.timelineKey === null ||
+      typeof response.timelineKey === "string") &&
     typeof response.timelineAvailable === "boolean" &&
     typeof response.filteringEnabled === "boolean" &&
     typeof response.continuousLoadingWarning === "boolean" &&

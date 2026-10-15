@@ -1,13 +1,14 @@
 import type { JSHandle, Page } from "puppeteer-core";
 import { expect } from "vitest";
 import { selectPartialChoice } from "../scripts/compatibility/filter-choice.ts";
-import { aria, element, evidence, text, visible } from "./browser-queries.ts";
+import { aria, element, evidence, visible } from "./browser-queries.ts";
 import { cases, lifecycleCases } from "./cases.ts";
 import {
   acquireCasePage,
   assertLivePage,
   closePanel,
   completeInitialLoad,
+  observeAutomaticPanelClose,
   openPanel,
   readContext,
   releaseCasePage,
@@ -140,6 +141,7 @@ export function createLifecycleCases(): LiveCase[] {
           await expect
             .poll(async () => (await readContext(session, page)).health?.state)
             .toBe("ready");
+          const originalPageKey = (await readContext(session, page)).pageKey;
           const picker = `[data-minimum-picker] >>> ${aria("combobox")}`;
           await expect.poll(() => visible(panel, picker)).toBe(true);
           await panel
@@ -186,6 +188,11 @@ export function createLifecycleCases(): LiveCase[] {
             )
             .toBeGreaterThan(0);
 
+          const closedWidth = await page.evaluate(() => innerWidth);
+          const assertAutomaticClose = await observeAutomaticPanelClose(
+            session,
+            page,
+          );
           if (target.site === "youtube")
             await page
               .locator(aria("tab", ["新しい順", "Latest", "Newest"]))
@@ -253,14 +260,13 @@ export function createLifecycleCases(): LiveCase[] {
               await link.dispose();
             }
           }
+          await assertAutomaticClose();
+          opened = false;
           await expect
-            .poll(() =>
-              visible(panel, text("このページはフィルター対象外です")),
+            .poll(
+              async () => (await readContext(session, page)).filteringEnabled,
             )
-            .toBe(true);
-          await expect
-            .poll(() => panel.$$eval(aria("combobox"), (nodes) => nodes.length))
-            .toBe(0);
+            .toBe(false);
           await expect
             .poll(() =>
               page.$$eval(
@@ -284,16 +290,31 @@ export function createLifecycleCases(): LiveCase[] {
           else if (target.site === "bluesky")
             await page.locator(aria("tab", "投稿")).click();
           else await page.goBack({ waitUntil: "domcontentloaded" });
+          // 一覧へ戻っても明示アクションまでは閉じたまま、絞り込みも再開しない。
           await expect
-            .poll(async () => (await readContext(session, page)).health?.state)
-            .toBe("ready");
+            .poll(async () => (await readContext(session, page)).pageKey)
+            .toBe(originalPageKey);
           await expect
-            .poll(() =>
-              visible(panel, `[data-minimum-picker] >>> ${aria("combobox")}`),
+            .poll(
+              async () => (await readContext(session, page)).timelineAvailable,
             )
             .toBe(true);
-          await closePanel(session, page);
-          opened = false;
+          await expect
+            .poll(
+              async () => (await readContext(session, page)).filteringEnabled,
+            )
+            .toBe(false);
+          await expect
+            .poll(() => page.evaluate(() => innerWidth))
+            .toBeGreaterThan(closedWidth);
+          await expect
+            .poll(() =>
+              page.$$eval(
+                '[data-sift-filter-state="hidden"]',
+                (nodes) => nodes.length,
+              ),
+            )
+            .toBe(0);
           panel = await openPanel(session, page);
           opened = true;
           await expect
@@ -308,8 +329,8 @@ export function createLifecycleCases(): LiveCase[] {
             body: JSON.stringify({
               stages: [
                 "filtered",
-                "unsupported-cleared",
-                "supported",
+                "navigation-closed-cleared",
+                "returned-inactive",
                 "reopened-reset",
               ],
             }),

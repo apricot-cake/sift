@@ -114,6 +114,17 @@ describe("投稿を見つける", () => {
     ).toBeNull();
   });
 
+  it("プロフィール再読み込み中の未選択タブを別の一覧として返さない", () => {
+    const page = render('<div role="tab" aria-selected="false">ポスト</div>');
+    expect(
+      xAdapter.readTimelineKey(page, { pathname: "/author", search: "" }),
+    ).toBeNull();
+    page.querySelector('[role="tab"]')?.setAttribute("aria-selected", "true");
+    expect(
+      xAdapter.readTimelineKey(page, { pathname: "/author", search: "" }),
+    ).toBe("/author:0:ポスト");
+  });
+
   it("画面にある投稿を全部見つける", () => {
     const timeline = renderTimeline(
       "<span>first</span>",

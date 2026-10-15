@@ -32,6 +32,7 @@ export interface LiveSession {
   casePage?: { key: string; page: Page; coldSite?: string };
   coldSites: Set<string>;
   preparedPanelOrigins: Map<number, string>;
+  panelObservers?: Set<() => Promise<void>>;
   browser: Browser;
   panelTargetId?: string;
   context: BrowserContext;
@@ -87,6 +88,7 @@ export async function connectLive(): Promise<LiveSession> {
 
 export async function finishLive(session: LiveSession) {
   try {
+    for (const dispose of session.panelObservers ?? []) await dispose();
     // 退避した強い条件を実サイトへ再適用して追加取得を起こさない。
     if (session.casePage) {
       await session.casePage.page.close();
@@ -272,34 +274,74 @@ export async function closePanel(session: LiveSession, page: Page) {
   }
   // 通知の検証が失敗しても、所有するrendererの回収は済ませる。
   try {
-    if (ownedTargetId) {
-      const cdp = await session.browser.target().createCDPSession();
-      try {
-        const targets = await cdp.send("Target.getTargets", undefined, {
-          timeout: workerCommandTimeout,
-        });
-        if (
-          targets.targetInfos.some(
-            (target) => target.targetId === ownedTargetId,
-          )
-        )
-          await cdp.send(
-            "Target.closeTarget",
-            {
-              targetId: ownedTargetId,
-            },
-            { timeout: workerCommandTimeout },
-          );
-        if (session.panelTargetId === ownedTargetId)
-          session.panelTargetId = undefined;
-      } finally {
-        await cdp.detach();
-      }
-    }
+    await disposePanelTarget(session, ownedTargetId);
   } catch (error) {
     if (!failed) throw error;
   }
   if (failed) throw failure;
+}
+
+async function disposePanelTarget(
+  session: LiveSession,
+  ownedTargetId?: string,
+) {
+  if (ownedTargetId) {
+    const cdp = await session.browser.target().createCDPSession();
+    try {
+      const targets = await cdp.send("Target.getTargets", undefined, {
+        timeout: workerCommandTimeout,
+      });
+      if (
+        targets.targetInfos.some((target) => target.targetId === ownedTargetId)
+      )
+        await cdp.send(
+          "Target.closeTarget",
+          {
+            targetId: ownedTargetId,
+          },
+          { timeout: workerCommandTimeout },
+        );
+      if (session.panelTargetId === ownedTargetId)
+        session.panelTargetId = undefined;
+    } finally {
+      await cdp.detach();
+    }
+  }
+}
+
+/** 遷移前に登録し、自動閉鎖の通知・幅復元を確認してから自分のrendererを回収する。 */
+export async function observeAutomaticPanelClose(
+  session: LiveSession,
+  page: Page,
+) {
+  const key = JSON.stringify(panelOperationKey());
+  const id = await tabId(session, page);
+  const width = await page.evaluate(() => innerWidth);
+  const target = session.panelTargetId;
+  await session.api.evaluate(
+    `(()=>{const state=globalThis[${key}]={done:false};state.listener=e=>{if(e.tabId===${id})state.done=true};chrome.sidePanel.onClosed.addListener(state.listener)})()`,
+  );
+  const dispose = async () => {
+    await session.api.evaluate(
+      `(()=>{const state=globalThis[${key}];if(state)chrome.sidePanel.onClosed.removeListener(state.listener);delete globalThis[${key}]})()`,
+    );
+    session.panelObservers?.delete(dispose);
+  };
+  session.panelObservers ??= new Set();
+  session.panelObservers.add(dispose);
+  return async () => {
+    try {
+      await expect
+        .poll(() => session.api.evaluate(`globalThis[${key}]?.done`))
+        .toBe(true);
+      await expect
+        .poll(() => page.evaluate(() => innerWidth))
+        .toBeGreaterThan(width);
+      await disposePanelTarget(session, target);
+    } finally {
+      await dispose();
+    }
+  };
 }
 
 export async function readContext(

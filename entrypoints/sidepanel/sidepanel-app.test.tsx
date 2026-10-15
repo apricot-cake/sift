@@ -170,7 +170,10 @@ describe("接続先と非同期応答", () => {
     expect(container.textContent).toContain(t("sidepanelSupportedSitesHint"));
     expect(container.querySelector("[data-minimum-group]")).toBeNull();
     expect(read).toHaveBeenCalledOnce();
-    expect(reconnect).not.toHaveBeenCalled();
+    expect(reconnect).not.toHaveBeenCalledWith({
+      type: SIDE_PANEL_CONTROL.connectTab,
+      tabId: 1,
+    });
     expect(writes).toHaveLength(0);
   });
   it("750msを超える正常応答を定期取得で破棄しない", async () => {
