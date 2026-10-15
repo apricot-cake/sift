@@ -1,7 +1,10 @@
 import { expect, test } from "vitest";
 import type { JsonTestResults } from "vitest/node";
 import type { CompatibilityCase } from "../../e2e/cases.ts";
-import { assertLiveCoverage } from "./live-coverage.ts";
+import {
+  assertInitializationCoverage,
+  assertLiveCoverage,
+} from "./live-coverage.ts";
 
 const target: CompatibilityCase = {
   id: "niconico-popular",
@@ -50,6 +53,58 @@ function specOf(value: JsonTestResults) {
   if (!spec) throw new Error("テスト用レポートのspecがありません");
   return spec;
 }
+
+test.each(["spa-unsupported-state", "direct-initialization"])(
+  "直接アクセスの代表で%sの証拠が欠けたら合格にしない",
+  (missing) => {
+    const value = report([]);
+    const spec = specOf(value);
+    const id = "unsupported-empty-youtube-channel-search";
+    spec.title = id;
+    const state = {
+      state: "unsupported",
+      timelineAvailable: false,
+      controls: 0,
+      hidden: 0,
+    };
+    spec.meta.liveEvidence = [
+      { name: "unsupported-state", data: state },
+      { name: "spa-unsupported-state", data: state },
+      { name: "direct-initialization", data: { directlyLoaded: true } },
+    ];
+    const check = () => assertLiveCoverage(value, [], [], [], [{ id }]);
+    expect(check).not.toThrow();
+    spec.meta.liveEvidence = spec.meta.liveEvidence.filter(
+      (item) => item.name !== missing,
+    );
+    expect(check).toThrow("サイト内遷移と直接アクセス");
+  },
+);
+
+test("キャッシュ無効の代表は成功と準備完了の証拠を必要とする", () => {
+  const value = report([]);
+  const spec = specOf(value);
+  const proof = {
+    site: "niconico",
+    cacheDisabledDuringInitialization: true,
+    cacheRestored: true,
+    state: "ready",
+  };
+  spec.meta.liveEvidence = [{ name: "initialization-cache", data: proof }];
+  expect(() => assertInitializationCoverage(value, ["niconico"])).not.toThrow();
+  expect(() =>
+    assertInitializationCoverage(value, ["niconico", "youtube"]),
+  ).toThrow("youtube");
+  proof.cacheDisabledDuringInitialization = false;
+  expect(() => assertInitializationCoverage(value, ["niconico"])).toThrow(
+    "niconico",
+  );
+  proof.cacheDisabledDuringInitialization = true;
+  spec.status = "failed";
+  expect(() => assertInitializationCoverage(value, ["niconico"])).toThrow(
+    "niconico",
+  );
+});
 test("ページの全項目で操作と除外効果を確認した結果を受け付ける", () => {
   expect(() =>
     assertLiveCoverage(report(["period-filter"]), [target]),

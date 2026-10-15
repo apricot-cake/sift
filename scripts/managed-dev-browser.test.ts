@@ -47,6 +47,9 @@ describe("起動元の pipe だけで管理する開発用 Chrome", () => {
       );
       expect(options?.args).not.toContain("--hide-scrollbars");
       if (headless) expect(options?.args).toContain("--window-size=1280,720");
+      if (headless)
+        expect(options?.args).not.toContain("--restore-last-session");
+      else expect(options?.args).toContain("--restore-last-session");
     },
   );
   test("成功後に所有ブラウザを閉じる", async () => {

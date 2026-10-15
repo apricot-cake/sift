@@ -95,7 +95,7 @@ it.each([
   },
 );
 
-it.each(["stale", undefined])(
+it.each(["stale"])(
   "新targetの実workerも候補と一致しなければ両workerを解放する: %s",
   async (buildId) => {
     const { browser } = fixture();
@@ -111,6 +111,47 @@ it.each(["stale", undefined])(
     expect(previous.dispose).toHaveBeenCalledOnce();
   },
 );
+
+it("初期化前のnullではreloadせず、同じworkerのビルドID設置を待つ", async () => {
+  const { browser } = fixture();
+  const next = worker("candidate");
+  vi.mocked(next.evaluate).mockResolvedValueOnce(null);
+  vi.mocked(getExtensionWorker).mockResolvedValueOnce(next);
+  expect(await installCandidateWorker(browser, "output", "candidate")).toEqual({
+    id: "sift",
+    worker: next,
+  });
+  expect(next.evaluate).toHaveBeenCalledTimes(2);
+  expect(getExtensionWorker).toHaveBeenCalledOnce();
+  expect(next.evaluate).not.toHaveBeenCalledWith("chrome.runtime.reload()");
+});
+
+it("reload後のworkerも初期化を待ってから照合する", async () => {
+  const { browser } = fixture();
+  const previous = worker("old-build", "installed");
+  const next = worker("candidate");
+  vi.mocked(next.evaluate).mockResolvedValueOnce(null);
+  vi.mocked(getExtensionWorker)
+    .mockResolvedValueOnce(previous)
+    .mockResolvedValueOnce(next);
+  expect(await installCandidateWorker(browser, "output", "candidate")).toEqual({
+    id: "sift",
+    worker: next,
+  });
+  expect(next.evaluate).toHaveBeenCalledTimes(2);
+  expect(previous.evaluate).toHaveBeenCalledWith("chrome.runtime.reload()");
+});
+
+it("初期化されないworkerは時間上限で失敗し、reloadへ進まない", async () => {
+  const { browser } = fixture();
+  const next = worker(null);
+  vi.mocked(getExtensionWorker).mockResolvedValueOnce(next);
+  await expect(
+    installCandidateWorker(browser, "output", "candidate", 20),
+  ).rejects.toThrow("初期化を確認できません。expected=candidate, actual=null");
+  expect(next.evaluate).not.toHaveBeenCalledWith("chrome.runtime.reload()");
+  expect(next.dispose).toHaveBeenCalledOnce();
+});
 
 it("読み込み前のsnapshot取得に失敗したらrootを解放しinstallしない", async () => {
   const { browser, root, installExtension } = fixture();

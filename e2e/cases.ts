@@ -6,12 +6,74 @@ export interface CompatibilityCase {
   tab?: string;
   linkLabel?: string;
   linkHref?: string;
+  linkHrefs?: readonly string[];
   list?: boolean;
   feed?: boolean;
   sort?: "newest" | "popular" | "default";
   period: boolean;
   niconicoSort?: "投稿日時が新しい順" | "再生数が多い順";
   niconicoSearch?: "registeredAt" | "viewCount";
+}
+
+// 同じ入口のケースを連続させる。ケース名と個別の期待値は変更しない。
+export function groupByEntry<T>(
+  targets: readonly T[],
+  entry: (target: T) => string,
+  priority: (target: T) => number = () => 0,
+): T[] {
+  const groups = new Map<string, T[]>();
+  for (const target of targets) {
+    const key = entry(target);
+    const group = groups.get(key) ?? [];
+    group.push(target);
+    groups.set(key, group);
+  }
+  return [...groups.values()].flatMap((group) =>
+    group.sort((a, b) => priority(a) - priority(b)),
+  );
+}
+
+export function liveCasePriority(id: string): number {
+  if (id.includes("youtube") && id.includes("streams")) return 3;
+  if (id.includes("youtube") && id.includes("shorts")) return 2;
+  const searches: Record<string, number> = {
+    "unsupported-niconico-search-newest": 1,
+    "unsupported-niconico-search-oldest": 2,
+    "unsupported-niconico-search-least-views": 3,
+  };
+  return searches[id] ?? 0;
+}
+
+export function compatibilityEntry(target: CompatibilityCase): string {
+  return target.site === "x" && target.destination === "/search"
+    ? new URL(target.start).origin + "/search"
+    : target.start;
+}
+
+export function unsupportedEntry(target: UnsupportedCase): string {
+  const url = new URL(target.url);
+  if (target.site === "x" && url.pathname === "/search")
+    return url.origin + url.pathname;
+  if (target.site === "niconico" && url.pathname.startsWith("/search/"))
+    return url.origin + url.pathname;
+  if (target.site === "youtube" && (target.channelSearch || target.empty))
+    return url.origin + url.pathname.replace(/\/(videos|search)$/, "/search");
+  if (
+    target.site === "niconico" &&
+    /^\/user\/\d+\/video$/.test(new URL(target.url).pathname)
+  )
+    return (
+      new URL(target.url).origin +
+      new URL(target.url).pathname.replace(/\/video$/, "")
+    );
+  if (target.id === "unsupported-x-images")
+    return (
+      new URL(target.url).origin +
+      new URL(target.url).pathname.replace(/\/media$/, "")
+    );
+  if (target.site === "youtube" && !target.channelSearch && !target.empty)
+    return target.url.replace(/\/videos$/, "");
+  return target.url;
 }
 
 export const lifecycleCases = [
@@ -25,7 +87,7 @@ export const lifecycleCases = [
     site: "niconico",
     url: "https://www.nicovideo.jp/user/129217273/video?sortKey=viewCount&sortOrder=desc",
   },
-  { id: "transition-x", site: "x", url: "https://x.com/uowata94" },
+  { id: "transition-x", site: "x", url: "https://x.com/NASA" },
   {
     id: "transition-bluesky",
     site: "bluesky",
@@ -35,8 +97,14 @@ export const lifecycleCases = [
 
 export const emptyCases = [{ id: "empty-x-search" }] as const;
 
+// SPAでの切り替えに加え、直接URLを開いた初期状態を確認する代表ケース。
+export const directInitializationCaseIds = [
+  "unsupported-niconico-search-oldest",
+  "unsupported-empty-youtube-channel-search",
+] as const;
+
 export const lightboxCases = [
-  { id: "lightbox-x", url: "https://x.com/AdamasMC" },
+  { id: "lightbox-x", url: "https://x.com/NASA" },
 ] as const;
 
 export interface UnsupportedCase {
@@ -132,13 +200,13 @@ export const unsupportedCases: readonly UnsupportedCase[] = [
   {
     id: "unsupported-x-search",
     site: "x",
-    url: "https://x.com/search?q=cat",
+    url: "https://x.com/search?q=%E3%82%A4%E3%83%A9%E3%82%B9%E3%83%88",
     label: "話題のポスト",
   },
   {
     id: "unsupported-bluesky-search",
     site: "bluesky",
-    url: "https://bsky.app/search?q=cat",
+    url: "https://bsky.app/search?q=%E7%8C%AB",
     label: "トップ",
   },
   {
@@ -313,7 +381,7 @@ export const cases: CompatibilityCase[] = [
   {
     id: "x-search",
     site: "x",
-    start: "https://x.com/search?q=cat",
+    start: "https://x.com/search?q=%E3%82%A4%E3%83%A9%E3%82%B9%E3%83%88",
     destination: "/search",
     tab: "最新",
     period: false,
@@ -321,7 +389,7 @@ export const cases: CompatibilityCase[] = [
   {
     id: "x-reply-representative",
     site: "x",
-    start: "https://x.com/search?q=cat%20filter%3Areplies",
+    start: "https://x.com/search?q=%E7%8C%AB%20filter%3Areplies",
     destination: "/search",
     tab: "最新",
     period: false,
@@ -329,7 +397,7 @@ export const cases: CompatibilityCase[] = [
   {
     id: "x-list",
     site: "x",
-    start: "https://x.com/ruaje8/lists",
+    start: "https://x.com/_apricot_cake_/lists",
     destination: "/i/lists/2082750019069948060",
     linkLabel: "e",
     list: true,
@@ -410,16 +478,16 @@ export const cases: CompatibilityCase[] = [
   {
     id: "bluesky-list",
     site: "bluesky",
-    start: "https://bsky.app/lists",
+    start: "https://bsky.app",
     destination: "/profile/apricot-cake.com/lists/3kldrwhjefi2w",
-    linkHref: "/profile/apricot-cake.com/lists/3kldrwhjefi2w",
+    linkHrefs: ["/lists", "/profile/apricot-cake.com/lists/3kldrwhjefi2w"],
     list: true,
     period: false,
   },
   {
     id: "bluesky-search",
     site: "bluesky",
-    start: "https://bsky.app/search?q=cat",
+    start: "https://bsky.app/search?q=%E7%8C%AB",
     destination: "/search",
     tab: "最新",
     period: false,

@@ -1,15 +1,28 @@
 // @vitest-environment node
+
+import { EventEmitter } from "node:events";
 import { type Browser, ProtocolError, type Target } from "puppeteer-core";
 import { expect, it, vi } from "vitest";
 import { getExtensionWorker } from "./browser-worker.ts";
 
 const url = "chrome-extension://sift/background.js";
-function session(targetId: string) {
+function session(
+  targetId: string,
+  contexts = [{ id: 1, origin: url, name: "", uniqueId: "worker-context" }],
+) {
+  const events = new EventEmitter();
   return {
+    on: events.on.bind(events),
+    off: events.off.bind(events),
+    emit: events.emit.bind(events),
+    listenerCount: events.listenerCount.bind(events),
     detached: false,
-    send: vi.fn(async (method: string) => {
+    send: vi.fn(async (method: string): Promise<object> => {
       if (method === "Target.getTargetInfo")
         return { targetInfo: { targetId, type: "service_worker", url } };
+      if (method === "Runtime.enable")
+        for (const context of contexts)
+          events.emit("Runtime.executionContextCreated", { context });
       return {};
     }),
     detach: vi.fn().mockResolvedValue(undefined),
@@ -67,7 +80,9 @@ it("SDKに残る旧targetをrootの現存集合で除外し、probeと所有sess
   expect(owned).toBeDefined();
   for (const probe of sessions.slice(0, -1))
     expect(probe.detach).toHaveBeenCalledOnce();
-  expect(owned?.send).toHaveBeenCalledWith("Runtime.enable");
+  expect(owned?.send).toHaveBeenCalledWith("Runtime.enable", undefined, {
+    timeout: 5000,
+  });
   expect(owned?.detach).not.toHaveBeenCalled();
   expect(root.detach).not.toHaveBeenCalled();
   await worker.dispose();
@@ -162,4 +177,103 @@ it("owned workerの解放失敗でもrootを解放する", async () => {
   owned.detach.mockRejectedValueOnce(Error("worker detach failed"));
   await expect(worker.dispose()).rejects.toThrow("worker detach failed");
   expect(root.detach).toHaveBeenCalledOnce();
+});
+
+it("workerの文字列評価に5秒の応答上限を渡し、失敗を再試行しない", async () => {
+  const { browser, sessions } = fixture();
+  const worker = await getExtensionWorker(browser, "sift");
+  const owned = sessions.at(-1);
+  if (!owned) throw Error("owned session missing");
+  const error = new ProtocolError("Runtime.evaluate timed out");
+  owned.send.mockRejectedValueOnce(error);
+  await expect(worker.evaluate("chrome.tabs.query({})")).rejects.toBe(error);
+  expect(owned.send).toHaveBeenLastCalledWith(
+    "Runtime.evaluate",
+    {
+      expression: "chrome.tabs.query({})",
+      awaitPromise: true,
+      returnByValue: true,
+      uniqueContextId: "worker-context",
+    },
+    { timeout: 5000 },
+  );
+  expect(
+    owned.send.mock.calls.filter(([method]) => method === "Runtime.evaluate"),
+  ).toHaveLength(1);
+  await worker.dispose();
+});
+
+it.each(
+  [
+    [],
+    [{ id: 1, origin: "https://example.com", name: "", uniqueId: "other" }],
+    [{ id: 1, origin: url, name: "isolated", uniqueId: "other" }],
+    [
+      {
+        id: 1,
+        origin: url,
+        name: "",
+        uniqueId: "other",
+        auxData: { isDefault: false },
+      },
+    ],
+    [
+      { id: 1, origin: url, name: "", uniqueId: "one" },
+      { id: 2, origin: url, name: "", uniqueId: "two" },
+    ],
+  ].map((contexts) => ({ contexts })),
+)("適合するcontextが一意でなければ接続に失敗する: %j", async ({ contexts }) => {
+  const { browser, root, targets } = fixture();
+  const owned = session("new", contexts);
+  targets[0]?.createCDPSession
+    .mockResolvedValueOnce(session("new"))
+    .mockResolvedValueOnce(owned);
+  await expect(getExtensionWorker(browser, "sift")).rejects.toThrow(
+    "一意に特定できません",
+  );
+  expect(owned.detach).toHaveBeenCalledOnce();
+  expect(root.detach).toHaveBeenCalledOnce();
+  expect(owned.listenerCount("Runtime.executionContextCreated")).toBe(0);
+});
+
+it.each([
+  "Runtime.executionContextDestroyed",
+  "Runtime.executionContextsCleared",
+])("%s 後は別contextへ切り替えず評価を拒否する", async (event) => {
+  const { browser, sessions } = fixture();
+  const worker = await getExtensionWorker(browser, "sift");
+  const owned = sessions.at(-1);
+  if (!owned) throw Error("owned session missing");
+  owned.emit(event, { executionContextId: 1 });
+  owned.emit("Runtime.executionContextCreated", {
+    context: { id: 1, origin: url, name: "", uniqueId: "replacement" },
+  });
+  const calls = owned.send.mock.calls.length;
+  await expect(worker.evaluate("chrome.tabs.query({})")).rejects.toThrow(
+    "失効",
+  );
+  expect(owned.send).toHaveBeenCalledTimes(calls);
+  await worker.dispose();
+  expect(owned.listenerCount("Runtime.executionContextCreated")).toBe(0);
+});
+
+it("workerの関数評価でも選択した一意contextをglobalThisの取得に渡す", async () => {
+  const { browser, sessions } = fixture();
+  const worker = await getExtensionWorker(browser, "sift");
+  const owned = sessions.at(-1);
+  if (!owned) throw Error("owned session missing");
+  owned.send
+    .mockResolvedValueOnce({ result: { objectId: "selected-root" } })
+    .mockResolvedValueOnce({ result: { value: true } })
+    .mockResolvedValueOnce({});
+  expect(await worker.evaluate(() => true)).toBe(true);
+  expect(owned.send).toHaveBeenCalledWith(
+    "Runtime.evaluate",
+    {
+      expression: "globalThis",
+      uniqueContextId: "worker-context",
+    },
+    { timeout: 5000 },
+  );
+  await worker.dispose();
 });

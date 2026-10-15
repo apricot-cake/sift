@@ -1,9 +1,13 @@
 import type { ElementHandle, Page } from "puppeteer-core";
-import { afterAll, beforeAll, expect, type RunnerTask, test } from "vitest";
+import { expect, type RunnerTask } from "vitest";
+import { workerCommandTimeout } from "../scripts/browser-worker.ts";
+import { callFunction } from "../scripts/cdp-call.ts";
+import { selectPartialChoice } from "../scripts/compatibility/filter-choice.ts";
 import { retryNameResolution } from "../scripts/compatibility/navigation.ts";
 import {
   captureRoute,
   captureStructure,
+  normalizeBlueskyFeedNavigation,
   type StructureNode,
   type StructureSnapshot,
 } from "../scripts/compatibility/structure.ts";
@@ -16,17 +20,25 @@ import {
   text,
   visible,
 } from "./browser-queries.ts";
-import { type CompatibilityCase, cases } from "./cases.ts";
 import {
+  type CompatibilityCase,
+  cases,
+  compatibilityEntry,
+  groupByEntry,
+} from "./cases.ts";
+import {
+  acquireCasePage,
+  assertLivePage,
   closePanel,
-  connectLive,
-  finishLive,
+  completeInitialLoad,
   type LiveSession,
   openPanel,
   readContext,
+  releaseCasePage,
 } from "./live.ts";
-
-let session: LiveSession;
+import type { LiveCase } from "./live-case.ts";
+import { selectNiconicoUserSort } from "./niconico-navigation.ts";
+import { changeXSearch } from "./x-navigation.ts";
 
 // サイドパネルでは背景タブ扱いでrequestAnimationFrameが停止することがある。
 // 可視・有効を確認し、安定性待ちだけを省いてCDPの実ポインター入力を送る。
@@ -37,13 +49,6 @@ async function panelClick(handle: ElementHandle<Element>) {
   );
   await handle.click();
 }
-beforeAll(async () => {
-  session = await connectLive();
-});
-afterAll(async () => {
-  if (session) await finishLive(session);
-});
-
 const regions = {
   youtube: {
     card: "ytd-browse:not([hidden]) ytd-rich-item-renderer, ytd-browse:not([hidden]) ytd-video-renderer",
@@ -89,22 +94,69 @@ async function selectTab(page: Page, target: CompatibilityCase) {
           ? `::-p-xpath(//*[@data-testid="searchScreen"]//*[@role="tab" and normalize-space(.)=${JSON.stringify(target.tab)}])`
           : aria(target.site === "niconico" ? "link" : "tab", target.tab);
     const locator = page.locator(navigation);
+    await locator.wait();
     // Bluesky の読み込みoverlayを待つ。再取得とスクロールはLocatorに任せる。
-    if (target.site === "bluesky")
-      await locator
-        .filter((node) => {
-          if (!node.isConnected) throw new Error("対象タブが再描画されました");
-          const rect = node.getBoundingClientRect();
-          const x = rect.x + rect.width / 2;
-          const y = rect.y + rect.height / 2;
-          // 画面外ならクリック側の自動スクロールに任せる。
-          if (x < 0 || y < 0 || x >= innerWidth || y >= innerHeight)
-            return true;
-          const hit = document.elementFromPoint(x, y);
-          return !!hit && node.contains(hit);
-        })
-        .click();
-    else await locator.click();
+    if (target.site === "youtube") {
+      const selected = await page.$eval(
+        navigation,
+        (node) =>
+          node.getAttribute("aria-selected") === "true" ||
+          node.matches(".ytTabShapeTabSelected, [selected]") ||
+          !!node.querySelector(".ytTabShapeTabSelected"),
+      );
+      if (new URL(page.url()).pathname !== target.destination || !selected)
+        await locator.click();
+      await expect
+        .poll(() => new URL(page.url()).pathname)
+        .toBe(target.destination);
+      await expect
+        .poll(() =>
+          page.$eval(
+            navigation,
+            (node) =>
+              node.getAttribute("aria-selected") === "true" ||
+              node.matches(".ytTabShapeTabSelected, [selected]") ||
+              !!node.querySelector(".ytTabShapeTabSelected"),
+          ),
+        )
+        .toBe(true);
+      // URLは先に変わるため、旧タブの並び順UIを操作しないよう再描画を待つ。
+      await page.waitForNetworkIdle({
+        idleTime: 500,
+        concurrency: 2,
+        timeout: 10000,
+      });
+    } else if (target.site === "bluesky") {
+      const selected = await page.$eval(navigation, (node) => {
+        const mark = node.querySelector('[style*="background-color"]');
+        return (
+          !!mark &&
+          getComputedStyle(mark).display !== "none" &&
+          mark.getBoundingClientRect().height > 0
+        );
+      });
+      if (!selected)
+        await locator
+          .filter((node) => {
+            if (!node.isConnected)
+              throw new Error("対象タブが再描画されました");
+            const rect = node.getBoundingClientRect();
+            const x = rect.x + rect.width / 2;
+            const y = rect.y + rect.height / 2;
+            // 画面外ならクリック側の自動スクロールに任せる。
+            if (x < 0 || y < 0 || x >= innerWidth || y >= innerHeight)
+              return true;
+            const hit = document.elementFromPoint(x, y);
+            return !!hit && node.contains(hit);
+          })
+          .click();
+    } else if (
+      target.site !== "x" ||
+      (await page.$eval(navigation, (node) =>
+        node.getAttribute("aria-selected"),
+      )) !== "true"
+    )
+      await locator.click();
     if (target.site === "bluesky")
       await expect
         .poll(async () =>
@@ -128,20 +180,31 @@ async function selectTab(page: Page, target: CompatibilityCase) {
 }
 
 async function navigate(
+  session: LiveSession,
   page: Page,
   target: CompatibilityCase,
   task: RunnerTask,
+  reused: boolean,
 ) {
-  await retryNameResolution(
-    () => page.goto(target.start, { waitUntil: "domcontentloaded" }),
-    (message) =>
-      evidence(task, "navigation-dns-retry", {
-        body: JSON.stringify({ url: target.start, message, retries: 1 }),
-        contentType: "application/json",
-      }),
-  );
+  await assertLivePage(session, page);
+  if (!reused)
+    await retryNameResolution(
+      () => page.goto(target.start, { waitUntil: "domcontentloaded" }),
+      (message) =>
+        evidence(task, "navigation-dns-retry", {
+          body: JSON.stringify({ url: target.start, message, retries: 1 }),
+          contentType: "application/json",
+        }),
+    );
+  await assertLivePage(session, page);
+  if (reused && target.site === "x" && target.destination === "/search")
+    await changeXSearch(page, target.start);
   if (target.linkHref)
     await page.locator(`a[href="${target.linkHref}"]`).click();
+  for (const href of target.linkHrefs ?? []) {
+    await page.locator(`a[href="${href}"]`).click();
+    await expect.poll(() => new URL(page.url()).pathname).toBe(href);
+  }
   if (target.linkLabel) {
     const link = `::-p-xpath(//*[@role="link" or self::a][descendant::*[normalize-space(text()) = ${JSON.stringify(target.linkLabel)}]])`;
     // 一覧内容の取得はページ読み込みと同じ上限で待ち、操作時間と分ける。
@@ -184,21 +247,7 @@ async function navigate(
     expect(query.get("sort")).toBe(target.niconicoSearch);
     expect(query.get("order")).toBe("desc");
   } else if (target.niconicoSort) {
-    const sort = ".Selectbox-button";
-    await expect.poll(() => visible(page, sort)).toBe(true);
-    if (
-      (
-        await (
-          await element(page, sort)
-        ).evaluate((node) => (node as HTMLElement).innerText)
-      ).trim() !== target.niconicoSort
-    ) {
-      await page.locator(sort).click();
-      await page.locator(text(target.niconicoSort)).click();
-    }
-    await expect
-      .poll(() => page.$eval(sort, (node) => (node.textContent ?? "").trim()))
-      .toBe(target.niconicoSort);
+    await selectNiconicoUserSort(page, target.niconicoSort);
     const query = new URL(page.url()).searchParams;
     expect(query.get("sortKey") ?? "registeredAt").toBe(
       target.niconicoSort === "再生数が多い順" ? "viewCount" : "registeredAt",
@@ -232,13 +281,44 @@ async function navigate(
         await page.locator(aria("menuitem", names)).click();
       }
     } else {
-      await page.locator(aria("tab", names)).click();
+      const sortTab = aria("tab", names);
+      await page.locator(sortTab).wait();
+      if (
+        (await page.$eval(sortTab, (node) =>
+          node.getAttribute("aria-selected"),
+        )) !== "true"
+      )
+        await page.locator(sortTab).click();
+      await expect
+        .poll(() =>
+          page.$eval(sortTab, (node) => node.getAttribute("aria-selected")),
+        )
+        .toBe("true");
     }
+    await page.waitForNetworkIdle({
+      idleTime: 500,
+      concurrency: 2,
+      timeout: 10000,
+    });
+    await expect
+      .poll(async () => {
+        if (await page.$(combo))
+          return label.test(
+            await page.$eval(combo, (node) => (node.textContent ?? "").trim()),
+          );
+        return (
+          (await page.$eval(aria("tab", names), (node) =>
+            node.getAttribute("aria-selected"),
+          )) === "true"
+        );
+      })
+      .toBe(true);
   }
 
   await expect
     .poll(() => visible(page, regionFor(target).card), { timeout: 30000 })
     .toBe(true);
+  await assertLivePage(session, page);
 }
 
 async function snapshot(
@@ -311,10 +391,16 @@ async function snapshot(
         })
       )
         continue;
-      const shape = await element.evaluate(
+      const captured = await element.evaluate(
         captureStructure,
         name === "card" ? 2 : 1,
       );
+      // 更新通知はスクロール位置や新着投稿で出入りする。実DOMは変更せず、
+      // このフィード領域の任意ボタンだけ比較から除く。
+      const shape =
+        target.site === "bluesky" && target.feed && name === "navigation"
+          ? normalizeBlueskyFeedNavigation(captured)
+          : captured;
       if (!shapes.some((s) => JSON.stringify(s) === JSON.stringify(shape)))
         shapes.push(shape);
       if (shapes.length === 8) break;
@@ -512,11 +598,13 @@ function youtubeAge(text: string): number {
 }
 
 async function inclusionFilter(
+  session: LiveSession,
   page: Page,
   panel: Page,
   target: CompatibilityCase,
   task: RunnerTask,
 ) {
+  session.loadGuard.setContext(target.id, "minimum-apply");
   const before = await observations(page, target);
   const combo = `[data-minimum-picker] >>> ${aria("combobox")}`;
   await panelClick(await element(panel, combo));
@@ -542,21 +630,56 @@ async function inclusionFilter(
     body: JSON.stringify(available),
     contentType: "application/json",
   });
-  const choice = available.find(
-    (o) =>
-      o.index > 0 &&
-      o.count > 0 &&
-      o.count < total &&
+  const choice = selectPartialChoice(
+    available.filter((o) =>
       Number.isFinite(
         target.period ? periodDays(o.label) : parseMetric(o.label),
       ),
+    ),
+    total,
   );
   let threshold: number;
   if (choice) {
     threshold = target.period
       ? periodDays(choice.label)
       : parseMetric(choice.label);
-    await panelClick(await element(panel, options, choice.index));
+    // 投稿の追加取得で候補値と順序が変わるため、観測時のindexを操作に使わない。
+    // ラベルが厳密に一致する実要素を保持し、消失・重複は失敗として扱う。
+    const currentOptions = await panel.$$(options);
+    try {
+      const labels = await Promise.all(
+        currentOptions.map((option) =>
+          option.evaluate((node) =>
+            [...(node.querySelector("[id]") ?? node).childNodes]
+              .filter((child) => child.nodeType === Node.TEXT_NODE)
+              .map((child) => child.textContent)
+              .join("")
+              .trim(),
+          ),
+        ),
+      );
+      const matches = currentOptions.filter(
+        (_, index) => labels[index] === choice.label,
+      );
+      expect(
+        matches,
+        "観測した条件と同じラベルの選択肢が一意であること",
+      ).toHaveLength(1);
+      const selected = matches[0];
+      if (!selected) throw new Error(`選択肢がありません: ${choice.label}`);
+      await evidence(task, "filter-choice", {
+        body: JSON.stringify({
+          label: choice.label,
+          threshold,
+          observedIndex: choice.index,
+          currentIndex: currentOptions.indexOf(selected),
+        }),
+        contentType: "application/json",
+      });
+      await panelClick(selected);
+    } finally {
+      await Promise.all(currentOptions.map((option) => option.dispose()));
+    }
   } else if (target.period) {
     const ages = [
       ...new Set(
@@ -594,6 +717,38 @@ async function inclusionFilter(
         panel.$eval(input, (node) => (node as HTMLInputElement).value),
       )
       .toBe(String(threshold));
+  }
+  // UI操作だけでなく、選んだ条件の保存完了を待つ。非同期の初期化との競合を検出する。
+  const storageClient = await panel.createCDPSession();
+  try {
+    await expect
+      .poll(async () => {
+        const saved = (await callFunction(
+          storageClient,
+          "() => chrome.storage.sync.get('settings')",
+          [],
+          workerCommandTimeout,
+        )) as {
+          settings?: {
+            siteSettings?: Record<
+              string,
+              {
+                minReactionsEnabled?: boolean;
+                minReactions?: number;
+                postedWithinDays?: number;
+              }
+            >;
+          };
+        };
+        const stored = saved.settings?.siteSettings?.[target.site];
+        return target.period
+          ? stored?.postedWithinDays === threshold
+          : stored?.minReactionsEnabled === true &&
+              stored.minReactions === threshold;
+      })
+      .toBe(true);
+  } finally {
+    await storageClient.detach();
   }
   let lastRows: Awaited<ReturnType<typeof observations>> = [];
   try {
@@ -635,6 +790,7 @@ async function inclusionFilter(
       target.period ? r.ageDays <= threshold : r.count >= threshold,
     ),
   );
+  session.loadGuard.setContext(target.id, "minimum-clear");
   await panelClick(await element(panel, combo));
   await panelClick(await element(panel, aria("option")));
   await expect
@@ -664,6 +820,7 @@ function periodDays(label: string): number {
 }
 
 async function categoricalFilter(
+  session: LiveSession,
   page: Page,
   panel: Page,
   target: CompatibilityCase,
@@ -721,6 +878,7 @@ async function categoricalFilter(
     }
   };
   try {
+    session.loadGuard.setContext(target.id, `${kind}-apply`);
     await apply(true);
     await expect
       .poll(async () =>
@@ -750,6 +908,7 @@ async function categoricalFilter(
       }),
       contentType: "application/json",
     });
+    session.loadGuard.setContext(target.id, `${kind}-clear`);
     await apply(false);
   }
   await expect
@@ -772,218 +931,306 @@ async function categoricalFilter(
   });
 }
 
-for (const target of cases) {
-  test(target.id, async ({ task }) => {
-    const page = await session.context.newPage();
-    page.setDefaultTimeout(10000);
-    page.setDefaultNavigationTimeout(30000);
-    let cleanupError: unknown;
-    try {
-      await page.bringToFront();
-      await navigate(page, target, task);
-
-      const panel = await openPanel(session, page);
-      await expect
-        .poll(() =>
-          visible(
-            panel,
-            aria(
-              "heading",
-              target.period
-                ? "投稿期間"
-                : target.site === "x" || target.site === "bluesky"
-                  ? "最低いいね数"
-                  : "最低再生回数",
-            ),
-          ),
-        )
-        .toBe(true);
-      await expect
-        .poll(async () => (await readContext(session, page)).health?.state)
-        .toBe("ready");
-      const context = await readContext(session, page);
-      expect(context.site).toBe(target.site);
-      expect(context.timelineAvailable).toBe(true);
-
-      if (target.sort) expect(context.sortOrder).toBe(target.sort);
-      if (target.site === "youtube" || target.site === "niconico") {
-        await expect
-          .poll(() =>
-            panel.$$eval(
-              aria("heading", "最低再生回数"),
-              (nodes) => nodes.length,
-            ),
-          )
-          .toBe(0);
-        expect(
-          await panel.$$eval(aria("switch"), (nodes) => nodes.length),
-        ).toBe(0);
-      }
-      for (const toggle of await panel.$$(aria("switch"))) {
-        if (
-          (await toggle.evaluate((node) =>
-            node.getAttribute("aria-checked"),
-          )) === "true"
-        ) {
-          await panelClick(toggle);
-          await expect
-            .poll(() =>
-              toggle.evaluate((node) => node.getAttribute("aria-checked")),
-            )
-            .toBe("false");
-        }
-      }
-      if (target.site === "x" || target.site === "bluesky") {
-        await panelClick(
-          await element(panel, aria("combobox", "コンテンツタイプ")),
-        );
-        await panelClick(await element(panel, aria("option", "すべて")));
-      }
-      const structure = await snapshot(page, target);
-      await evidence(task, "structure", {
-        body: JSON.stringify(structure),
-        contentType: "application/json",
-      });
-      // 基準未登録も失敗。更新は明示的な --update だけで行う。
-      await expect
-        .soft(JSON.stringify(structure, null, 2))
-        .toMatchFileSnapshot(
-          `../test/compatibility-baselines/${target.id}.json`,
-        );
-      if (target.site === "x" || target.site === "bluesky") {
-        for (const kind of ["media", "reply", "quote", "repost"] as const)
-          await categoricalFilter(page, panel, target, kind, task);
-        // 仮想化で差し替わった表示範囲を戻し、最低値を独立した一覧で検証する。
-        await page.reload({ waitUntil: "domcontentloaded" });
-        await selectTab(page, target);
-        await expect
-          .poll(() => visible(page, regionFor(target).card), { timeout: 30000 })
-          .toBe(true);
-        await expect
-          .poll(async () => (await readContext(session, page)).health?.state)
-          .toBe("ready");
-      }
-      // 最低値は追加読み込みを大きく進めることがあるため、種別の確認後に行う。
-      {
-        const result = await inclusionFilter(page, panel, target, task);
-        await evidence(
-          task,
-          target.period ? "period-filter" : "minimum-filter",
-          {
-            body: JSON.stringify(result),
-            contentType: "application/json",
-          },
-        );
-      }
-      if (
-        target.id === "niconico-popular" ||
-        target.id === "niconico-search-popular"
-      ) {
-        const requests: string[] = [];
-        const track = (request: import("puppeteer-core").HTTPRequest) => {
-          const url = new URL(request.url());
-          if (
-            url.pathname.includes("/videos") ||
-            url.pathname.startsWith("/search/")
-          )
-            requests.push(request.url());
-        };
-        const before = (await observations(page, target)).map((row) => row.id);
-        const pager = 'a[href*="page="]';
-        expect(
-          await page.$(pager),
-          "サイトのページ送りが残ること",
-        ).not.toBeNull();
-        page.on("request", track);
+export function createCompatibilityCases(): LiveCase[] {
+  const entries: LiveCase[] = [];
+  for (const target of groupByEntry(cases, compatibilityEntry)) {
+    const entry = compatibilityEntry(target);
+    entries.push({
+      id: target.id,
+      entry,
+      run: async (session, task) => {
+        const { page, reused } = await acquireCasePage(session, entry);
+        page.setDefaultTimeout(10000);
+        page.setDefaultNavigationTimeout(30000);
+        let cleanupError: unknown;
+        let healthy = false;
         try {
-          await page.evaluate(() =>
-            window.scrollTo(0, document.documentElement.scrollHeight),
+          // 保存済みの強い条件で初期一覧を隠し、サイトの追加取得を誘発しない。
+          // UIからの適用・解除と起動後の「指定なし」確認は、この後で個別に行う。
+          await session.api.evaluate(
+            `(async (site) => {
+          const stored = await chrome.storage.sync.get('settings');
+          const settings = stored.settings ?? {siteSettings:{}};
+          const previous = settings.siteSettings?.[site] ?? {};
+          const cleared = site === 'x' || site === 'bluesky'
+            ? {...previous,kind:'reactions',minReactionsEnabled:false,mediaEnabled:false,mediaMode:'any',hideReplies:false,hideQuotes:false,hideReposts:false}
+            : {...previous,kind:'metric',postedWithinDays:0};
+          if(JSON.stringify(previous) !== JSON.stringify(cleared)) {
+            await chrome.storage.sync.set({settings:{...settings,siteSettings:{...settings.siteSettings,[site]:cleared}}});
+          }
+        })(${JSON.stringify(target.site)})`,
           );
-          await new Promise((resolve) => setTimeout(resolve, 800));
-          expect(requests, "スクロールで次ページを取得しないこと").toHaveLength(
-            0,
-          );
-          expect(
-            (await observations(page, target)).map((row) => row.id),
-          ).toEqual(before);
-          await evidence(task, "native-pagination", {
+          await page.bringToFront();
+          session.loadGuard.setContext(target.id, "navigate");
+          await navigate(session, page, target, task, reused);
+          await evidence(task, "page-load", {
             body: JSON.stringify({
-              requested: 0,
-              unchanged: true,
-              pager: true,
+              entry: target.start,
+              reused,
+              firstNavigation: !reused,
             }),
             contentType: "application/json",
           });
-        } finally {
-          page.off("request", track);
-        }
-      }
-      await evidence(task, "candidate", {
-        body: JSON.stringify(session.candidate),
-        contentType: "application/json",
-      });
-    } catch (error) {
-      await evidence(task, "failure-cause", {
-        body: JSON.stringify({
-          message: String(error),
-          stack: error instanceof Error ? error.stack : undefined,
-        }),
-        contentType: "application/json",
-      });
-      await evidence(task, "failure-navigation", {
-        body: JSON.stringify({
-          url: page.url(),
-          title: await page.title(),
-          visibility: await page.evaluate(() => document.visibilityState),
-          tabs: await page.$$eval('[role="tab"]', (nodes) =>
-            nodes.map((node) => {
-              const r = node.getBoundingClientRect();
-              const hit = document.elementFromPoint(
-                r.x + r.width / 2,
-                r.y + r.height / 2,
+
+          session.loadGuard.setContext(target.id, "open-panel");
+          const panel = await openPanel(session, page);
+          await expect
+            .poll(() =>
+              visible(
+                panel,
+                aria(
+                  "heading",
+                  target.period
+                    ? "投稿期間"
+                    : target.site === "x" || target.site === "bluesky"
+                      ? "最低いいね数"
+                      : "最低再生回数",
+                ),
+              ),
+            )
+            .toBe(true);
+          await expect
+            .poll(async () => (await readContext(session, page)).health?.state)
+            .toBe("ready");
+          const context = await readContext(session, page);
+          expect(context.site).toBe(target.site);
+          expect(context.timelineAvailable).toBe(true);
+
+          if (target.sort) expect(context.sortOrder).toBe(target.sort);
+          if (target.site === "youtube" || target.site === "niconico") {
+            await expect
+              .poll(() =>
+                panel.$$eval(
+                  aria("heading", "最低再生回数"),
+                  (nodes) => nodes.length,
+                ),
+              )
+              .toBe(0);
+            expect(
+              await panel.$$eval(aria("switch"), (nodes) => nodes.length),
+            ).toBe(0);
+          }
+          for (const toggle of await panel.$$(aria("switch"))) {
+            if (
+              (await toggle.evaluate((node) =>
+                node.getAttribute("aria-checked"),
+              )) === "true"
+            ) {
+              await panelClick(toggle);
+              await expect
+                .poll(() =>
+                  toggle.evaluate((node) => node.getAttribute("aria-checked")),
+                )
+                .toBe("false");
+            }
+          }
+          if (target.site === "x" || target.site === "bluesky") {
+            const typePicker = aria("combobox", "コンテンツタイプ");
+            if (
+              (await panel.$eval(typePicker, (node) =>
+                node.textContent?.trim(),
+              )) !== "すべて"
+            ) {
+              await panelClick(await element(panel, typePicker));
+              await panelClick(await element(panel, aria("option", "すべて")));
+            }
+          }
+          const minimum = `[data-minimum-picker] >>> ${aria("combobox")}`;
+          await panelClick(await element(panel, minimum));
+          await panelClick(await element(panel, aria("option")));
+          await expect
+            .poll(async () => {
+              const rows = await observations(page, target);
+              return (
+                rows.length > 0 &&
+                rows.every((row) => row.visible && row.height > 0)
               );
-              return {
-                text: node.textContent,
-                href: node.getAttribute("href"),
-                rect: { x: r.x, y: r.y, width: r.width, height: r.height },
-                hit: hit?.outerHTML.slice(0, 500),
-              };
+            })
+            .toBe(true);
+          const structure = await snapshot(page, target);
+          await completeInitialLoad(session, page, task, "ready");
+          await evidence(task, "structure", {
+            body: JSON.stringify(structure),
+            contentType: "application/json",
+          });
+          // 基準未登録も失敗。更新は明示的な --update だけで行う。
+          await expect
+            .soft(JSON.stringify(structure, null, 2))
+            .toMatchFileSnapshot(
+              `../test/compatibility-baselines/${target.id}.json`,
+            );
+          if (target.site === "x" || target.site === "bluesky") {
+            for (const kind of ["media", "reply", "quote", "repost"] as const)
+              await categoricalFilter(session, page, panel, target, kind, task);
+            // 全条件の解除を確認し、同じ一覧の先頭を最低値の独立した観測に使う。
+            // 復元できなければ再読込で隠さず、このケースの失敗として記録する。
+            const pageKey = (await readContext(session, page)).pageKey;
+            await page.evaluate(() => window.scrollTo(0, 0));
+            await expect
+              .poll(() => visible(page, regionFor(target).card), {
+                timeout: 30000,
+              })
+              .toBe(true);
+            await expect
+              .poll(
+                async () => (await readContext(session, page)).health?.state,
+              )
+              .toBe("ready");
+            await expect
+              .poll(async () => (await readContext(session, page)).pageKey)
+              .toBe(pageKey);
+            await expect
+              .poll(async () => {
+                const rows = await observations(page, target);
+                return (
+                  rows.length > 0 &&
+                  rows.every((row) => row.visible && row.height > 0)
+                );
+              })
+              .toBe(true);
+            await evidence(task, "restored-list", {
+              body: JSON.stringify({
+                pageKey,
+                reloaded: false,
+                rows: await observations(page, target),
+              }),
+              contentType: "application/json",
+            });
+          }
+          // 最低値は追加読み込みを大きく進めることがあるため、種別の確認後に行う。
+          {
+            const result = await inclusionFilter(
+              session,
+              page,
+              panel,
+              target,
+              task,
+            );
+            await evidence(
+              task,
+              target.period ? "period-filter" : "minimum-filter",
+              {
+                body: JSON.stringify(result),
+                contentType: "application/json",
+              },
+            );
+          }
+          if (
+            target.id === "niconico-popular" ||
+            target.id === "niconico-search-popular"
+          ) {
+            const requests: string[] = [];
+            const track = (request: import("puppeteer-core").HTTPRequest) => {
+              const url = new URL(request.url());
+              if (
+                url.pathname.includes("/videos") ||
+                url.pathname.startsWith("/search/")
+              )
+                requests.push(request.url());
+            };
+            const before = (await observations(page, target)).map(
+              (row) => row.id,
+            );
+            const pager = 'a[href*="page="]';
+            expect(
+              await page.$(pager),
+              "サイトのページ送りが残ること",
+            ).not.toBeNull();
+            page.on("request", track);
+            try {
+              await page.evaluate(() =>
+                window.scrollTo(0, document.documentElement.scrollHeight),
+              );
+              await new Promise((resolve) => setTimeout(resolve, 800));
+              expect(
+                requests,
+                "スクロールで次ページを取得しないこと",
+              ).toHaveLength(0);
+              expect(
+                (await observations(page, target)).map((row) => row.id),
+              ).toEqual(before);
+              await evidence(task, "native-pagination", {
+                body: JSON.stringify({
+                  requested: 0,
+                  unchanged: true,
+                  pager: true,
+                }),
+                contentType: "application/json",
+              });
+            } finally {
+              page.off("request", track);
+            }
+          }
+          await evidence(task, "candidate", {
+            body: JSON.stringify(session.candidate),
+            contentType: "application/json",
+          });
+          healthy = true;
+        } catch (error) {
+          await evidence(task, "failure-cause", {
+            body: JSON.stringify({
+              message: String(error),
+              stack: error instanceof Error ? error.stack : undefined,
             }),
-          ),
-        }),
-        contentType: "application/json",
-      });
-      await evidence(task, "failure-tabs", {
-        body: JSON.stringify({
-          pageUrl: page.url(),
-          tabs: await session.worker.evaluate(
-            "chrome.tabs.query({}).then(tabs=>tabs.map(({id,url,active})=>({id,url,active})))",
-          ),
-        }),
-        contentType: "application/json",
-      });
-      await evidence(task, "failure-context", {
-        body: JSON.stringify(
-          await readContext(session, page).catch((problem) => ({
-            error: String(problem),
-          })),
-        ),
-        contentType: "application/json",
-      });
-      throw error;
-    } finally {
-      try {
-        await closePanel(session, page);
-      } catch (error) {
-        await evidence(task, "cleanup-error", {
-          body: String(error),
-          contentType: "text/plain",
-        });
-        cleanupError = error;
-      } finally {
-        await page.close();
-      }
-    }
-    if (cleanupError) throw cleanupError;
-  });
+            contentType: "application/json",
+          });
+          await evidence(task, "failure-navigation", {
+            body: JSON.stringify({
+              url: page.url(),
+              title: await page.title(),
+              visibility: await page.evaluate(() => document.visibilityState),
+              tabs: await page.$$eval('[role="tab"]', (nodes) =>
+                nodes.map((node) => {
+                  const r = node.getBoundingClientRect();
+                  const hit = document.elementFromPoint(
+                    r.x + r.width / 2,
+                    r.y + r.height / 2,
+                  );
+                  return {
+                    text: node.textContent,
+                    href: node.getAttribute("href"),
+                    rect: { x: r.x, y: r.y, width: r.width, height: r.height },
+                    hit: hit?.outerHTML.slice(0, 500),
+                  };
+                }),
+              ),
+            }),
+            contentType: "application/json",
+          });
+          await evidence(task, "failure-tabs", {
+            body: JSON.stringify({
+              pageUrl: page.url(),
+              tabs: await session.api.evaluate(
+                "chrome.tabs.query({}).then(tabs=>tabs.map(({id,url,active})=>({id,url,active})))",
+              ),
+            }),
+            contentType: "application/json",
+          });
+          await evidence(task, "failure-context", {
+            body: JSON.stringify(
+              await readContext(session, page).catch((problem) => ({
+                error: String(problem),
+              })),
+            ),
+            contentType: "application/json",
+          });
+          throw error;
+        } finally {
+          try {
+            await closePanel(session, page);
+          } catch (error) {
+            await evidence(task, "cleanup-error", {
+              body: String(error),
+              contentType: "text/plain",
+            });
+            cleanupError = error;
+          } finally {
+            await releaseCasePage(session, entry, healthy && !cleanupError);
+          }
+        }
+        if (cleanupError) throw cleanupError;
+      },
+    });
+  }
+  return entries;
 }

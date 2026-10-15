@@ -43,7 +43,9 @@ export async function launchDevBrowser(headless: boolean): Promise<Browser> {
     ],
     args: [
       ...devBrowserArgs(profile).filter(
-        (arg) => !arg.startsWith("--user-data-dir="),
+        (arg) =>
+          !arg.startsWith("--user-data-dir=") &&
+          !(headless && arg === "--restore-last-session"),
       ),
       ...(headless ? ["--window-size=1280,720"] : []),
     ],

@@ -10,7 +10,10 @@ import {
   unsupportedCases,
 } from "../e2e/cases.ts";
 import { artifactHash } from "./compatibility/artifact.ts";
-import { assertLiveCoverage } from "./compatibility/live-coverage.ts";
+import {
+  assertInitializationCoverage,
+  assertLiveCoverage,
+} from "./compatibility/live-coverage.ts";
 import {
   type CandidateBuild,
   sourceHash,
@@ -21,6 +24,7 @@ import {
 } from "./compatibility/verification-run.ts";
 
 const root = path.resolve(import.meta.dirname, "..");
+process.env.SIFT_LIVE_RUN_ID = new Date().toISOString();
 const receiptFile = path.join(root, ".output", "verified-candidate.json");
 let candidate: CandidateBuild | undefined;
 recordVerification(
@@ -39,10 +43,23 @@ recordVerification(
     const npm = process.env.npm_execpath;
     if (!npm) throw new Error("npm run verify:candidate で実行してください。");
     runVerificationTasks((task) => {
-      execFileSync(process.execPath, [npm, "run", task], {
-        cwd: root,
-        stdio: "inherit",
-      });
+      try {
+        execFileSync(process.execPath, [npm, "run", task], {
+          cwd: root,
+          stdio: "inherit",
+        });
+      } finally {
+        const loadFile = path.join(root, "test-results", "live-load.json");
+        if (task !== "check" && fs.existsSync(loadFile))
+          fs.copyFileSync(
+            loadFile,
+            path.join(
+              root,
+              "test-results",
+              `live-load-after-${task.replace(":", "-")}.json`,
+            ),
+          );
+      }
     });
     const report: JsonTestResults = JSON.parse(
       fs.readFileSync(
@@ -63,6 +80,10 @@ recordVerification(
       emptyCases,
       unsupportedCases,
       lightboxCases,
+    );
+    assertInitializationCoverage(
+      report,
+      cases.map((target) => target.site),
     );
     if (
       report.numPassedTests !==
@@ -116,6 +137,4 @@ recordVerification(
     );
   },
 );
-console.log(
-  "検証済み候補を記録しました。npm run deploy:local で同じ成果物を配備できます。",
-);
+console.log("候補の全検証結果を記録しました。");

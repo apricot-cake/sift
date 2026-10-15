@@ -1,5 +1,6 @@
 import { loadDevCandidate } from "./dev-browser-candidate.ts";
 import { launchDevBrowser } from "./managed-dev-browser.ts";
+import { isOwnedPanelEvent, isOwnedPanelUrl } from "./panel-target.ts";
 
 const [url, ...rest] = process.argv.slice(2);
 if (url === "--help") {
@@ -95,9 +96,8 @@ try {
       const found = events.find(
         (e) =>
           e.event === name &&
-          e.tabId === tab.id &&
           e.windowId === tab.windowId &&
-          e.path.replace(/^\//, "") === "sidepanel.html",
+          isOwnedPanelEvent(e, ext, tab.id),
       );
       if (found) return events;
       await pause(100);
@@ -120,22 +120,19 @@ try {
   const panelStates = [];
   for (const target of ownedBrowser
     .targets()
-    .filter(
-      (target) => target.url() === `chrome-extension://${ext}/sidepanel.html`,
-    )) {
+    .filter((target) => isOwnedPanelUrl(target.url(), ext, tab.id))) {
     const panel = await target.asPage();
     const pc = await panel.createCDPSession();
     connections.push(pc);
     const { targetInfo } = await pc.send("Target.getTargetInfo");
     panelStates.push(
       await panel.evaluate(async (target) => {
-        const state = await chrome.storage.session.get("sift:sidepanel-tab-id");
         return {
           target,
           visibility: document.visibilityState,
           width: innerWidth,
           height: innerHeight,
-          tabId: state["sift:sidepanel-tab-id"],
+          tabId: Number(new URL(location.href).searchParams.get("tabId")),
           text: document.body.innerText,
         };
       }, targetInfo.targetId),

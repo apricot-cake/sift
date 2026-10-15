@@ -1,11 +1,12 @@
 import { defineConfig } from "vitest/config";
 
 const runId = new Date().toISOString().replace(/[:.]/g, "-");
+process.env.SIFT_LIVE_RUN_ID ??= runId;
 
 export default defineConfig({
   test: {
     environment: "node",
-    include: ["e2e/**/*.spec.ts"],
+    include: ["e2e/all-live.spec.ts"],
     fileParallelism: false,
     maxWorkers: 1,
     retry: 0,

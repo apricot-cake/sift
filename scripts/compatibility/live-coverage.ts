@@ -1,6 +1,7 @@
 import type { JsonTestResults } from "vitest/node";
 import {
   type CompatibilityCase,
+  directInitializationCaseIds,
   requiredFilterEvidence,
 } from "../../e2e/cases.ts";
 
@@ -130,6 +131,27 @@ export function assertLiveCoverage(
       throw new Error(
         `${target.id}: ${target.state} の判定・操作欄・非表示状態の確認が不足しています。`,
       );
+    if (directInitializationCaseIds.some((id) => id === target.id)) {
+      const records = result.meta.liveEvidence ?? [];
+      const spa = records.filter(
+        (item) => item.name === "spa-unsupported-state",
+      );
+      const direct = records.filter(
+        (item) => item.name === "direct-initialization",
+      );
+      if (
+        spa.length !== 1 ||
+        spa[0]?.data.state !== "unsupported" ||
+        spa[0]?.data.timelineAvailable !== false ||
+        spa[0]?.data.controls !== 0 ||
+        spa[0]?.data.hidden !== 0 ||
+        direct.length !== 1 ||
+        direct[0]?.data.directlyLoaded !== true
+      )
+        throw new Error(
+          `${target.id}: サイト内遷移と直接アクセスの確認が不足しています。`,
+        );
+    }
   }
   if (missing.length)
     throw new Error(`代表ページで除外効果が未確認です: ${missing.join(", ")}`);
@@ -155,5 +177,29 @@ export function assertLiveCoverage(
       throw new Error(
         `${target.id}: ライトボックスの検証記録が不足しています。`,
       );
+  }
+}
+
+/** 完了した代表ケースの記録で、動的な一覧の初期化までcache無効を維持したことを確認する。 */
+export function assertInitializationCoverage(
+  report: JsonTestResults,
+  sites: readonly string[],
+): void {
+  const records = report.testResults
+    .flatMap((suite) => suite.assertionResults)
+    .filter((spec) => spec.status === "passed" && !spec.failureMessages?.length)
+    .flatMap((spec) => spec.meta.liveEvidence ?? []);
+  for (const site of new Set(sites)) {
+    if (
+      !records.some(
+        (item) =>
+          item.name === "initialization-cache" &&
+          item.data.site === site &&
+          item.data.cacheDisabledDuringInitialization === true &&
+          item.data.cacheRestored === true &&
+          ["ready", "empty", "unsupported"].includes(String(item.data.state)),
+      )
+    )
+      throw new Error(`${site}: キャッシュ無効の初期化確認が不足しています。`);
   }
 }

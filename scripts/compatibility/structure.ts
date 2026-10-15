@@ -69,6 +69,23 @@ export interface StructureSnapshot {
   regions: Record<string, StructureNode[]>;
 }
 
+/** フィードの更新通知だけを除き、同形要素の反復数を再び正規化する。 */
+export function normalizeBlueskyFeedNavigation(
+  node: StructureNode,
+): StructureNode {
+  if (node.testId !== "customFeedScreen") return node;
+  const retained = (node.children ?? []).filter(
+    (child) => child.testId !== "loadLatestBtn",
+  );
+  const children = retained.filter(
+    (child, index) =>
+      index === 0 ||
+      JSON.stringify(child) !== JSON.stringify(retained[index - 1]),
+  );
+  const { children: _children, ...root } = node;
+  return { ...root, ...(children.length ? { children } : {}) };
+}
+
 export interface StructureDifference {
   region: string;
   kind: "added" | "removed" | "changed";

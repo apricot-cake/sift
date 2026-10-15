@@ -4,6 +4,7 @@ import {
   captureRoute,
   captureStructure,
   compareStructures,
+  normalizeBlueskyFeedNavigation,
   type StructureSnapshot,
 } from "./structure.ts";
 
@@ -14,6 +15,44 @@ const snapshot = (html: string): StructureSnapshot => ({
   regions: { card: [captureStructure(render(html))] },
 });
 describe("互換性検証の構造比較", () => {
+  it("Blueskyフィードの任意の更新通知だけを比較から除く", () => {
+    const capture = (html: string) => {
+      const root = render(html).firstElementChild;
+      if (!root) throw new Error("フィード画面がありません。");
+      return normalizeBlueskyFeedNavigation(captureStructure(root, 1));
+    };
+    const without = capture(
+      '<div data-testid="customFeedScreen"><div></div></div>',
+    );
+    const withNotice = capture(
+      '<div data-testid="customFeedScreen"><div></div><div data-testid="loadLatestBtn"></div><div></div></div>',
+    );
+    expect(withNotice).toEqual(without);
+    expect(
+      capture('<div data-testid="customFeedScreen"><section></section></div>'),
+    ).not.toEqual(without);
+    expect(
+      capture(
+        '<div data-testid="customFeedScreen"><div></div><div data-testid="unknownControl"></div></div>',
+      ),
+    ).not.toEqual(without);
+    expect(
+      capture('<div data-testid="changedFeedScreen"><div></div></div>'),
+    ).not.toEqual(without);
+  });
+  it("他の領域の同名ボタンは除外せず、取得した構造も変更しない", () => {
+    const root = render(
+      '<div data-testid="otherScreen"><div data-testid="loadLatestBtn"></div></div>',
+    ).firstElementChild;
+    if (!root) throw new Error("画面がありません。");
+    const shape = captureStructure(root, 1);
+    const before = structuredClone(shape);
+    expect(normalizeBlueskyFeedNavigation(shape)).toEqual(before);
+    shape.testId = "customFeedScreen";
+    const original = structuredClone(shape);
+    expect(normalizeBlueskyFeedNavigation(shape).children).toBeUndefined();
+    expect(shape).toEqual(original);
+  });
   it("いいね済み状態だけの違いを構造変更に数えない", () => {
     expect(
       compareStructures(

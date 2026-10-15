@@ -3,7 +3,7 @@ import path from "node:path";
 import { type Browser, ProtocolError } from "puppeteer-core";
 import { getExtensionWorker } from "./browser-worker.ts";
 import { artifactHash } from "./compatibility/artifact.ts";
-import type { VerifiedCandidate } from "./compatibility/verification.ts";
+import type { CandidateBuild } from "./compatibility/verification.ts";
 
 /** 実行中のビルドを照合し、Chrome に残る旧ビルドだけを再読み込みする。 */
 export async function installCandidateWorker(
@@ -29,15 +29,30 @@ export async function installCandidateWorker(
     previousTargetId,
   );
   try {
-    const runningBuild = () =>
-      next.evaluate(
-        () =>
-          (
-            globalThis as typeof globalThis & {
-              __SIFT_RUNNING_BUILD_ID__?: string;
-            }
-          ).__SIFT_RUNNING_BUILD_ID__ ?? null,
-      );
+    const runningBuild = async () => {
+      const deadline = Date.now() + timeout;
+      let actual: unknown;
+      while (true) {
+        actual = await next.evaluate(
+          () =>
+            (
+              globalThis as typeof globalThis & {
+                __SIFT_RUNNING_BUILD_ID__?: string;
+              }
+            ).__SIFT_RUNNING_BUILD_ID__ ?? null,
+        );
+        // target/contextの生成はbundle初期化より先。未設置を旧ビルドと扱わない。
+        if (typeof actual === "string" && actual !== "") return actual;
+        const remaining = deadline - Date.now();
+        if (remaining <= 0)
+          throw new Error(
+            `workerのビルドID初期化を確認できません。expected=${buildId}, actual=${JSON.stringify(actual) ?? String(actual)}`,
+          );
+        await new Promise((resolve) =>
+          setTimeout(resolve, Math.min(100, remaining)),
+        );
+      }
+    };
     let actual = await runningBuild();
     if (actual !== buildId) {
       const previous = next;
@@ -74,7 +89,9 @@ export async function installCandidateWorker(
       actual = await runningBuild();
     }
     if (actual !== buildId)
-      throw new Error("読み込んだ worker が候補ビルドと一致しません。");
+      throw new Error(
+        `読み込んだ worker が候補ビルドと一致しません。expected=${buildId}, actual=${actual}`,
+      );
     return { id: extensionId, worker: next };
   } catch (error) {
     await next.dispose().catch(() => {});
@@ -86,7 +103,7 @@ export async function loadDevCandidate(browser: Browser) {
   const root = path.resolve(import.meta.dirname, "..");
   const candidate = JSON.parse(
     fs.readFileSync(path.join(root, ".output", "candidate.json"), "utf8"),
-  ) as VerifiedCandidate;
+  ) as CandidateBuild;
   const expected = path.join(root, ".output", "candidate", "chrome-mv3");
   if (
     candidate.output !== expected ||

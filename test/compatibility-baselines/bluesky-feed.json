@@ -10,13 +10,6 @@
         "children": [
           {
             "tag": "div"
-          },
-          {
-            "tag": "div",
-            "testId": "loadLatestBtn"
-          },
-          {
-            "tag": "div"
           }
         ]
       }
