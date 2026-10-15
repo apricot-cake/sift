@@ -143,13 +143,13 @@ export const unsupportedCases: readonly UnsupportedCase[] = [
   {
     id: "unsupported-x-replies",
     site: "x",
-    url: "https://x.com/uowata94",
+    url: "https://x.com/NASA",
     label: "返信",
   },
   {
     id: "unsupported-x-videos",
     site: "x",
-    url: "https://x.com/AdamasMC",
+    url: "https://x.com/NASA",
     profileMedia: true,
   },
   {
@@ -161,7 +161,7 @@ export const unsupportedCases: readonly UnsupportedCase[] = [
   {
     id: "unsupported-x-images",
     site: "x",
-    url: "https://x.com/uowata94/media",
+    url: "https://x.com/NASA/media",
   },
   {
     id: "unsupported-youtube-oldest-dropdown",
@@ -397,7 +397,7 @@ export const cases: CompatibilityCase[] = [
   {
     id: "x-list",
     site: "x",
-    start: "https://x.com/_apricot_cake_/lists",
+    start: "https://x.com/ruru_endpoint/lists",
     destination: "/i/lists/2082750019069948060",
     linkLabel: "e",
     list: true,
@@ -406,16 +406,16 @@ export const cases: CompatibilityCase[] = [
   {
     id: "x-profile",
     site: "x",
-    start: "https://x.com/uowata94",
-    destination: "/uowata94",
+    start: "https://x.com/NASA",
+    destination: "/NASA",
     tab: "ポスト",
     period: false,
   },
   {
     id: "x-quote-representative",
     site: "x",
-    start: "https://x.com/AdamasMC",
-    destination: "/AdamasMC",
+    start: "https://x.com/NASA",
+    destination: "/NASA",
     tab: "ポスト",
     period: false,
   },

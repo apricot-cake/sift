@@ -17,7 +17,7 @@ import { changeXSearch } from "./x-navigation.ts";
 export function createEmptyCases(): LiveCase[] {
   const entries: LiveCase[] = [];
   const entry =
-    "https://x.com/search?q=from%3Auowata94%20sift_empty_7d649d20&f=live";
+    "https://x.com/search?q=from%3ANASA%20sift_empty_7d649d20&f=live";
   const search = cases.find((target) => target.id === "x-search");
   const sharedEntry = search ? compatibilityEntry(search) : entry;
   for (const target of emptyCases) {

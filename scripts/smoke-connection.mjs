@@ -226,7 +226,7 @@ try {
         .wait();
     }
   }
-  const first = await newPage("https://x.com/uowata94");
+  const first = await newPage("https://x.com/NASA");
   await delay(2000);
   const closedWidth = await evaluate(first.client, "innerWidth");
   await action(first);
@@ -271,7 +271,7 @@ try {
   await check("明示アクションで移動先のYouTubeパネルを開く", first, youtube);
   // 未開封タブへの切替ではパネルを引き継がず、開封済みタブへ戻ると復帰する。
   // プロフィール固有資源は最初のタブと共用する。
-  const second = await newPage("https://x.com/uowata94");
+  const second = await newPage("https://x.com/NASA");
   await activate(second);
   await delay(2000);
   await check(

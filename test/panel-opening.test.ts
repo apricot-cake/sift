@@ -88,7 +88,7 @@ it("旧版で保存された自動開閉を起動時に解除する", () => {
   expect(api.sidePanel.setOptions).not.toHaveBeenCalled();
 });
 
-function trackedPage(url = "https://x.com/uowata94") {
+function trackedPage(url = "https://x.com/NASA") {
   const context = {
     site: "x",
     pageKey: url,
@@ -127,9 +127,9 @@ it("元の一覧を離れると同じサイトでも閉じて絞り込みを解�
   api.tabs.get.mockResolvedValue({
     id: 7,
     active: true,
-    url: "https://x.com/NASA",
+    url: "https://x.com/home",
   });
-  context.pageKey = "https://x.com/NASA";
+  context.pageKey = "https://x.com/home";
   await expect(check()).resolves.toBe(true);
   expect(api.sidePanel.setOptions).toHaveBeenCalledWith({
     tabId: 7,
@@ -153,7 +153,7 @@ it("ライトボックスを開いて閉じても背景一覧が同じなら維�
   api.tabs.get.mockResolvedValue({
     id: 7,
     active: true,
-    url: "https://x.com/uowata94",
+    url: "https://x.com/NASA",
   });
   await expect(check()).resolves.toBe(false);
   expect(api.sidePanel.setOptions).not.toHaveBeenCalled();
@@ -340,7 +340,7 @@ it("アクセス権を失いURLが読めないときも読み込み完了で閉�
   );
 });
 
-it.each(["https://x.com/home", "https://x.com/uowata94?test=1"])(
+it.each(["https://x.com/home", "https://x.com/NASA?test=1"])(
   "一覧記録のない旧パネルでは同じサイトへの再接続を維持する: %s",
   async (url) => {
     api.tabs.get.mockResolvedValueOnce({ id: 7, active: true, url });
@@ -397,7 +397,7 @@ it("可視パネルから現在の許可済みタブへ再接続する", async (
   api.tabs.get.mockResolvedValueOnce({
     id: 7,
     active: true,
-    url: "https://x.com/uowata94",
+    url: "https://x.com/NASA",
   });
   for (let i = 0; i < 8; i++)
     api.tabs.sendMessage.mockRejectedValueOnce(new Error("No receiver"));
@@ -419,7 +419,7 @@ it("権限による注入失敗を再接続失敗として返す", async () => {
   api.tabs.get.mockResolvedValueOnce({
     id: 7,
     active: true,
-    url: "https://x.com/uowata94",
+    url: "https://x.com/NASA",
   });
   for (let i = 0; i < 8; i++)
     api.tabs.sendMessage.mockRejectedValueOnce(new Error("No receiver"));

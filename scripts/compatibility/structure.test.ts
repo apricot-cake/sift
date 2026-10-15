@@ -65,8 +65,8 @@ describe("互換性検証の構造比較", () => {
     expect(
       captureRoute("https://x.com/search?q=private&src=typed_query&f=live"),
     ).toBe("/search?f=live");
-    expect(captureRoute("https://x.com/uowata94/media?filter=photo")).toBe(
-      "/uowata94/media?filter=photo",
+    expect(captureRoute("https://x.com/NASA/media?filter=photo")).toBe(
+      "/NASA/media?filter=photo",
     );
     expect(captureRoute("https://x.com/search?q=other&f=top")).toBe(
       "/search?f=top",

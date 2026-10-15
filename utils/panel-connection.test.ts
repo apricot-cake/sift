@@ -4,7 +4,7 @@ import { isKnownUnsupportedSite } from "./panel-connection.ts";
 it.each([
   undefined,
   "",
-  "https://x.com/uowata94",
+  "https://x.com/NASA",
   "https://www.youtube.com/@Google/videos",
   "https://bsky.app/",
   "https://www.nicovideo.jp/user/123/video",

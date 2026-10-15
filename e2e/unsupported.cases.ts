@@ -259,7 +259,7 @@ export function createUnsupportedCases(): LiveCase[] {
               )
               .toMatch(/一致するコンテンツはありません/);
           if ("profileMedia" in target) {
-            const media = 'a[role="tab"][href="/AdamasMC/media"]';
+            const media = 'a[role="tab"][href="/NASA/media"]';
             await page.locator(media).wait();
             await page.$eval(media, (node) =>
               (node as HTMLAnchorElement).focus(),
@@ -272,11 +272,11 @@ export function createUnsupportedCases(): LiveCase[] {
             await page.keyboard.press("Enter");
             await expect
               .poll(() => page.url())
-              .toBe("https://x.com/AdamasMC/media");
+              .toBe("https://x.com/NASA/media");
             await expect
               .poll(() =>
                 page.$eval(
-                  'a[role="tab"][href="/AdamasMC/media"]',
+                  'a[role="tab"][href="/NASA/media"]',
                   (node, name) => node.getAttribute(name),
                   "aria-selected",
                 ),
@@ -284,10 +284,10 @@ export function createUnsupportedCases(): LiveCase[] {
               .toBe("true");
           }
           if (target.id === "unsupported-x-images") {
-            const media = 'a[role="tab"][href="/uowata94/media"]';
+            const media = 'a[role="tab"][href="/NASA/media"]';
             // 共有ページが返信タブでも、サイト自身の操作でメディアへ移動する。
             // 単独実行の /media 文書はそのまま使い、選択済みタブで画像メニューを開く。
-            if (new URL(page.url()).pathname !== "/uowata94/media") {
+            if (new URL(page.url()).pathname !== "/NASA/media") {
               await page.locator(media).wait();
               await page.$eval(media, (node) =>
                 (node as HTMLAnchorElement).focus(),
@@ -301,7 +301,7 @@ export function createUnsupportedCases(): LiveCase[] {
             }
             await expect
               .poll(() => page.url())
-              .toBe("https://x.com/uowata94/media");
+              .toBe("https://x.com/NASA/media");
             await expect
               .poll(() =>
                 page.$eval(media, (node) => node.getAttribute("aria-selected")),
@@ -315,11 +315,11 @@ export function createUnsupportedCases(): LiveCase[] {
             await page.locator(aria("menuitem", "画像")).click();
             await expect
               .poll(() => page.url())
-              .toBe("https://x.com/uowata94/media?filter=photo");
+              .toBe("https://x.com/NASA/media?filter=photo");
             await expect
               .poll(() =>
                 page.$eval(
-                  'a[role="tab"][href="/uowata94/media?filter=photo"]',
+                  'a[role="tab"][href="/NASA/media?filter=photo"]',
                   (node, name) => node.getAttribute(name),
                   "aria-selected",
                 ),
