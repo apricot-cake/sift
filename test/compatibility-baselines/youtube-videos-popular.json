@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "caseId": "youtube-videos-popular",
-  "route": "/@sutehage_channel/videos",
+  "route": "/@hololive/videos",
   "regions": {
     "sort": [
       {

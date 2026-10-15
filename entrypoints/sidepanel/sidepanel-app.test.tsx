@@ -117,7 +117,7 @@ describe("接続先と非同期応答", () => {
     ["youtube", "https://www.youtube.com/@Google/streams"],
     [
       "niconico",
-      "https://www.nicovideo.jp/user/53559097/video?sortKey=viewCount&sortOrder=desc",
+      "https://www.nicovideo.jp/user/11045538/video?sortKey=viewCount&sortOrder=desc",
     ],
     ["niconico", "https://www.nicovideo.jp/search/test?sort=v&order=d"],
   ] as const)("%s の再生数順には投稿期間だけを表示する", async (site, url) => {
@@ -143,7 +143,7 @@ describe("接続先と非同期応答", () => {
         url:
           site === "youtube"
             ? "https://www.youtube.com/@Google/videos"
-            : "https://www.nicovideo.jp/user/53559097/video",
+            : "https://www.nicovideo.jp/user/11045538/video",
       };
       request = async () => ({
         ...context(site),

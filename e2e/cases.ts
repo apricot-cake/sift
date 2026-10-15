@@ -85,7 +85,7 @@ export const lifecycleCases = [
   {
     id: "transition-niconico",
     site: "niconico",
-    url: "https://www.nicovideo.jp/user/129217273/video?sortKey=viewCount&sortOrder=desc",
+    url: "https://www.nicovideo.jp/user/116176195/video?sortKey=viewCount&sortOrder=desc",
   },
   { id: "transition-x", site: "x", url: "https://x.com/NASA" },
   {
@@ -166,7 +166,7 @@ export const unsupportedCases: readonly UnsupportedCase[] = [
   {
     id: "unsupported-youtube-oldest-dropdown",
     site: "youtube",
-    url: "https://www.youtube.com/@sutehage_channel/videos",
+    url: "https://www.youtube.com/@hololive/videos",
   },
   {
     id: "unsupported-youtube-oldest-chip",
@@ -176,19 +176,19 @@ export const unsupportedCases: readonly UnsupportedCase[] = [
   {
     id: "unsupported-niconico-sort-0",
     site: "niconico",
-    url: "https://www.nicovideo.jp/user/129217273/video",
+    url: "https://www.nicovideo.jp/user/116176195/video",
     label: "投稿日時が古い順",
   },
   {
     id: "unsupported-niconico-sort-1",
     site: "niconico",
-    url: "https://www.nicovideo.jp/user/129217273/video",
+    url: "https://www.nicovideo.jp/user/116176195/video",
     label: "再生数が少ない順",
   },
   {
     id: "unsupported-niconico-sort-2",
     site: "niconico",
-    url: "https://www.nicovideo.jp/user/129217273/video",
+    url: "https://www.nicovideo.jp/user/116176195/video",
     label: "コメントが新しい順",
   },
   {
@@ -227,47 +227,47 @@ export const unsupportedCases: readonly UnsupportedCase[] = [
   {
     id: "unsupported-youtube-videos-without-sort",
     site: "youtube",
-    url: "https://www.youtube.com/@SAYOSAYOCh/videos",
+    url: "https://www.youtube.com/@hololive_ASOBIMAWARITAI/videos",
     sort: "default",
   },
   {
     id: "unsupported-youtube-channel-search",
     site: "youtube",
-    url: "https://www.youtube.com/@zunda_drop/videos",
-    channelSearch: "WARDOGS",
+    url: "https://www.youtube.com/@Google/videos",
+    channelSearch: "Gemini",
   },
   {
     id: "unsupported-youtube-members-representative",
     site: "youtube",
-    url: "https://www.youtube.com/@sutehage_channel/videos",
+    url: "https://www.youtube.com/@hololive/videos",
     sort: "newest",
     membersOnly: true,
   },
   {
     id: "unsupported-youtube-videos-newest",
     site: "youtube",
-    url: "https://www.youtube.com/@sutehage_channel",
+    url: "https://www.youtube.com/@hololive",
     tab: "動画",
     sort: "newest",
   },
   {
     id: "unsupported-youtube-shorts-newest",
     site: "youtube",
-    url: "https://www.youtube.com/@sutehage_channel",
+    url: "https://www.youtube.com/@hololive",
     tab: "ショート",
     sort: "newest",
   },
   {
     id: "unsupported-youtube-shorts-popular",
     site: "youtube",
-    url: "https://www.youtube.com/@sutehage_channel",
+    url: "https://www.youtube.com/@hololive",
     tab: "ショート",
     sort: "popular",
   },
   {
     id: "unsupported-youtube-streams-newest",
     site: "youtube",
-    url: "https://www.youtube.com/@sutehage_channel",
+    url: "https://www.youtube.com/@hololive",
     tab: "ライブ",
     sort: "newest",
   },
@@ -281,13 +281,13 @@ export const unsupportedCases: readonly UnsupportedCase[] = [
   {
     id: "unsupported-niconico-videos",
     site: "niconico",
-    url: "https://www.nicovideo.jp/user/129217273",
+    url: "https://www.nicovideo.jp/user/116176195",
     tab: "動画・シリーズ",
   },
   {
     id: "unsupported-empty-youtube-channel-search",
     site: "youtube",
-    url: "https://www.youtube.com/@zunda_drop/search?query=sift_empty_7d649d20",
+    url: "https://www.youtube.com/@Google/search?query=sift_empty_7d649d20",
     empty: true,
   },
 ];
@@ -320,8 +320,8 @@ export const cases: CompatibilityCase[] = [
   {
     id: "youtube-videos-popular",
     site: "youtube",
-    start: "https://www.youtube.com/@sutehage_channel",
-    destination: "/@sutehage_channel/videos",
+    start: "https://www.youtube.com/@hololive",
+    destination: "/@hololive/videos",
     tab: "動画",
     sort: "popular",
     period: true,
@@ -329,8 +329,8 @@ export const cases: CompatibilityCase[] = [
   {
     id: "youtube-streams-popular",
     site: "youtube",
-    start: "https://www.youtube.com/@sutehage_channel",
-    destination: "/@sutehage_channel/streams",
+    start: "https://www.youtube.com/@hololive",
+    destination: "/@hololive/streams",
     tab: "ライブ",
     sort: "popular",
     period: true,
@@ -347,8 +347,8 @@ export const cases: CompatibilityCase[] = [
   {
     id: "niconico-popular",
     site: "niconico",
-    start: "https://www.nicovideo.jp/user/129217273",
-    destination: "/user/129217273/video",
+    start: "https://www.nicovideo.jp/user/116176195",
+    destination: "/user/116176195/video",
     tab: "動画・シリーズ",
     niconicoSort: "再生数が多い順",
     period: true,
@@ -357,8 +357,8 @@ export const cases: CompatibilityCase[] = [
     id: "niconico-period-representative",
     site: "niconico",
     start:
-      "https://www.nicovideo.jp/user/53559097/video?sortKey=viewCount&sortOrder=desc",
-    destination: "/user/53559097/video",
+      "https://www.nicovideo.jp/user/11045538/video?sortKey=viewCount&sortOrder=desc",
+    destination: "/user/11045538/video",
     niconicoSort: "再生数が多い順",
     period: true,
   },

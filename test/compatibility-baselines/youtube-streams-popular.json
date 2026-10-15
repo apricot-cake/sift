@@ -1,9 +1,21 @@
 {
   "schema": 1,
   "caseId": "youtube-streams-popular",
-  "route": "/@sutehage_channel/streams",
+  "route": "/@hololive/streams",
   "regions": {
     "sort": [
+      {
+        "tag": "button",
+        "role": "combobox",
+        "attributes": [
+          "aria-selected"
+        ],
+        "children": [
+          {
+            "tag": "div"
+          }
+        ]
+      },
       {
         "tag": "button",
         "role": "tab",
