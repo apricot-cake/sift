@@ -4,7 +4,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { artifactHash } from "./artifact.ts";
 
-export interface VerifiedCandidate {
+export interface CandidateBuild {
   buildId: string;
   output: string;
   sha256: string;
@@ -33,34 +33,10 @@ export function sourceHash(root: string): string {
   return hash.digest("hex");
 }
 
-export function assertVerified(
-  candidate: VerifiedCandidate,
-  receipt: {
-    status: string;
-    buildId?: string;
-    sha256?: string;
-    sourceHash?: string;
-  },
-  currentSourceHash: string,
-): void {
-  if (
-    receipt.status !== "passed" ||
-    receipt.buildId !== candidate.buildId ||
-    receipt.sha256 !== candidate.sha256 ||
-    receipt.sourceHash !== currentSourceHash ||
-    candidate.sourceHash !== currentSourceHash
-  )
-    throw new Error(
-      "配備できません。現在のソースと候補ビルドに対する完全な検証結果が必要です。",
-    );
-  if (artifactHash(candidate.output) !== candidate.sha256)
-    throw new Error("検証後に成果物が変更されています。");
-}
-
-/** 配備済み成果物は退避し、検証したバイト列だけを昇格する。再ビルドしない。 */
+/** 配備済み成果物を退避して候補をコピーする。コピーの整合性を確認してから切り替える。 */
 export function promoteCandidate(
   root: string,
-  candidate: VerifiedCandidate,
+  candidate: CandidateBuild,
 ): string {
   const outputRoot = path.join(root, ".output");
   if (

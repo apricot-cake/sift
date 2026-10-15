@@ -2,7 +2,7 @@ import { describe, expect, test } from "vitest";
 import { deployLocalExtension } from "./deploy-extension.ts";
 
 describe("ローカル拡張機能の配備", () => {
-  test("検査済みビルド、Host登録、通知の順に実行する", () => {
+  test("ビルド・配備、Host登録、通知の順に実行する", () => {
     const events: string[] = [];
     const result = deployLocalExtension({
       assertContext: () => events.push("context"),

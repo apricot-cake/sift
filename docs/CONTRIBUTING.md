@@ -68,11 +68,16 @@ Windows では、ローカル配備用のビルドを自動で再読み込みで
 ```powershell
 npm run build:candidate
 npm run verify:candidate
-npm run deploy:local
 npm run browser:open
 ```
 
-候補は `.output\candidate\chrome-mv3` に作成します。各検証コマンドは専用プロファイルの Chrome を起動して候補を自動で読み込み、終了処理で Chrome を閉じます。手動確認用の開発用 Chrome が開いている場合は、先に閉じてください。全検証が成功した後、`deploy:local` が同じ成果物を `.output\chrome-mv3` へ配備します。検証後にソースや成果物が変更された場合は配備できません。
+候補は `.output\candidate\chrome-mv3` に作成します。各検証コマンドは専用プロファイルの Chrome を起動して候補を自動で読み込み、終了処理で Chrome を閉じます。手動確認用の開発用 Chrome が開いている場合は、先に閉じてください。
+
+日常版への配備は、main の主作業ツリーで次のコマンドを実行します。現在のソースをビルドし、`.output\chrome-mv3` へ配備します。
+
+```powershell
+npm run deploy:local
+```
 
 候補の読み込みだけを確認する場合は、`npm run browser:candidate` を実行できます。全検証の前にこのコマンドを実行する必要はありません。
 

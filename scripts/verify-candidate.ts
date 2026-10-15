@@ -12,8 +12,8 @@ import {
 import { artifactHash } from "./compatibility/artifact.ts";
 import { assertLiveCoverage } from "./compatibility/live-coverage.ts";
 import {
+  type CandidateBuild,
   sourceHash,
-  type VerifiedCandidate,
 } from "./compatibility/verification.ts";
 import {
   recordVerification,
@@ -22,7 +22,7 @@ import {
 
 const root = path.resolve(import.meta.dirname, "..");
 const receiptFile = path.join(root, ".output", "verified-candidate.json");
-let candidate: VerifiedCandidate | undefined;
+let candidate: CandidateBuild | undefined;
 recordVerification(
   () => {
     candidate = JSON.parse(

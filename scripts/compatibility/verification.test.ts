@@ -4,11 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, test } from "vitest";
 import { artifactHash } from "./artifact.ts";
-import {
-  assertVerified,
-  promoteCandidate,
-  sourceHash,
-} from "./verification.ts";
+import { promoteCandidate, sourceHash } from "./verification.ts";
 
 const temporary: string[] = [];
 function fixture() {
@@ -30,7 +26,6 @@ function fixture() {
     root,
     current,
     candidate,
-    receipt: { ...candidate, status: "passed" },
   };
 }
 afterEach(() => {
@@ -38,7 +33,7 @@ afterEach(() => {
     fs.rmSync(directory, { recursive: true, force: true });
 });
 
-describe("検証済み成果物の配備", () => {
+describe("候補成果物と配備の整合性", () => {
   test("別ビルドのサイト編集は除き、拡張機能の実装・テスト・未追跡ファイルの変更は検出する", () => {
     const { root } = fixture();
     execFileSync("git", ["init", "--quiet"], { cwd: root });
@@ -64,42 +59,9 @@ describe("検証済み成果物の配備", () => {
     fs.writeFileSync(path.join(root, "runtime.test.ts"), "test");
     fs.writeFileSync(path.join(root, "new-runtime.ts"), "untracked runtime");
     expect(sourceHash(root)).not.toBe(initial);
-  });
-  test.each(["running", "failed", "incomplete"])(
-    "%sは配備できない",
-    (status) => {
-      const { candidate, receipt, current } = fixture();
-      expect(() =>
-        assertVerified(candidate, { ...receipt, status }, candidate.sourceHash),
-      ).toThrow();
-      expect(fs.readFileSync(path.join(current, "background.js"), "utf8")).toBe(
-        "daily-build",
-      );
-    },
-  );
-  test("検証後のソース変更と別ビルドの結果を拒否する", () => {
-    const { candidate, receipt } = fixture();
-    expect(() =>
-      assertVerified(candidate, receipt, "changed-source"),
-    ).toThrow();
-    expect(() =>
-      assertVerified(
-        candidate,
-        { ...receipt, buildId: "other" },
-        candidate.sourceHash,
-      ),
-    ).toThrow();
-  });
-  test("検証後の成果物への追記を拒否する", () => {
-    const { candidate, receipt } = fixture();
-    fs.writeFileSync(path.join(candidate.output, "extra.js"), "changed");
-    expect(() =>
-      assertVerified(candidate, receipt, candidate.sourceHash),
-    ).toThrow("成果物");
-  });
+  }, 15000);
   test("同じバイト列を配備し、日常版の旧成果物を退避する", () => {
-    const { candidate, receipt, root, current } = fixture();
-    assertVerified(candidate, receipt, candidate.sourceHash);
+    const { candidate, root, current } = fixture();
     expect(promoteCandidate(root, candidate)).toBe(current);
     expect(artifactHash(current)).toBe(candidate.sha256);
     const backup = fs

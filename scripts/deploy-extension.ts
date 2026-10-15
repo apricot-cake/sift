@@ -1,4 +1,4 @@
-// 検証済みの候補を共有出力へ昇格し、最後に再読み込み通知を発行する。
+// 現在のソースをビルドして共有出力へ配備し、再読み込み通知を発行する。
 import { execSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
@@ -8,12 +8,8 @@ import {
   installReloadHost,
   publishBuildStamp,
 } from "../native-host/install.ts";
-import {
-  assertVerified,
-  promoteCandidate,
-  sourceHash,
-  type VerifiedCandidate,
-} from "./compatibility/verification.ts";
+import { promoteCandidate } from "./compatibility/verification.ts";
+import { prepareCandidate } from "./prepare-candidate.ts";
 
 const ROOT = path.resolve(import.meta.dirname, "..");
 
@@ -62,16 +58,7 @@ function main(): void {
   const deployed = deployLocalExtension({
     assertContext: () => assertWindowsUserContext("npm run deploy:local"),
     promote: () => {
-      const candidate: VerifiedCandidate = JSON.parse(
-        fs.readFileSync(path.join(ROOT, ".output", "candidate.json"), "utf8"),
-      );
-      const receipt = JSON.parse(
-        fs.readFileSync(
-          path.join(ROOT, ".output", "verified-candidate.json"),
-          "utf8",
-        ),
-      );
-      assertVerified(candidate, receipt, sourceHash(ROOT));
+      const candidate = prepareCandidate();
       return {
         buildId: candidate.buildId,
         output: promoteCandidate(ROOT, candidate),
@@ -80,7 +67,7 @@ function main(): void {
     installHost: () => installReloadHost(),
     publish: publishBuildStamp,
   });
-  console.log(`[sift] 検証済みの同一成果物を配備した: ${deployed.output}`);
+  console.log(`[sift] 現在のソースをビルドして配備した: ${deployed.output}`);
   console.log(
     `[sift] 自己リロード用の配備IDを発行した: ${deployed.buildId} (${deployed.stamp})`,
   );
