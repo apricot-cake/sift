@@ -14,6 +14,7 @@ import {
   type ClassifyState,
   classifyPost,
 } from "./filter-core.ts";
+import { hasRetainedPostBelowViewport } from "./layout-probe.ts";
 import { PageHealthTracker } from "./page-health.ts";
 import {
   defaults,
@@ -465,20 +466,20 @@ export function startContentRuntime(
         setCellState(update.cell, update.state, update.reason);
       }
     }
-    const hasMatchedPostBelowViewport = updates.some(
-      (update) =>
-        update.state === "matched" &&
-        update.cell.getBoundingClientRect().bottom > window.innerHeight + 4,
+    // 種別条件だけの場合や指標を読めない場合も、残した投稿を数える。
+    const hasRetainedPost = hasRetainedPostBelowViewport(
+      updates,
+      window.innerHeight,
     );
     // 一時的に全投稿を展開している間の座標では回数を戻さない。
-    if (hasMatchedPostBelowViewport && scrollTopBeforeLayoutProbe === null) {
+    if (hasRetainedPost && scrollTopBeforeLayoutProbe === null) {
       automaticLayoutProbeCount = 0;
     }
     if (
       filteringEnabled() &&
       adapter.needsLayoutProbeForPagination &&
       !adapter.hasReachedTimelineEnd?.(document) &&
-      !hasMatchedPostBelowViewport
+      !hasRetainedPost
     ) {
       startLayoutProbe();
     } else {

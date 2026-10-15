@@ -11,6 +11,7 @@ import {
   FILTER_CONTEXT_REQUEST,
   type FilterContextResponse,
 } from "../../utils/filter-context.ts";
+import { defaults } from "../../utils/settings.ts";
 import { TIMELINE_CONTROL } from "../../utils/timeline-controls.ts";
 
 const timelineMarkup = `
@@ -593,6 +594,81 @@ describe("タイムラインのフィルター", () => {
 
     runtime.dispose();
   });
+
+  it.each([
+    { label: "種別条件だけ", metric: "10 likes", minimumEnabled: false },
+    { label: "指標が取得不能", metric: null, minimumEnabled: true },
+  ])(
+    "Blueskyで$labelの表示投稿が画面下に残る間は条件変更後も追加取得しない",
+    async ({ metric, minimumEnabled }) => {
+      vi.useFakeTimers();
+      history.replaceState({}, "", "/profile/alice.test");
+      document.body.innerHTML = `
+        <div data-testid="feedItem-by-alice.test">
+          <a href="/profile/alice.test/post/retained"></a>
+          ${metric === null ? "" : `<button data-testid="likeBtn" aria-label="${metric}"></button>`}
+        </div>
+        <div data-testid="feedItem-by-bob.test">
+          <a href="/profile/bob.test/post/readable"></a>
+          <button data-testid="likeBtn" aria-label="0 likes"></button>
+        </div>
+      `;
+      const retained = document.querySelector<HTMLElement>(
+        '[data-testid="feedItem-by-alice.test"]',
+      );
+      if (!retained) throw new Error("表示対象の投稿がありません。");
+      vi.spyOn(retained, "getBoundingClientRect").mockReturnValue(
+        new DOMRect(0, window.innerHeight, 500, 100),
+      );
+      const scrollTo = vi
+        .spyOn(window, "scrollTo")
+        .mockImplementation(() => {});
+      const settings = {
+        ...defaults,
+        siteSettings: {
+          ...defaults.siteSettings,
+          bluesky: {
+            ...defaults.siteSettings.bluesky,
+            minReactionsEnabled: minimumEnabled,
+            hideReplies: true,
+            hideQuotes: false,
+            hideReposts: false,
+          },
+        },
+      };
+      await fakeBrowser.storage.sync.set({ settings });
+      const runtime = startContentRuntime(undefined, blueskyAdapter);
+      try {
+        await setFiltering(true);
+        // 条件変更のたびに上限が戻っても、自動取得を一度も開始しない。
+        for (const hideQuotes of [false, true, false, true]) {
+          await fakeBrowser.storage.sync.set({
+            settings: {
+              ...settings,
+              siteSettings: {
+                ...settings.siteSettings,
+                bluesky: { ...settings.siteSettings.bluesky, hideQuotes },
+              },
+            },
+          });
+          await vi.advanceTimersByTimeAsync(9_000);
+          expect(retained.dataset.siftFilterState).toBe("visible");
+          expect(retained.dataset.siftFilterReason).toBe(
+            minimumEnabled ? "indeterminate-metric" : "no-inclusion-filter",
+          );
+          expect((await getFilterContext()).filteringEnabled).toBe(true);
+          expect(scrollTo).not.toHaveBeenCalled();
+          expect(
+            document.documentElement.hasAttribute("data-sift-layout-probe"),
+          ).toBe(false);
+        }
+      } finally {
+        runtime.dispose();
+        vi.useRealTimers();
+        vi.restoreAllMocks();
+      }
+    },
+  );
 
   it("Blueskyで初期投稿が全件不一致でも次ページ判定を進める", async () => {
     history.replaceState({}, "", "/profile/alice.test");
