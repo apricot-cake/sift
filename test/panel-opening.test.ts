@@ -79,25 +79,34 @@ it("ローカルビルドIDはサイドパネルからの診断にだけ返す",
   const listener = api.runtime.onMessage.addListener.mock.calls[0]?.[0];
   const message = { type: "sift:get-local-build" };
   await expect(
-    listener(message, { url: "chrome-extension://test/sidepanel.html" }),
+    listener(message, {
+      url: "chrome-extension://test/sidepanel.html?tabId=7",
+    }),
   ).resolves.toEqual({ buildId: "running-build" });
   expect(
     listener(message, { url: "https://x.com/home", tab: { id: 7 } }),
   ).toBeUndefined();
   expect(
     listener(message, {
-      url: "chrome-extension://test/sidepanel.html",
+      url: "chrome-extension://test/sidepanel.html?tabId=7",
       tab: { id: 7 },
     }),
   ).toBeUndefined();
   vi.stubGlobal("__SIFT_LOCAL_DEPLOY__", false);
   expect(
-    listener(message, { url: "chrome-extension://test/sidepanel.html" }),
+    listener(message, {
+      url: "chrome-extension://test/sidepanel.html?tabId=7",
+    }),
   ).toBeUndefined();
 });
 
-it.each(["sidepanel.html", "/sidepanel.html"])(
-  "開いた通知のパス %s で対象タブを保存し最低値を初期化する",
+it.each([
+  "sidepanel.html",
+  "/sidepanel.html",
+  "sidepanel.html?tabId=7",
+  "/sidepanel.html?tabId=7",
+])(
+  "開いた通知のパス %s で対象タブを保存し復帰時の最低値は初期化しない",
   (path) => {
     api.sidePanel.onOpened.addListener.mock.calls[0]?.[0]({
       path,
@@ -110,7 +119,6 @@ it.each(["sidepanel.html", "/sidepanel.html"])(
     expect(api.runtime.sendMessage).toHaveBeenCalledWith({
       type: "sift:sidepanel-set-panel-tab",
       tabId: 7,
-      resetMinimum: true,
     });
   },
 );
@@ -144,11 +152,20 @@ it("対応サイトは開いてから注入する", async () => {
     url: "https://www.youtube.com/@Google/videos",
   });
   expect(api.sidePanel.open).toHaveBeenCalledWith({ tabId: 7 });
+  expect(api.sidePanel.setOptions).toHaveBeenCalledWith({
+    tabId: 7,
+    path: "sidepanel.html?tabId=7",
+    enabled: true,
+  });
   expect(api.scripting.executeScript).not.toHaveBeenCalled();
   await vi.waitFor(() =>
     expect(api.scripting.executeScript).toHaveBeenCalled(),
   );
-  expect(api.runtime.sendMessage).toHaveBeenCalled();
+  expect(api.runtime.sendMessage).toHaveBeenCalledWith({
+    type: "sift:sidepanel-set-panel-tab",
+    tabId: 7,
+    resetMinimum: true,
+  });
 });
 
 it("別サイトへ移動すると注入せずパネルを無効化する", async () => {
@@ -244,7 +261,7 @@ it("可視パネルから現在の許可済みタブへ再接続する", async (
   expect(
     await connect(
       { type: "sift:sidepanel-connect-tab", tabId: 7 },
-      { url: "chrome-extension://test/sidepanel.html" },
+      { url: "chrome-extension://test/sidepanel.html?tabId=7" },
     ),
   ).toBe(true);
   expect(api.scripting.executeScript).toHaveBeenCalledWith({
@@ -269,7 +286,7 @@ it("権限による注入失敗を再接続失敗として返す", async () => {
   expect(
     await connect(
       { type: "sift:sidepanel-connect-tab", tabId: 7 },
-      { url: "chrome-extension://test/sidepanel.html" },
+      { url: "chrome-extension://test/sidepanel.html?tabId=7" },
     ),
   ).toBe(false);
   expect(api.scripting.executeScript).not.toHaveBeenCalled();
@@ -277,7 +294,7 @@ it("権限による注入失敗を再接続失敗として返す", async () => {
 
 it.each([
   { url: "https://x.com/home", tab: { id: 7 } },
-  { url: "chrome-extension://test/sidepanel.html", tab: { id: 7 } },
+  { url: "chrome-extension://test/sidepanel.html?tabId=7", tab: { id: 7 } },
 ])("ページからの再接続要求は受け付けない: %j", async (sender) => {
   const connect = api.runtime.onMessage.addListener.mock.calls[0]?.[0];
   expect(
@@ -291,7 +308,7 @@ it("バックグラウンドのタブへ接続しない", async () => {
   expect(
     await connect(
       { type: "sift:sidepanel-connect-tab", tabId: 7 },
-      { url: "chrome-extension://test/sidepanel.html" },
+      { url: "chrome-extension://test/sidepanel.html?tabId=7" },
     ),
   ).toBe(false);
   expect(api.scripting.executeScript).not.toHaveBeenCalled();

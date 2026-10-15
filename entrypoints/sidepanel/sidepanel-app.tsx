@@ -42,10 +42,9 @@ import {
 } from "../../utils/settings.ts";
 import { settingsItem } from "../../utils/settings-storage.ts";
 import {
-  isSidePanelTabId,
   isSidePanelTabRequest,
   SIDE_PANEL_CONTROL,
-  SIDE_PANEL_TAB_STORAGE_KEY,
+  sidePanelTabIdFromUrl,
 } from "../../utils/sidepanel-controls.ts";
 import { TIMELINE_CONTROL } from "../../utils/timeline-controls.ts";
 import { Button } from "./components/ui/button.tsx";
@@ -83,7 +82,7 @@ export function SidepanelApp(): React.JSX.Element {
   } | null>(null);
   const connectionEpoch = useRef(0);
   const panelMounted = useRef(true);
-  const panelTabId = useRef<number | null>(null);
+  const panelTabId = useRef(sidePanelTabIdFromUrl(location.href));
   const panelInitialized = useRef(false);
   const initializedMinimums = useRef(new Set<SiteSettingsKey>());
   const [manualSites, setManualSites] = useState<
@@ -210,29 +209,10 @@ export function SidepanelApp(): React.JSX.Element {
           currentWindow: true,
         });
         if (!isCurrent()) return;
-        setKnownUnsupportedSite(isKnownUnsupportedSite(tab?.url));
-        if (panelTabId.current === null && tab?.id !== undefined) {
-          panelTabId.current = tab.id;
-        }
         if (panelTabId.current !== tab?.id) {
-          const previousPage = activePageRef.current;
-          if (previousPage !== null) {
-            void browser.tabs
-              .sendMessage(previousPage.tabId, {
-                type: TIMELINE_CONTROL.setFiltering,
-                enabled: false,
-              })
-              .catch(() => {});
-          }
-          activePageRef.current = null;
-          pageFilteringExpected.current = false;
-          setPageFilteringEnabled(false);
-          setActiveContext(null);
-          setActiveSite(null);
-          panelTabId.current = tab?.id ?? null;
-          panelInitialized.current = false;
-          connectionAttempt = null;
+          return;
         }
+        setKnownUnsupportedSite(isKnownUnsupportedSite(tab?.url));
         const panelTabMatches = panelTabId.current === tab?.id;
         let context: FilterContextResponse | null = null;
         if (tab?.id !== undefined) {
@@ -402,42 +382,21 @@ export function SidepanelApp(): React.JSX.Element {
       }
     };
     const handlePanelTab = (message: unknown): void => {
-      if (!isSidePanelTabRequest(message)) {
+      if (
+        !isSidePanelTabRequest(message) ||
+        message.tabId !== panelTabId.current
+      ) {
         return;
       }
       if (message.resetMinimum === true) {
         initializedMinimums.current.clear();
         setManualSites({});
       }
-      const previousPage = activePageRef.current;
-      if (previousPage !== null && previousPage.tabId !== message.tabId) {
-        void browser.tabs
-          .sendMessage(previousPage.tabId, {
-            type: TIMELINE_CONTROL.setFiltering,
-            enabled: false,
-          })
-          .catch(() => {});
-      }
-      if (panelTabId.current !== message.tabId) {
-        activePageRef.current = null;
-        pageFilteringExpected.current = false;
-        panelInitialized.current = false;
-      }
-      panelTabId.current = message.tabId;
       void refreshActiveHost(true);
     };
-    void browser.storage.session
-      .get(SIDE_PANEL_TAB_STORAGE_KEY)
-      .then((stored) => {
-        const tabId = stored[SIDE_PANEL_TAB_STORAGE_KEY];
-        if (refreshGeneration === 0 && !disposed && isSidePanelTabId(tabId)) {
-          panelTabId.current = tabId;
-        }
-      })
-      .catch(() => {})
-      .finally(() => {
-        if (refreshGeneration === 0) void refreshActiveHost(true);
-      });
+    void refreshActiveHost(true);
+    const handleVisibility = () => void refreshActiveHost(true);
+    document.addEventListener("visibilitychange", handleVisibility);
     const contextTimer = window.setInterval(() => {
       void refreshActiveHost();
     }, 750);
@@ -450,6 +409,7 @@ export function SidepanelApp(): React.JSX.Element {
       browser.tabs.onActivated.removeListener(handleTabActivated);
       browser.tabs.onUpdated.removeListener(handleTabUpdated);
       browser.runtime.onMessage.removeListener(handlePanelTab);
+      document.removeEventListener("visibilitychange", handleVisibility);
       window.clearInterval(contextTimer);
     };
   }, []);

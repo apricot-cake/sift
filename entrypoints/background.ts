@@ -12,6 +12,8 @@ import {
   SIDE_PANEL_TAB_STORAGE_KEY,
   sidePanelOrigin,
   sidePanelOriginKey,
+  sidePanelPath,
+  sidePanelTabIdFromUrl,
 } from "../utils/sidepanel-controls.ts";
 import { isSupportedSiteUrl } from "../utils/site-matches.ts";
 import { TIMELINE_CONTROL } from "../utils/timeline-controls.ts";
@@ -84,7 +86,7 @@ export default defineBackground(() => {
     });
     const configured = sidePanel?.setOptions({
       tabId: tab.id,
-      path: "sidepanel.html",
+      path: sidePanelPath(tab.id),
       enabled: true,
     });
     const panelOpening = sidePanel?.open({ tabId: tab.id });
@@ -97,11 +99,12 @@ export default defineBackground(() => {
       await readFilterContext(tab.id);
     }
     // 既存のパネルを開き直す場合は onOpened が発火しないことがある。
-    // 注入後にも接続先を通知し、前のタブに結び付いたままにしない。
+    // 注入後にも所有タブを通知し、開き直したパネルの接続を更新する。
     void browser.runtime
       .sendMessage({
         type: SIDE_PANEL_CONTROL.setPanelTab,
         tabId: tab.id,
+        resetMinimum: true,
       })
       .catch(() => {});
   }
@@ -174,20 +177,25 @@ export default defineBackground(() => {
   // パネルの復元やタブ切替は action を伴わない。既に許可された現在のタブなら
   // 接続を復旧する。新しいサイト権限は要求せず、拒否された場合はパネルで案内する。
   browser.runtime.onMessage.addListener((message, sender) => {
+    const owner = sender.url ? sidePanelTabIdFromUrl(sender.url) : null;
+    const panelSender =
+      owner !== null &&
+      sender.url ===
+        `${browser.runtime.getURL("/sidepanel.html")}?tabId=${owner}` &&
+      sender.tab === undefined;
     // ファイルの再取得ではなく、現在実行中のバックグラウンドがビルドIDを返す。
     // ローカル配備の診断専用。通常ページ・content scriptからは受け付けない。
     if (
       __SIFT_LOCAL_DEPLOY__ &&
       message?.type === "sift:get-local-build" &&
-      sender.url === browser.runtime.getURL("/sidepanel.html") &&
-      sender.tab === undefined
+      panelSender
     )
       return Promise.resolve({ buildId: __SIFT_BUILD_ID__ });
     if (
-      sender.url !== browser.runtime.getURL("/sidepanel.html") ||
-      sender.tab !== undefined ||
+      !panelSender ||
       message?.type !== SIDE_PANEL_CONTROL.connectTab ||
-      !isSidePanelTabId(message.tabId)
+      !isSidePanelTabId(message.tabId) ||
+      message.tabId !== owner
     )
       return;
     return (async () => {
@@ -212,10 +220,11 @@ export default defineBackground(() => {
   });
 
   sidePanel?.onOpened.addListener((panel) => {
-    // Chrome の開閉通知では先頭に / が付く場合がある。
+    // Chrome の通知パスは先頭の / やクエリの有無が異なる。所有者は通知のtabIdで判定する。
     if (
-      (panel.path === "sidepanel.html" || panel.path === "/sidepanel.html") &&
-      panel.tabId !== undefined
+      panel.tabId !== undefined &&
+      new URL(panel.path, browser.runtime.getURL("/sidepanel.html"))
+        .pathname === "/sidepanel.html"
     ) {
       void browser.storage.session.set({
         [SIDE_PANEL_TAB_STORAGE_KEY]: panel.tabId,
@@ -224,7 +233,6 @@ export default defineBackground(() => {
         .sendMessage({
           type: SIDE_PANEL_CONTROL.setPanelTab,
           tabId: panel.tabId,
-          resetMinimum: true,
         })
         .catch(() => {});
     }

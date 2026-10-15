@@ -42,7 +42,7 @@ describe("抽出の操作入口", () => {
       );
     }
   });
-  it("パネルの再表示でも最低値の選択を初期化する", () => {
+  it("アクションで開き直した場合は最低値の選択を初期化する", () => {
     const panel = readEntrypoint("entrypoints/sidepanel/sidepanel-app.tsx");
     const background = readEntrypoint("entrypoints/background.ts");
     expect(background).toContain("resetMinimum: true");
@@ -111,7 +111,7 @@ describe("抽出の操作入口", () => {
     expect(background).toContain("FILTER_CONTEXT_RETRY_COUNT");
     expect(background).toContain("sidePanel?.onOpened.addListener");
     expect(background).toContain("SIDE_PANEL_CONTROL.setPanelTab");
-    expect(background).toContain('path: "sidepanel.html"');
+    expect(background).toContain("path: sidePanelPath(tab.id)");
     expect(content).toContain("defineUnlistedScript");
     expect(background).not.toContain("openOptionsPage");
   });
@@ -177,7 +177,7 @@ describe("抽出の操作入口", () => {
     expect(mediaSetting).not.toContain("<Switch");
   });
 
-  it("サイドパネルは現在タブへ追従し、設定の操作入口を集約する", () => {
+  it("サイドパネルは所有タブに固定し、設定の操作入口を集約する", () => {
     const background = readEntrypoint("entrypoints/background.ts");
     const sidepanel = readEntrypoint("entrypoints/sidepanel/sidepanel-app.tsx");
 
@@ -189,8 +189,7 @@ describe("抽出の操作入口", () => {
     expect(sidepanel).toContain("browser.tabs.onActivated.addListener");
     expect(sidepanel).toContain("shouldEnableFiltering");
     expect(sidepanel).toContain("isSidePanelTabRequest(message)");
-    expect(sidepanel).toContain("SIDE_PANEL_TAB_STORAGE_KEY");
-    expect(sidepanel).toContain("browser.storage.session");
+    expect(sidepanel).toContain("sidePanelTabIdFromUrl");
     expect(background).toContain(
       "const savedTab = browser.storage.session.set",
     );
@@ -200,7 +199,7 @@ describe("抽出の操作入口", () => {
     expect(background).toContain(
       "await Promise.all([savedTab, configured, panelOpening])",
     );
-    expect(sidepanel).toContain("panelTabId.current = message.tabId");
+    expect(sidepanel).toContain("message.tabId !== panelTabId.current");
     expect(sidepanel).toContain("pageFilteringExpected.current");
     expect(sidepanel).not.toContain("browser.runtime.openOptionsPage");
     expect(sidepanel).not.toContain("manageAll");

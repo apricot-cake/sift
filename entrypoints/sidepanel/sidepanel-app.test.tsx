@@ -49,6 +49,7 @@ async function mount() {
   await flush();
 }
 beforeEach(() => {
+  history.replaceState(null, "", "/sidepanel.html?tabId=1");
   vi.useFakeTimers();
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   tab = { id: 1, url: "https://www.youtube.com/@a/videos" };
@@ -80,6 +81,37 @@ afterEach(async () => {
   vi.useRealTimers();
 });
 describe("接続先と非同期応答", () => {
+  it("別タブへ引き継がず、元のタブへ戻っても最低値を初期化し直さない", async () => {
+    await mount();
+    expect(writes).toHaveLength(1);
+    vi.mocked(fakeBrowser.tabs.sendMessage).mockClear();
+    tab = { id: 2, url: "https://x.com/example" };
+    await fakeBrowser.tabs.onActivated.trigger({ tabId: 2, windowId: 1 });
+    await act(async () => vi.advanceTimersByTimeAsync(1500));
+    expect(fakeBrowser.tabs.sendMessage).not.toHaveBeenCalledWith(2, {
+      type: FILTER_CONTEXT_REQUEST,
+    });
+    expect(container.querySelector("[data-period-group]")).not.toBeNull();
+    tab = { id: 1, url: "https://www.youtube.com/@a/videos" };
+    await fakeBrowser.tabs.onActivated.trigger({ tabId: 1, windowId: 1 });
+    await flush();
+    expect(writes).toHaveLength(1);
+    expect(fakeBrowser.tabs.sendMessage).toHaveBeenCalledWith(1, {
+      type: FILTER_CONTEXT_REQUEST,
+    });
+  });
+
+  it("別タブのパネル起動通知で接続先や最低値を変更しない", async () => {
+    await mount();
+    await fakeBrowser.runtime.onMessage.trigger(
+      { type: "sift:sidepanel-set-panel-tab", tabId: 2, resetMinimum: true },
+      {},
+      () => {},
+    );
+    await flush();
+    expect(writes).toHaveLength(1);
+    expect(container.querySelector("[data-period-group]")).not.toBeNull();
+  });
   it.each([
     ["youtube", "https://www.youtube.com/@Google/videos"],
     ["youtube", "https://www.youtube.com/@Google/streams"],
@@ -167,11 +199,10 @@ describe("接続先と非同期応答", () => {
     await flush();
     old.resolve(context("youtube"));
     await flush();
-    expect(writes).toHaveLength(1);
-    expect(writes[0]?.siteSettings.youtube).toEqual(
-      defaults.siteSettings.youtube,
-    );
-    expect(writes[0]?.siteSettings.x.minReactionsEnabled).toBe(false);
+    expect(writes).toHaveLength(0);
+    expect(fakeBrowser.tabs.sendMessage).not.toHaveBeenCalledWith(2, {
+      type: FILTER_CONTEXT_REQUEST,
+    });
     expect(fakeBrowser.tabs.sendMessage).not.toHaveBeenCalledWith(1, {
       type: TIMELINE_CONTROL.setFiltering,
       enabled: true,
@@ -198,10 +229,7 @@ describe("接続先と非同期応答", () => {
     await flush();
     oldSettings.resolve(defaults);
     await flush();
-    expect(writes).toHaveLength(1);
-    expect(writes[0]?.siteSettings.youtube).toEqual(
-      defaults.siteSettings.youtube,
-    );
+    expect(writes).toHaveLength(0);
   });
   it("古い接続失敗を別タブへの切替後に再接続しない", async () => {
     const old = deferred<FilterContextResponse | null>();

@@ -4,9 +4,25 @@ export const SIDE_PANEL_CONTROL = {
   setPanelTab: "sift:sidepanel-set-panel-tab",
 } as const;
 
-// パネルを開く通知は React の初期化より先に届くことがある。最後に開いたタブを
-// session storage にも置き、パネル自身が起動後に読み取れるようにする。
+// background が最後に開いたタブを記録する。各パネルの所有者はURLで確定する。
 export const SIDE_PANEL_TAB_STORAGE_KEY = "sift:sidepanel-tab-id";
+
+export const sidePanelPath = (tabId: number): string =>
+  `sidepanel.html?tabId=${tabId}`;
+
+export function sidePanelTabIdFromUrl(url: string): number | null {
+  try {
+    const parsed = new URL(url, "chrome-extension://sift/");
+    if (parsed.pathname !== "/sidepanel.html") return null;
+    if (parsed.searchParams.getAll("tabId").length !== 1) return null;
+    const value = parsed.searchParams.get("tabId");
+    if (value === null || !/^(0|[1-9]\d*)$/.test(value)) return null;
+    const tabId = Number(value);
+    return Number.isSafeInteger(tabId) ? tabId : null;
+  } catch {
+    return null;
+  }
+}
 
 export const sidePanelOriginKey = (tabId: number): string =>
   `sift:sidepanel-origin:${tabId}`;

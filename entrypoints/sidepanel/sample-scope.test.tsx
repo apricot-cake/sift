@@ -1,6 +1,6 @@
 import { act } from "react";
 import { createRoot } from "react-dom/client";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { fakeBrowser } from "wxt/testing/fake-browser";
 import {
   FILTER_CONTEXT_REQUEST,
@@ -9,6 +9,10 @@ import {
 import { defaults } from "../../utils/settings.ts";
 import { settingsItem } from "../../utils/settings-storage.ts";
 import { SidepanelApp } from "./sidepanel-app.tsx";
+
+beforeEach(() => {
+  history.replaceState(null, "", "/sidepanel.html?tabId=1");
+});
 
 afterEach(() => {
   vi.restoreAllMocks();

@@ -4,6 +4,7 @@ import {
   isSidePanelTabId,
   isSidePanelTabRequest,
   SIDE_PANEL_CONTROL,
+  sidePanelTabIdFromUrl,
 } from "./sidepanel-controls.ts";
 
 describe("サイドパネルの初期化要求", () => {
@@ -25,6 +26,20 @@ describe("サイドパネルの初期化要求", () => {
 });
 
 describe("サイドパネルを開くタブの通知", () => {
+  it("所有タブは正確なパネルURLの単一tabIdから取得する", () => {
+    expect(sidePanelTabIdFromUrl("sidepanel.html?tabId=7")).toBe(7);
+    expect(
+      sidePanelTabIdFromUrl("chrome-extension://test/sidepanel.html?tabId=0"),
+    ).toBe(0);
+    for (const url of [
+      "sidepanel.html",
+      "sidepanel.html?tabId=-1",
+      "sidepanel.html?tabId=1&tabId=2",
+      "other.html?tabId=7",
+      "sidepanel.html?tabId=1.5",
+    ])
+      expect(sidePanelTabIdFromUrl(url)).toBeNull();
+  });
   it("session storage から読むタブ IDも検証する", () => {
     expect(isSidePanelTabId(0)).toBe(true);
     expect(isSidePanelTabId(123)).toBe(true);
