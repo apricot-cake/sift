@@ -1,5 +1,3 @@
-<!-- markdownlint-disable MD025 -- 日本語版と英語版をそれぞれ独立した文書として記載する -->
-
 # sift プライバシーポリシー
 
 最終更新日: 2026年10月10日
@@ -33,39 +31,3 @@ sift によるデータの利用は、Chrome ウェブストアのユーザー�
 ## 問い合わせ
 
 このポリシーに関する問い合わせは、[GitHub Issues](https://github.com/apricot-cake/sift/issues) で受け付けます。
-
----
-
-# sift Privacy Policy
-
-Last updated: October 10, 2026
-
-sift is a Chrome extension that filters posts and videos displayed on supported websites according to conditions selected by the user.
-
-## Data handled by sift
-
-sift reads the information needed to filter posts and videos on supported websites, including like counts, publication time, content type, whether an item is a reply, quote post, or repost, and post identifiers. Processing takes place in a supported website tab where the user has activated sift. Filtering occurs entirely within the browser.
-
-sift reads the target tab's URL to identify supported pages and maintain its connection. It also stores the tab identifier and website origin (including the protocol and domain) for the browser session only. This connection information is not synchronized through Chrome. sift does not persist viewed post or video content or accumulate browsing history.
-
-sift reads the scroll position and interactions within the page to maintain the viewing position after filtering and continue loading items. It does not store or transmit an interaction history.
-
-Filtering preferences for each website are stored in Chrome sync storage. If Chrome sync is enabled, Chrome may synchronize these preferences between browsers signed in to the same account. The developer does not receive these preferences.
-
-## Bluesky support in older builds
-
-Older builds that identify Bluesky lists using the website's stored data use the current account identifier (DID) and selected feed. Parsing the entire stored data object may also read email addresses and authentication tokens. sift does not save this data in its own storage, use it for authentication, or transmit it externally. An upcoming update will identify lists from the page and remove this stored-data access.
-
-## Data transmission and sharing
-
-sift does not transmit information read from pages to the developer or to third-party servers. When Chrome sync is enabled, saved filtering preferences are sent off the device through Google's synchronization service. The developer does not receive this data. sift does not use analytics, advertising, or tracking, and does not sell data. Except for preference synchronization by Chrome, sift does not share data with third parties.
-
-sift's use of data complies with the Chrome Web Store User Data Policy, including the Limited Use requirements, and is limited to providing the user-facing filtering feature.
-
-## Changing preferences
-
-Saved filtering preferences can be returned to their defaults with “Reset all settings” on the settings page.
-
-## Contact
-
-Questions about this policy can be submitted through [GitHub Issues](https://github.com/apricot-cake/sift/issues).
