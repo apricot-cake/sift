@@ -2,7 +2,7 @@
 
 ## 公式サイト
 
-https://apricot-cake.com/sift
+<https://apricot-cake.com/sift>
 
 ## インストール
 
