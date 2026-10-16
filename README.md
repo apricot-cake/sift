@@ -1,8 +1,8 @@
-<!-- markdownlint-disable MD041 -- リポジトリ名はページ側に表示されるため、公式サイトから始める -->
+# sift
 
 ## 公式サイト
 
-[sift — 投稿と動画を、その場で絞り込む](https://apricot-cake.github.io/sift/)
+https://apricot-cake.com/sift
 
 ## インストール
 
@@ -11,10 +11,6 @@
 ## 環境構築からビルドまで
 
 [CONTRIBUTING.md](docs/CONTRIBUTING.md) を参照してください。
-
-## 公式サイト
-
-ページの開発・ビルド・GitHub Pagesへの公開設定は [website/README.md](website/README.md) を参照してください。
 
 ## 脆弱性報告
 
