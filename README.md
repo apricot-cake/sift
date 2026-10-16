@@ -2,7 +2,7 @@
 
 ## 公式サイト
 
-[sift — 投稿と動画を、その場で絞り込む](https://apricot-cake.github.io/sift/)
+https://apricot-cake.github.io/sift
 
 ## インストール
 
@@ -11,10 +11,6 @@
 ## 環境構築からビルドまで
 
 [CONTRIBUTING.md](docs/CONTRIBUTING.md) を参照してください。
-
-## プロダクトページ
-
-ページの開発・ビルド・GitHub Pagesへの公開設定は [website/README.md](website/README.md) を参照してください。
 
 ## 脆弱性報告
 
