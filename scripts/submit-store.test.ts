@@ -33,7 +33,7 @@ describe("Chrome ウェブストアへの審査提出", () => {
     expect(parseUploadOnly(undefined)).toBe(false);
     expect(parseUploadOnly("false")).toBe(false);
     expect(parseUploadOnly("true")).toBe(true);
-    for (const value of ["", "TRUE", "1", "tru", " false"]) {
+    for (const value of ["", "TRUE", "1", "yes", " false"]) {
       expect(() => parseUploadOnly(value)).toThrow("CWS_UPLOAD_ONLY");
     }
   });
