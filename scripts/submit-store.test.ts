@@ -1,6 +1,7 @@
 import { describe, expect, test, vi } from "vitest";
 import {
   compareVersions,
+  parseUploadOnly,
   type Submission,
   submitStore,
 } from "./submit-store.ts";
@@ -28,6 +29,55 @@ function responses(...bodies: unknown[]) {
 }
 
 describe("Chrome ウェブストアへの審査提出", () => {
+  test("アップロード専用の指定は未指定・true・false だけを受け付ける", () => {
+    expect(parseUploadOnly(undefined)).toBe(false);
+    expect(parseUploadOnly("false")).toBe(false);
+    expect(parseUploadOnly("true")).toBe(true);
+    for (const value of ["", "TRUE", "1", "tru", " false"]) {
+      expect(() => parseUploadOnly(value)).toThrow("CWS_UPLOAD_ONLY");
+    }
+  });
+
+  test("アップロード専用では成功後も publish を呼ばない", async () => {
+    const fetchMock = responses(
+      status,
+      { uploadState: "SUCCEEDED", crxVersion: "0.1.6" },
+      status,
+    );
+    expect(
+      await submitStore(
+        { ...submission, uploadOnly: true },
+        { fetch: fetchMock },
+      ),
+    ).toBe("UPLOADED");
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(
+      fetchMock.mock.calls.some(([url]) => String(url).endsWith(":publish")),
+    ).toBe(false);
+  });
+
+  test("アップロード専用でも非同期処理の完了を待つ", async () => {
+    const fetchMock = responses(
+      status,
+      { uploadState: "IN_PROGRESS" },
+      { ...status, lastAsyncUploadState: "IN_PROGRESS" },
+      { ...status, lastAsyncUploadState: "SUCCEEDED" },
+      status,
+    );
+    const sleep = vi.fn().mockResolvedValue(undefined);
+    expect(
+      await submitStore(
+        { ...submission, uploadOnly: true },
+        { fetch: fetchMock, sleep },
+      ),
+    ).toBe("UPLOADED");
+    expect(sleep).toHaveBeenCalledTimes(2);
+    expect(fetchMock).toHaveBeenCalledTimes(5);
+    expect(
+      fetchMock.mock.calls.some(([url]) => String(url).endsWith(":publish")),
+    ).toBe(false);
+  });
+
   test("パスに使えない識別子は API を呼ぶ前に拒否する", async () => {
     for (const invalid of [
       { publisherId: "../another" },
@@ -81,13 +131,16 @@ describe("Chrome ウェブストアへの審査提出", () => {
     },
   );
 
-  test("アップロード失敗では publish を呼ばない", async () => {
-    const fetchMock = responses(status, { uploadState: "FAILED" });
-    await expect(submitStore(submission, { fetch: fetchMock })).rejects.toThrow(
-      "審査提出は実行していません",
-    );
-    expect(fetchMock).toHaveBeenCalledTimes(2);
-  });
+  test.each([false, true])(
+    "アップロード失敗では publish を呼ばない（uploadOnly: %s）",
+    async (uploadOnly) => {
+      const fetchMock = responses(status, { uploadState: "FAILED" });
+      await expect(
+        submitStore({ ...submission, uploadOnly }, { fetch: fetchMock }),
+      ).rejects.toThrow("審査提出は実行していません");
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+    },
+  );
 
   test("非同期アップロードの完了を待ち、承認後の自動公開を指定する", async () => {
     const fetchMock = responses(
@@ -124,16 +177,19 @@ describe("Chrome ウェブストアへの審査提出", () => {
     ).toBe(false);
   });
 
-  test("ZIP のバージョン不一致では publish しない", async () => {
-    const fetchMock = responses(status, {
-      uploadState: "SUCCEEDED",
-      crxVersion: "0.1.7",
-    });
-    await expect(submitStore(submission, { fetch: fetchMock })).rejects.toThrow(
-      "一致しません",
-    );
-    expect(fetchMock).toHaveBeenCalledTimes(2);
-  });
+  test.each([false, true])(
+    "ZIP のバージョン不一致では publish しない（uploadOnly: %s）",
+    async (uploadOnly) => {
+      const fetchMock = responses(status, {
+        uploadState: "SUCCEEDED",
+        crxVersion: "0.1.7",
+      });
+      await expect(
+        submitStore({ ...submission, uploadOnly }, { fetch: fetchMock }),
+      ).rejects.toThrow("一致しません");
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+    },
+  );
 
   test("publish の拒否を成功扱いしない", async () => {
     const fetchMock = responses(
@@ -159,17 +215,20 @@ describe("Chrome ウェブストアへの審査提出", () => {
     );
   });
 
-  test("アップロード中に別途提出された場合は publish しない", async () => {
-    const fetchMock = responses(
-      status,
-      { uploadState: "SUCCEEDED", crxVersion: "0.1.6" },
-      { ...status, submittedItemRevisionStatus: { state: "PENDING_REVIEW" } },
-    );
-    await expect(submitStore(submission, { fetch: fetchMock })).rejects.toThrow(
-      "提出済み",
-    );
-    expect(fetchMock).toHaveBeenCalledTimes(3);
-  });
+  test.each([false, true])(
+    "アップロード中に別途提出された場合は publish しない（uploadOnly: %s）",
+    async (uploadOnly) => {
+      const fetchMock = responses(
+        status,
+        { uploadState: "SUCCEEDED", crxVersion: "0.1.6" },
+        { ...status, submittedItemRevisionStatus: { state: "PENDING_REVIEW" } },
+      );
+      await expect(
+        submitStore({ ...submission, uploadOnly }, { fetch: fetchMock }),
+      ).rejects.toThrow("提出済み");
+      expect(fetchMock).toHaveBeenCalledTimes(3);
+    },
+  );
 
   test("publish の通信失敗は再送せず、秘密情報をログへ出さない", async () => {
     const fetchMock = responses(

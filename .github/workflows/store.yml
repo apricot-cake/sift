@@ -11,6 +11,10 @@ on:
         description: 接続確認だけを行う（アップロード・審査提出なし）
         type: boolean
         default: false
+      upload_only:
+        description: ZIP をアップロードするだけ（権限理由の確認用・審査提出なし）
+        type: boolean
+        default: false
   release:
     types: [published]
 
@@ -45,7 +49,13 @@ jobs:
         id: version
         env:
           REQUESTED_VERSION: ${{ inputs.version }}
+          CHECK_ONLY: ${{ inputs.check_only }}
+          UPLOAD_ONLY: ${{ inputs.upload_only }}
         run: |
+          if [ "$CHECK_ONLY" = true ] && [ "$UPLOAD_ONLY" = true ]; then
+            echo "::error::check_only と upload_only は同時に指定できません。"
+            exit 1
+          fi
           git merge-base --is-ancestor HEAD origin/main
           version=$(node -p 'JSON.parse(require("node:fs").readFileSync("package.json", "utf8")).version')
           if [ "$GITHUB_EVENT_NAME" = release ]; then
@@ -151,7 +161,7 @@ jobs:
           console.log(`ストアへの接続を確認しました。公開版の状態: ${status.publishedItemRevisionStatus.state}`);
           JS
 
-      - name: アップロードして審査へ提出する
+      - name: ZIP をアップロードする（通常モードでは審査へ提出する）
         if: github.event_name != 'workflow_dispatch' || !inputs.check_only
         env:
           CWS_ACCESS_TOKEN: ${{ steps.auth.outputs.access_token }}
@@ -159,4 +169,5 @@ jobs:
           CWS_EXTENSION_ID: ${{ vars.CWS_EXTENSION_ID }}
           CWS_ZIP_PATH: store-package/extension.zip
           CWS_VERSION: ${{ needs.package.outputs.version }}
+          CWS_UPLOAD_ONLY: ${{ inputs.upload_only || false }}
         run: node scripts/submit-store.ts

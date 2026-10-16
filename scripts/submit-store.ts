@@ -21,7 +21,14 @@ export type Submission = {
   accessToken: string;
   version: string;
   zip: Uint8Array<ArrayBuffer>;
+  uploadOnly?: boolean;
 };
+
+export function parseUploadOnly(value: string | undefined): boolean {
+  if (value === undefined || value === "false") return false;
+  if (value === "true") return true;
+  throw new Error("CWS_UPLOAD_ONLY は true または false で指定してください。");
+}
 
 function versionParts(version: string): number[] {
   if (!/^(0|[1-9]\d*)(\.(0|[1-9]\d*)){0,3}$/.test(version)) {
@@ -85,7 +92,7 @@ export async function submitStore(
     fetch?: typeof fetch;
     sleep?: (milliseconds: number) => Promise<unknown>;
   } = {},
-): Promise<"PENDING_REVIEW" | "PUBLISHED"> {
+): Promise<"UPLOADED" | "PENDING_REVIEW" | "PUBLISHED"> {
   const { publisherId, extensionId, accessToken, version, zip } = submission;
   if (!/^[A-Za-z0-9_-]+$/.test(publisherId)) {
     throw new Error("CWS_PUBLISHER_ID が不正です。");
@@ -167,6 +174,7 @@ export async function submitStore(
   }
   // アップロード中にダッシュボードから提出された場合も上書きしない。
   checkStatus(await fetchStatus(), version);
+  if (submission.uploadOnly) return "UPLOADED";
   const published = (await request(`${base}/v2/${name}:publish`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -194,17 +202,21 @@ if (
   path.resolve(process.argv[1]) === path.resolve(fileURLToPath(import.meta.url))
 ) {
   try {
+    const uploadOnly = parseUploadOnly(process.env.CWS_UPLOAD_ONLY);
     const state = await submitStore({
       publisherId: requiredEnvironment("CWS_PUBLISHER_ID"),
       extensionId: requiredEnvironment("CWS_EXTENSION_ID"),
       accessToken: requiredEnvironment("CWS_ACCESS_TOKEN"),
       version: requiredEnvironment("CWS_VERSION"),
       zip: await readFile(requiredEnvironment("CWS_ZIP_PATH")),
+      uploadOnly,
     });
     console.log(
-      state === "PUBLISHED"
-        ? "Chrome ウェブストア: 公開済みです。"
-        : "Chrome ウェブストア: 審査提出済みです。審査承認・公開完了ではありません。承認後は自動公開されます。",
+      state === "UPLOADED"
+        ? "Chrome ウェブストア: ZIP のアップロードが完了しました。審査提出は実行していません。"
+        : state === "PUBLISHED"
+          ? "Chrome ウェブストア: 公開済みです。"
+          : "Chrome ウェブストア: 審査提出済みです。審査承認・公開完了ではありません。承認後は自動公開されます。",
     );
   } catch (error) {
     console.error(
