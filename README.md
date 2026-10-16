@@ -12,7 +12,7 @@
 
 [CONTRIBUTING.md](docs/CONTRIBUTING.md) を参照してください。
 
-## プロダクトページ
+## 公式サイト
 
 ページの開発・ビルド・GitHub Pagesへの公開設定は [website/README.md](website/README.md) を参照してください。
 
