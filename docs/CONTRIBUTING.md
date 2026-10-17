@@ -6,10 +6,10 @@
 
 Node.js 24.12 以降が必要です。使用するバージョンは `.node-version` と `package.json` に記載しています。
 
-依存関係をインストールします。
+pnpm 12.11.2 を使用します。未導入の場合は、[公式のインストール手順](https://pnpm.io/installation)に従って `npx get-pnpm` を実行してください。バージョンはルートの `package.json` の `packageManager` で固定しています。リポジトリのルートで、拡張機能と `website/` の依存関係をまとめてインストールします。
 
 ```powershell
-npm ci
+pnpm install --frozen-lockfile
 ```
 
 `scripts/` の TypeScript は、Node.js の型除去機能を使って直接実行します。
@@ -25,7 +25,7 @@ cargo install typos-cli --version 1.49.0 --locked
 一通りの変更が終わったら、次のコマンドを実行します。
 
 ```powershell
-npm run check
+pnpm run check
 ```
 
 このコマンドは Biome、markdownlint、typos、TypeScript、Vitest を順番に実行します。
@@ -33,17 +33,17 @@ npm run check
 個別に実行する場合は、次のコマンドを使います。
 
 ```powershell
-npm run lint
-npm run lint:code
-npm run lint:markdown
-npm run lint:typos
-npm run typecheck
-npm run test
+pnpm run lint
+pnpm run lint:code
+pnpm run lint:markdown
+pnpm run lint:typos
+pnpm run typecheck
+pnpm run test
 ```
 
-Biome で自動修正する場合は `npm run lint:fix` を実行します。
+Biome で自動修正する場合は `pnpm run lint:fix` を実行します。
 
-Markdown の自動修正には `npm run lint:markdown:fix` を使います。設定は `.markdownlint-cli2.jsonc` にあり、日本語の段落を機械的に改行しないため、行長制限を無効にしています。文書固有の例外は、その文書のコメントに理由を記載します。
+Markdown の自動修正には `pnpm run lint:markdown:fix` を使います。設定は `.markdownlint-cli2.jsonc` にあり、日本語の段落を機械的に改行しないため、行長制限を無効にしています。文書固有の例外は、その文書のコメントに理由を記載します。
 
 typos の設定は `_typos.toml` にあります。生成物・依存ファイルを除外し、誤検知は識別子や単語単位で許可します。検査の対象となる文章やコードを、警告を消す目的で丸ごと除外しないでください。
 
@@ -54,21 +54,21 @@ typos の設定は `_typos.toml` にあります。生成物・依存ファイ�
 次のコマンドで本番ビルドを作成します。
 
 ```powershell
-npm run build
+pnpm run build
 ```
 
 出力先は `.output\store\chrome-mv3` です。Chrome の拡張機能管理画面でデベロッパーモードを有効にし、このフォルダーを「パッケージ化されていない拡張機能」として読み込みます。
 
-コードを変更した後は、もう一度 `npm run build` を実行し、拡張機能管理画面で再読み込みします。
+コードを変更した後は、もう一度 `pnpm run build` を実行し、拡張機能管理画面で再読み込みします。
 
 ### 自動再読み込みを使う
 
 Windows では、ローカル配備用のビルドを自動で再読み込みできます。この機能は任意です。
 
 ```powershell
-npm run build:candidate
-npm run verify:candidate
-npm run browser:open
+pnpm run build:candidate
+pnpm run verify:candidate
+pnpm run browser:open
 ```
 
 候補は `.output\candidate\chrome-mv3` に作成します。各検証コマンドは専用プロファイルの Chrome を起動して候補を自動で読み込み、終了処理で Chrome を閉じます。手動確認用の開発用 Chrome が開いている場合は、先に閉じてください。
@@ -76,10 +76,10 @@ npm run browser:open
 日常版への配備は、main の主作業ツリーで次のコマンドを実行します。現在のソースをビルドし、`.output\chrome-mv3` へ配備します。
 
 ```powershell
-npm run deploy:local
+pnpm run deploy:local
 ```
 
-候補の読み込みだけを確認する場合は、`npm run browser:candidate` を実行できます。全検証の前にこのコマンドを実行する必要はありません。
+候補の読み込みだけを確認する場合は、`pnpm run browser:candidate` を実行できます。全検証の前にこのコマンドを実行する必要はありません。
 
 配備時に再読み込み専用の[ネイティブメッセージングホスト](https://developer.chrome.com/docs/extensions/develop/concepts/native-messaging)を現在の Windows ユーザーへ登録します。サイドパネルが開いていれば、配備後に拡張機能を再読み込みします。閉じている場合は、次に開いたときに新しいビルドを読み込みます。
 
@@ -88,7 +88,7 @@ npm run deploy:local
 手動確認には、次のコマンドで専用の Chrome プロファイルを開きます。
 
 ```powershell
-npm run browser:open
+pnpm run browser:open
 ```
 
 `browser:open` は Puppeteer の pipe 接続で Chrome を起動し、候補を読み込みます。事前に `build:candidate` を実行してください。コマンドが終了した後も Chrome は開いたままになります。候補を読み込むため、バックグラウンドの保持プロセスが pipe 接続を維持します。Chrome のウィンドウを閉じると、保持プロセスも終了します。
@@ -100,7 +100,7 @@ npm run browser:open
 次のコマンドで開発プロファイルと pipe 接続の設定を表示できます。このコマンドは Chrome を起動せず、起動状況も取得しません。
 
 ```powershell
-npm run browser:status
+pnpm run browser:status
 ```
 
 自動検証と手動起動は、専用プロファイルと Puppeteer の `pipe: true` を使います。TCP の CDP ポートは開きません。この接続方法は [Chrome の Puppeteer による拡張機能テスト](https://developer.chrome.com/docs/extensions/how-to/test/puppeteer)で紹介されています。
@@ -110,7 +110,7 @@ npm run browser:status
 次のコマンドで Chrome ウェブストア提出用の ZIP を作成します。
 
 ```powershell
-npm run package:store
+pnpm run package:store
 ```
 
 出力先は `.output\store` です。提出用ビルドには、ネイティブメッセージング権限や自動再読み込み処理を含めません。マニフェスト、権限、ロケール、`activeTab` で注入するスクリプトも生成後に検査します。

@@ -56,7 +56,7 @@ function main(): void {
   }
 
   const deployed = deployLocalExtension({
-    assertContext: () => assertWindowsUserContext("npm run deploy:local"),
+    assertContext: () => assertWindowsUserContext("pnpm run deploy:local"),
     promote: () => {
       const candidate = prepareCandidate();
       return {

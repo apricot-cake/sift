@@ -10,7 +10,7 @@
 // @wxt-dev/i18n の prepare:types フックで、それが走るのは
 // generateWxtDir()＝findEntrypoints() の後（wxt/dist/core/prepare.mjs）。
 //
-// 結果、`.wxt/` が空の状態（`npm ci` 直後・CI・新規clone）では `wxt prepare`
+// 結果、`.wxt/` が空の状態（`pnpm install --frozen-lockfile` 直後・CI・新規clone）では `wxt prepare`
 // 自身が「Cannot find module '#i18n'」で毎回落ちる（2026-08-09 に確認・
 // wxt 0.21.3 + @wxt-dev/i18n 0.2.7・vite 8.2.0 の組み合わせ。手元で1度でも
 // 通した後の `.wxt/` が残っていると再現しない＝気付きにくい）。entrypoint の

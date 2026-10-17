@@ -4,20 +4,20 @@ AstroとCSSで構築した静的サイトです。操作デモの再生には小
 
 ## 開発
 
-Node.js 24.12.0 以上を使用します。拡張機能とは依存とビルドを分けています。
+Node.js 24.12.0 以上を使用します。pnpm 12.11.2 を使用します。拡張機能と pnpm workspace を共有し、ビルドは分けています。
 
 ```sh
+pnpm install --frozen-lockfile
 cd website
-npm ci
-npm run dev
+pnpm run dev
 ```
 
 開発サーバーで表示するパスは `/sift/` です。
 `/sift/alternative/` でもメインページと同じデザインを表示します。
 
 ```sh
-npm run check
-npm run build
+pnpm run check
+pnpm run build
 ```
 
 `check` はAstroとTypeScriptの診断を実行します。`build` は公開用ファイルを `dist/` に生成し、素材パス、ページ内リンク、GitHubボタンのスタイルを検査します。

@@ -1,5 +1,5 @@
 [files]
-extend-exclude = [".git/", "package-lock.json", "node_modules/", ".output/", ".wxt/", "test-results/"]
+extend-exclude = [".git/", "pnpm-lock.yaml", "node_modules/", ".output/", ".wxt/", "test-results/"]
 ignore-hidden = false
 
 [default.extend-identifiers]

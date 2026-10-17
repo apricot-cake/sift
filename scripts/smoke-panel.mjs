@@ -5,7 +5,7 @@ import { isOwnedPanelEvent, isOwnedPanelUrl } from "./panel-target.ts";
 const [url, ...rest] = process.argv.slice(2);
 if (url === "--help") {
   console.log(
-    "使い方: npm run smoke:panel -- <ページの完全URL>\n同じURLの既存タブが1つあれば再利用し、なければ検証用タブを作ってページを読み込みます。2つ以上あれば失敗します。準備起動→閉じる→開く→閉じるを検証し、作成したタブだけを閉じて設定を復元します。結果はJSON、失敗時は終了コード1です。",
+    "使い方: pnpm run smoke:panel <ページの完全URL>\n同じURLの既存タブが1つあれば再利用し、なければ検証用タブを作ってページを読み込みます。2つ以上あれば失敗します。準備起動→閉じる→開く→閉じるを検証し、作成したタブだけを閉じて設定を復元します。結果はJSON、失敗時は終了コード1です。",
   );
   process.exit(0);
 }

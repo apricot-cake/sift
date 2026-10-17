@@ -9,7 +9,7 @@ const loadGuard = new LiveLoadGuard();
 
 if (process.argv.includes("--help")) {
   console.log(
-    "使い方: npm run smoke:connection\n開発用Chromeで別サイト移動時の自動閉鎖、再接続、同一サイトの移動・再読込、タブごとのパネル独立性を検証します。作成したタブを閉じ、設定を復元します。結果: test-results/connection-smoke.json。失敗時は終了コード1。",
+    "使い方: pnpm run smoke:connection\n開発用Chromeで別サイト移動時の自動閉鎖、再接続、同一サイトの移動・再読込、タブごとのパネル独立性を検証します。作成したタブを閉じ、設定を復元します。結果: test-results/connection-smoke.json。失敗時は終了コード1。",
   );
   process.exit(0);
 }

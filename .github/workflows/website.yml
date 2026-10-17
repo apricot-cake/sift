@@ -7,11 +7,17 @@ on:
       - website/**
       - .github/workflows/website.yml
       - .node-version
+      - package.json
+      - pnpm-workspace.yaml
+      - pnpm-lock.yaml
   pull_request:
     paths:
       - website/**
       - .github/workflows/website.yml
       - .node-version
+      - package.json
+      - pnpm-workspace.yaml
+      - pnpm-lock.yaml
   workflow_dispatch:
 
 concurrency:
@@ -36,14 +42,15 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      - uses: pnpm/setup@c9883cc79df532ad1a7b81bf9ab944ceb090d65c # v2.0.0
         with:
           node-version-file: .node-version
-          cache: npm
-          cache-dependency-path: website/package-lock.json
-      - run: npm ci
-      - run: npm run check
-      - run: npm run build
+          cache: true
+          install: false
+      - run: pnpm install --frozen-lockfile
+        working-directory: .
+      - run: pnpm run check
+      - run: pnpm run build
       - name: Pages の設定を確認
         if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
         uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6

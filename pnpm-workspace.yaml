@@ -1,0 +1,13 @@
+packages:
+  - website
+
+# 依存を追加するときも完全なバージョンを記録する。
+saveExact: true
+
+overrides:
+  markdownlint-cli2>smol-toml: 1.9.0
+  micromark-extension-math>katex: 0.18.2
+
+allowBuilds:
+  esbuild: true
+  fsevents: false

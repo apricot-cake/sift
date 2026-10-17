@@ -40,14 +40,20 @@ recordVerification(
       throw new Error("現在のソースで候補をビルドし直してください。");
     if (process.argv.length > 2)
       throw new Error("全検証では絞り込みや基準更新の引数を指定できません。");
-    const npm = process.env.npm_execpath;
-    if (!npm) throw new Error("npm run verify:candidate で実行してください。");
+    const packageManager = process.env.npm_execpath;
+    if (!packageManager)
+      throw new Error("pnpm run verify:candidate で実行してください。");
     runVerificationTasks((task) => {
       try {
-        execFileSync(process.execPath, [npm, "run", task], {
-          cwd: root,
-          stdio: "inherit",
-        });
+        const standalone = !/\.[cm]?js$/i.test(packageManager);
+        execFileSync(
+          standalone ? packageManager : process.execPath,
+          standalone ? ["run", task] : [packageManager, "run", task],
+          {
+            cwd: root,
+            stdio: "inherit",
+          },
+        );
       } finally {
         const loadFile = path.join(root, "test-results", "live-load.json");
         if (task !== "check" && fs.existsSync(loadFile))

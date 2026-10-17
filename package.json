@@ -18,7 +18,7 @@
     "verify:candidate": "node scripts/verify-candidate.ts",
     "package:store": "node scripts/build-extension.ts store zip",
     "deploy:local": "node scripts/deploy-extension.ts",
-    "lint": "npm run lint:code && npm run lint:markdown && npm run lint:typos",
+    "lint": "pnpm run lint:code && pnpm run lint:markdown && pnpm run lint:typos",
     "lint:code": "biome ci .",
     "lint:markdown": "markdownlint-cli2",
     "lint:markdown:fix": "markdownlint-cli2 --fix",
@@ -26,7 +26,7 @@
     "lint:fix": "biome check --write .",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "check": "npm run lint && npm run typecheck && npm run test",
+    "check": "pnpm run lint && pnpm run typecheck && pnpm run test",
     "postinstall": "node scripts/bootstrap-i18n-types.ts && wxt prepare"
   },
   "dependencies": {
@@ -59,12 +59,5 @@
     "vitest": "5.0.3",
     "wxt": "0.21.4"
   },
-  "overrides": {
-    "markdownlint-cli2": {
-      "smol-toml": "1.9.0"
-    },
-    "micromark-extension-math": {
-      "katex": "0.18.2"
-    }
-  }
+  "packageManager": "pnpm@12.11.2"
 }
