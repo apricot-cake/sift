@@ -78,14 +78,19 @@ beforeEach(async () => {
   vi.stubGlobal("__SIFT_LOCAL_DEPLOY__", false);
   const background = await import("../entrypoints/background.ts");
   background.default.main();
+  api.sidePanel.setOptions.mockClear();
 });
 
-it("旧版で保存された自動開閉を起動時に解除する", () => {
-  expect(api.sidePanel.setPanelBehavior).toHaveBeenCalledExactlyOnceWith({
+it("旧版の自動開閉と共通パネルをworker起動時に無効化する", async () => {
+  const background = await import("../entrypoints/background.ts");
+  background.default.main();
+  expect(api.sidePanel.setPanelBehavior).toHaveBeenCalledWith({
     openPanelOnActionClick: false,
   });
   // onInstalled を待たず、worker の起動でも旧設定を移行する。
-  expect(api.sidePanel.setOptions).not.toHaveBeenCalled();
+  expect(api.sidePanel.setOptions).toHaveBeenCalledExactlyOnceWith({
+    enabled: false,
+  });
 });
 
 function trackedPage(url = "https://x.com/NASA") {

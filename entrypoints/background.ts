@@ -73,13 +73,10 @@ export default defineBackground(() => {
   // 実行されない。更新・再読み込みのいずれでも現在の起動方式に揃える。
   void sidePanel?.setPanelBehavior({ openPanelOnActionClick: false });
 
-  // default_path は WXT が manifest に生成する。パネルはユーザーが action を
-  // 実行したタブで開き、対象外のサイト・ページはパネル内で案内する。worker の
-  // 起動ごとに無効化すると、action 後に worker が再起動しただけで開いたパネルが
-  // 無効になるため、初回インストールまたは更新時だけ既定値を設定する。
-  browser.runtime.onInstalled.addListener(() => {
-    void sidePanel?.setOptions({ enabled: false });
-  });
+  // default_path は WXT が manifest に生成する。共通パネルの設定が残ると、
+  // 所有タブへの復帰後に未開封の別タブでも表示されるため、worker 起動時に無効化する。
+  // tabId を省略した設定は既定値だけを変え、開封済みのタブ固有パネルは維持する。
+  void sidePanel?.setOptions({ enabled: false });
 
   async function openPanelForActiveTab(tab: Browser.tabs.Tab): Promise<void> {
     if (tab.id === undefined) {

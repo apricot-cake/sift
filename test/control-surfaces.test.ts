@@ -103,7 +103,7 @@ describe("抽出の操作入口", () => {
       actionHandler.indexOf("SIDE_PANEL_CONTROL.setPanelTab"),
     ).toBeGreaterThan(actionHandler.indexOf("await readFilterContext(tab.id)"));
     expect(background).toContain("sidePanel?.setOptions({ enabled: false })");
-    expect(background).toContain("browser.runtime.onInstalled.addListener");
+    expect(background).not.toContain("browser.runtime.onInstalled.addListener");
     expect(background).toContain("isSupportedSiteUrl(tab.url)");
     expect(background).toContain("browser.scripting.executeScript");
     expect(background).toContain("FILTER_CONTEXT_REQUEST");
