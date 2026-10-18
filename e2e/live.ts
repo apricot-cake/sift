@@ -16,6 +16,19 @@ import { isOwnedPanelEvent, isOwnedPanelUrl } from "../scripts/panel-target.ts";
 import type { FilterContextResponse } from "../utils/filter-context.ts";
 import { evidence } from "./browser-queries.ts";
 
+// 関数本体は拡張機能のrendererで評価される。Node側にはグローバルを追加しない。
+declare const chrome: typeof import("wxt/browser").browser;
+type PanelEvent = { tabId?: number; path: string };
+type PanelState = {
+  done: boolean;
+  opened: PanelEvent[];
+  closed: PanelEvent[];
+  listener: (event: PanelEvent) => void;
+  openListener: (event: PanelEvent) => void;
+  closeListener: (event: PanelEvent) => void;
+};
+type PanelGlobals = typeof globalThis & Record<string, PanelState | undefined>;
+
 export const extensionId = "bohbpocokkfioejlabmeaimpkpmablkm";
 let panelOperation = 0;
 const observedPanelGrantPages = new WeakSet<Page>();
@@ -95,11 +108,13 @@ export async function finishLive(session: LiveSession) {
       session.casePage = undefined;
     }
     const settings = session.settings as Record<string, unknown>;
-    const restore = Object.hasOwn(settings, "settings")
-      ? `chrome.storage.sync.set(${JSON.stringify(settings)})`
-      : "chrome.storage.sync.remove('settings')";
+    const restore = async (saved: Record<string, unknown>) => {
+      if (Object.hasOwn(saved, "settings"))
+        await chrome.storage.sync.set(saved);
+      else await chrome.storage.sync.remove("settings");
+    };
     try {
-      await session.api.evaluate(restore);
+      await session.api.evaluate(restore, settings);
       expect(
         await session.api.evaluate("chrome.storage.sync.get('settings')"),
         "検証前の設定を復元できません",
@@ -129,7 +144,7 @@ export async function finishLive(session: LiveSession) {
         extensionId,
       );
       try {
-        await restoreApi.evaluate(restore);
+        await restoreApi.evaluate(restore, settings);
         const restored = await restoreApi.evaluate(
           "chrome.storage.sync.get('settings')",
         );
@@ -228,17 +243,17 @@ export async function assertLivePage(session: LiveSession, page: Page) {
 
 export async function tabId(session: LiveSession, page: Page): Promise<number> {
   const url = page.url();
-  const id = await session.api.evaluate(
-    "(async()=>{const tabs=(await chrome.tabs.query({})).filter(t=>t.url===" +
-      JSON.stringify(url) +
-      ");if(tabs.length!==1)throw Error('対象タブが一意ではありません');return tabs[0].id;})()",
-  );
+  const id = await session.api.evaluate(async (url: string) => {
+    const tabs = (await chrome.tabs.query({})).filter((tab) => tab.url === url);
+    if (tabs.length !== 1) throw Error("対象タブが一意ではありません");
+    return tabs[0]?.id;
+  }, url);
   if (typeof id !== "number") throw new Error("対象タブの ID を取得できません");
   return id;
 }
 
 export async function closePanel(session: LiveSession, page: Page) {
-  const key = JSON.stringify(panelOperationKey());
+  const key = panelOperationKey();
   const ownedTargetId = session.panelTargetId;
   let failure: unknown;
   let failed = false;
@@ -246,12 +261,31 @@ export async function closePanel(session: LiveSession, page: Page) {
     const id = await tabId(session, page);
     const width = await page.evaluate(() => innerWidth);
     await session.api.evaluate(
-      `(()=>{const state=globalThis[${key}]={done:false};state.listener=e=>{if(e.tabId===${id})state.done=true};chrome.sidePanel.onClosed.addListener(state.listener)})()`,
+      (key: string, id: number) => {
+        const state = {
+          done: false,
+          listener: (event: PanelEvent) => {
+            if (event.tabId === id) state.done = true;
+          },
+        };
+        (globalThis as PanelGlobals)[key] = state as PanelState;
+        chrome.sidePanel.onClosed.addListener(state.listener);
+      },
+      key,
+      id,
     );
     try {
-      await session.api.evaluate(`chrome.sidePanel.close({tabId:${id}})`);
+      await session.api.evaluate(
+        (id: number) => chrome.sidePanel.close({ tabId: id }),
+        id,
+      );
       await expect
-        .poll(() => session.api.evaluate(`globalThis[${key}]?.done`))
+        .poll(() =>
+          session.api.evaluate(
+            (key: string) => (globalThis as PanelGlobals)[key]?.done,
+            key,
+          ),
+        )
         .toBe(true);
       await expect
         .poll(() => page.evaluate(() => innerWidth))
@@ -261,9 +295,12 @@ export async function closePanel(session: LiveSession, page: Page) {
       failure = error;
     } finally {
       await session.api
-        .evaluate(
-          `(()=>{const state=globalThis[${key}];if(state)chrome.sidePanel.onClosed.removeListener(state.listener);delete globalThis[${key}]})()`,
-        )
+        .evaluate((key: string) => {
+          const scope = globalThis as PanelGlobals;
+          const state = scope[key];
+          if (state) chrome.sidePanel.onClosed.removeListener(state.listener);
+          delete scope[key];
+        }, key)
         .catch((error) => {
           if (!failed) throw error;
         });
@@ -314,17 +351,31 @@ export async function observeAutomaticPanelClose(
   session: LiveSession,
   page: Page,
 ) {
-  const key = JSON.stringify(panelOperationKey());
+  const key = panelOperationKey();
   const id = await tabId(session, page);
   const width = await page.evaluate(() => innerWidth);
   const target = session.panelTargetId;
   await session.api.evaluate(
-    `(()=>{const state=globalThis[${key}]={done:false};state.listener=e=>{if(e.tabId===${id})state.done=true};chrome.sidePanel.onClosed.addListener(state.listener)})()`,
+    (key: string, id: number) => {
+      const state = {
+        done: false,
+        listener: (event: PanelEvent) => {
+          if (event.tabId === id) state.done = true;
+        },
+      };
+      (globalThis as PanelGlobals)[key] = state as PanelState;
+      chrome.sidePanel.onClosed.addListener(state.listener);
+    },
+    key,
+    id,
   );
   const dispose = async () => {
-    await session.api.evaluate(
-      `(()=>{const state=globalThis[${key}];if(state)chrome.sidePanel.onClosed.removeListener(state.listener);delete globalThis[${key}]})()`,
-    );
+    await session.api.evaluate((key: string) => {
+      const scope = globalThis as PanelGlobals;
+      const state = scope[key];
+      if (state) chrome.sidePanel.onClosed.removeListener(state.listener);
+      delete scope[key];
+    }, key);
     session.panelObservers?.delete(dispose);
   };
   session.panelObservers ??= new Set();
@@ -332,7 +383,12 @@ export async function observeAutomaticPanelClose(
   return async () => {
     try {
       await expect
-        .poll(() => session.api.evaluate(`globalThis[${key}]?.done`))
+        .poll(() =>
+          session.api.evaluate(
+            (key: string) => (globalThis as PanelGlobals)[key]?.done,
+            key,
+          ),
+        )
         .toBe(true);
       await expect
         .poll(() => page.evaluate(() => innerWidth))
@@ -350,9 +406,9 @@ export async function readContext(
 ): Promise<FilterContextResponse> {
   session.loadGuard.budget.assert(liveSite(page.url()));
   return (await session.api.evaluate(
-    "chrome.tabs.sendMessage(" +
-      (await tabId(session, page)) +
-      ",{type:'sift:get-filter-context'})",
+    (id: number) =>
+      chrome.tabs.sendMessage(id, { type: "sift:get-filter-context" }),
+    await tabId(session, page),
   )) as FilterContextResponse;
 }
 
@@ -365,7 +421,7 @@ export async function openPanel(
   await session.loadGuard.assertPage(page);
   await page.bringToFront();
   const cdp = await session.browser.target().createCDPSession();
-  const key = JSON.stringify(panelOperationKey());
+  const key = panelOperationKey();
   let originalTargets: Set<string> | undefined;
   let ownerTabId: number | undefined;
   let completed = false;
@@ -382,9 +438,17 @@ export async function openPanel(
         })
       ).targetInfos.map((target) => target.targetId),
     );
-    await session.api.evaluate(
-      `(()=>{const state=globalThis[${key}]={opened:[],closed:[]};state.openListener=e=>state.opened.push(e);state.closeListener=e=>state.closed.push(e);chrome.sidePanel.onOpened.addListener(state.openListener);chrome.sidePanel.onClosed.addListener(state.closeListener);})()`,
-    );
+    await session.api.evaluate((key: string) => {
+      const state = {
+        opened: [] as PanelEvent[],
+        closed: [] as PanelEvent[],
+        openListener: (event: PanelEvent) => state.opened.push(event),
+        closeListener: (event: PanelEvent) => state.closed.push(event),
+      };
+      (globalThis as PanelGlobals)[key] = state as unknown as PanelState;
+      chrome.sidePanel.onOpened.addListener(state.openListener);
+      chrome.sidePanel.onClosed.addListener(state.closeListener);
+    }, key);
     ownerTabId = (await session.api.evaluate(
       "(async()=>{const [tab]=await chrome.tabs.query({active:true,currentWindow:true});return tab?.id;})()",
     )) as number;
@@ -414,7 +478,12 @@ export async function openPanel(
       await expect
         .poll(() =>
           session.api.evaluate(
-            `globalThis[${key}]?.opened.some(e=>e.tabId===${id})`,
+            (key: string, id: number) =>
+              (globalThis as PanelGlobals)[key]?.opened.some(
+                (event) => event.tabId === id,
+              ),
+            key,
+            id,
           ),
         )
         .toBe(true);
@@ -425,7 +494,12 @@ export async function openPanel(
       await expect
         .poll(() =>
           session.api.evaluate(
-            `globalThis[${key}]?.closed.some(e=>e.tabId===${id})`,
+            (key: string, id: number) =>
+              (globalThis as PanelGlobals)[key]?.closed.some(
+                (event) => event.tabId === id,
+              ),
+            key,
+            id,
           ),
         )
         .toBe(true);
@@ -456,12 +530,17 @@ export async function openPanel(
       ).targetInfos.map((target) => target.targetId),
     );
     const width = await page.evaluate(() => innerWidth);
-    await session.api.evaluate(`globalThis[${key}].opened=[]`);
+    await session.api.evaluate((key: string) => {
+      const state = (globalThis as PanelGlobals)[key];
+      if (!state) throw Error("パネル通知の監視状態がありません");
+      state.opened = [];
+    }, key);
     await action();
     await expect
       .poll(async () => {
         const opened = (await session.api.evaluate(
-          `globalThis[${key}]?.opened ?? []`,
+          (key: string) => (globalThis as PanelGlobals)[key]?.opened ?? [],
+          key,
         )) as { tabId: number; path: string }[];
         return opened.some((event) =>
           isOwnedPanelEvent(event, extensionId, id),
@@ -535,13 +614,22 @@ export async function openPanel(
       console.error(
         "パネルの開閉通知",
         await session.api
-          .evaluate(`globalThis[${key}]?.opened ?? []`)
+          .evaluate(
+            (key: string) => (globalThis as PanelGlobals)[key]?.opened ?? [],
+            key,
+          )
           .catch(() => []),
       );
     await session.api
-      .evaluate(
-        `(()=>{const state=globalThis[${key}];if(state){chrome.sidePanel.onOpened.removeListener(state.openListener);chrome.sidePanel.onClosed.removeListener(state.closeListener)}delete globalThis[${key}]})()`,
-      )
+      .evaluate((key: string) => {
+        const scope = globalThis as PanelGlobals;
+        const state = scope[key];
+        if (state) {
+          chrome.sidePanel.onOpened.removeListener(state.openListener);
+          chrome.sidePanel.onClosed.removeListener(state.closeListener);
+        }
+        delete scope[key];
+      }, key)
       .catch(() => {});
     try {
       if (!completed && originalTargets) {
