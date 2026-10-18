@@ -14,9 +14,9 @@ const base = `${import.meta.env.BASE_URL.replace(/\/$/, "")}/`;
   </header>
   <main id="main" tabindex="-1" class="product-page">
     <section class="product-intro" aria-labelledby="product-introduction-sentence">
-      <h1 id="product-introduction-sentence" class="product-page-title"><span>人気の投稿を、</span><span>その場で絞り込む</span></h1>
+      <h1 id="product-introduction-sentence" class="product-page-title"><span>SNSのイラストを、</span><span>その場で絞り込む</span></h1>
       <div class="product-description" data-reveal>
-        <p>いつものタイムラインで人気の投稿を、<br />動画サイトで最近の人気動画を見つける<span class="product-kind">Chrome拡張機能。</span></p>
+        <p>X・Blueskyのイラストを、<br />いいね数や画像の条件で絞り込む<span class="product-kind">SNSのイラストフィルター。</span></p>
       </div>
       <div data-reveal style="--reveal-delay: 160ms">
         <InstallLinks />
@@ -24,20 +24,9 @@ const base = `${import.meta.env.BASE_URL.replace(/\/$/, "")}/`;
     </section>
 
     <section class="product-demo" data-reveal aria-labelledby="product-social-heading">
-      <h2 id="product-social-heading">いつものタイムラインで、人気投稿を</h2>
-      <p class="product-demo-description">X・Blueskyのタイムラインやリストを、いいね数で絞り込みます。</p>
-      <ReplayDemo mode="social" />
-    </section>
-
-    <section class="product-demo" data-reveal aria-labelledby="product-youtube-heading">
-      <h2 id="product-youtube-heading">古い動画に埋もれがちな、最近の人気動画を</h2>
-      <p class="product-demo-description">YouTube・ニコニコ動画の人気順を保ったまま、過去3か月・1年などの期間に絞り込みます。</p>
-      <ReplayDemo mode="youtube" />
-    </section>
-
-    <section class="product-video" data-reveal aria-labelledby="product-introduction-heading">
-      <h2 id="product-introduction-heading">紹介動画</h2>
-      <div class="product-video-surface"><iframe src="https://www.youtube-nocookie.com/embed/KqO-4fv2Qsw" title="siftの紹介動画 — YouTube" loading="lazy" allow="accelerometer; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe></div>
+      <h2 id="product-social-heading">いつものタイムラインで、人気のイラストを</h2>
+      <p class="product-demo-description">X・Blueskyの対応するタイムラインやリストで、いいね数や画像の有無を指定して、読み込まれた投稿からイラストを探せます。</p>
+      <ReplayDemo />
     </section>
 
     <section class="product-local" data-reveal aria-labelledby="product-local-heading">

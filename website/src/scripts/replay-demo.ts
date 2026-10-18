@@ -1,5 +1,4 @@
 import { metricThresholdSuggestions } from "../../../utils/metric-threshold-suggestions.ts";
-import { PUBLICATION_PERIODS } from "../../../utils/publication-period.ts";
 
 const boundaries = [0, 2600, 5000, 8900, 15700];
 type Point = { x: number; y: number };
@@ -37,15 +36,8 @@ export function advanceReplayTime(time: number, delta: number, enabled = true) {
 export function seekReplayTime(index: number, reducedMotion = false) {
   return reducedMotion && index === 2 ? 7000 : (boundaries[index] ?? 0);
 }
-export function isReplayItemVisible(
-  mode: "social" | "youtube",
-  value: number,
-  time: number,
-) {
-  return (
-    getReplayState(time).stage !== 3 ||
-    (mode === "youtube" ? value <= 90 : value >= 100)
-  );
+export function isReplayItemVisible(value: number, time: number) {
+  return getReplayState(time).stage !== 3 || value >= 100;
 }
 export function initializeReplayDemos() {
   document
@@ -75,33 +67,21 @@ function initialize(root: HTMLElement) {
   let optionOffset: Point | undefined;
   let renderedState = "";
   function updatePanel() {
-    const youtube = root.dataset.mode === "youtube";
-    get("[data-label]").textContent = youtube ? "投稿期間" : "最低いいね数";
     const items = Array.from(
-      root.querySelectorAll<HTMLElement>(
-        youtube ? ".replay-video" : ".replay-post",
-      ),
+      root.querySelectorAll<HTMLElement>(".replay-post"),
     );
-    get("[data-panel-note]").textContent = youtube
-      ? `読み込み済み動画${items.length}本を集計しています`
-      : `読み込み済み投稿${items.length}件を集計しています`;
-    const values = items.map((item) =>
-      Number(youtube ? item.dataset.days : item.dataset.likes),
+    get("[data-panel-note]").textContent =
+      `読み込み済み投稿${items.length}件を集計しています`;
+    const values = items.map((item) => Number(item.dataset.likes));
+    const choices = metricThresholdSuggestions(values, 100).map(
+      (suggestion) => ({
+        label: new Intl.NumberFormat("ja", { notation: "compact" }).format(
+          suggestion.minimum,
+        ),
+        count: suggestion.count,
+        selected: suggestion.minimum === 100,
+      }),
     );
-    const choices = youtube
-      ? PUBLICATION_PERIODS.map((period) => ({
-          label: `${period.value}${period.unit === "week" ? "週間" : period.unit === "month" ? "か月" : "年"}以内`,
-          count: values.filter((days) => days <= period.days).length,
-          selected: period.days === 90,
-        }))
-      : metricThresholdSuggestions(values, 100).map((suggestion) => ({
-          label: new Intl.NumberFormat("ja", { notation: "compact" }).format(
-            suggestion.minimum,
-          ),
-          count: suggestion.count,
-          selected: suggestion.minimum === 100,
-        }));
-    const suffix = youtube ? "本" : "件";
     const entry = (label: string, count?: number, selected = false) => {
       const element = document.createElement("div");
       const text = document.createElement("span");
@@ -109,7 +89,7 @@ function initialize(root: HTMLElement) {
       element.append(text);
       if (count !== undefined) {
         const total = document.createElement("span");
-        total.textContent = `${count}${suffix}`;
+        total.textContent = `${count}件`;
         element.append(total);
       }
       if (selected) element.className = "replay-option";
@@ -120,7 +100,7 @@ function initialize(root: HTMLElement) {
       ...choices.map((choice) =>
         entry(choice.label, choice.count, choice.selected),
       ),
-      entry(youtube ? "期間を入力" : "数値を入力"),
+      entry("数値を入力"),
     );
     optionOffset = undefined;
   }
@@ -146,7 +126,6 @@ function initialize(root: HTMLElement) {
   function render(time: number) {
     const { stage, menuOpen, chosen, clicked } = getReplayState(time);
     cursor.hidden = !started || stage === 3;
-    const youtube = root.dataset.mode === "youtube";
     const state = `${stage}:${menuOpen}:${chosen}:${clicked}`;
     const changed = state !== renderedState;
     if (changed) {
@@ -160,8 +139,7 @@ function initialize(root: HTMLElement) {
         "pressed",
         clicked && stage === 0,
       );
-      get("[data-value]").textContent =
-        stage === 3 ? (youtube ? "3か月以内" : "100") : "指定なし";
+      get("[data-value]").textContent = stage === 3 ? "100" : "指定なし";
     }
     root
       .querySelectorAll<HTMLElement>("[data-step]")
@@ -178,37 +156,15 @@ function initialize(root: HTMLElement) {
       });
     if (changed) {
       root.querySelectorAll<HTMLElement>(".replay-post").forEach((post) => {
-        const removed = !isReplayItemVisible(
-          "social",
-          Number(post.dataset.likes),
-          time,
-        );
+        const removed = !isReplayItemVisible(Number(post.dataset.likes), time);
         post.classList.toggle("removed", removed);
         post.setAttribute("aria-hidden", String(removed));
       });
-      root.querySelectorAll<HTMLElement>(".replay-video").forEach((video) => {
-        const removed = !isReplayItemVisible(
-          "youtube",
-          Number(video.dataset.days),
-          time,
-        );
-        video.hidden = removed;
-        video.setAttribute("aria-hidden", String(removed));
-      });
-      const items = [
-        ...root.querySelectorAll<HTMLElement>(
-          youtube ? ".replay-video" : ".replay-post",
-        ),
-      ];
-      const count = items.filter((item) =>
-        youtube ? !item.hidden : !item.classList.contains("removed"),
+      const items = [...root.querySelectorAll<HTMLElement>(".replay-post")];
+      const count = items.filter(
+        (item) => !item.classList.contains("removed"),
       ).length;
-      if (youtube) {
-        get("[data-video-count]").textContent =
-          `${count} / ${items.length}件を表示`;
-      }
-      get("[data-selected-count]").textContent =
-        `${count}${youtube ? "本" : "件"}`;
+      get("[data-selected-count]").textContent = `${count}件`;
     }
     if (stage === 3) return;
     const icon = point(get(".replay-extension"));

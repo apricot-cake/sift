@@ -25,12 +25,9 @@ assert.equal(getReplayState(seekReplayTime(0)).stage, 0);
 
 // 境界値を含め、絞り込みと冒頭への移動で一覧が戻ることを確かめる。
 const filteredTime = seekReplayTime(3);
-assert.equal(isReplayItemVisible("social", 99, filteredTime), false);
-assert.equal(isReplayItemVisible("social", 100, filteredTime), true);
-assert.equal(isReplayItemVisible("youtube", 90, filteredTime), true);
-assert.equal(isReplayItemVisible("youtube", 91, filteredTime), false);
-assert.equal(isReplayItemVisible("social", 2, seekReplayTime(0)), true);
-assert.equal(isReplayItemVisible("youtube", 1100, seekReplayTime(0)), true);
+assert.equal(isReplayItemVisible(99, filteredTime), false);
+assert.equal(isReplayItemVisible(100, filteredTime), true);
+assert.equal(isReplayItemVisible(2, seekReplayTime(0)), true);
 
 // 非表示・モーション抑制時は進めず、復帰時にも場面を飛ばさない。
 assert.equal(advanceReplayTime(6200, 10000, false), 6200);

@@ -10,7 +10,7 @@
 8880F011E39FCD327CE597F14530196794775FF16A8F1F2ECFDBD0899A760D15
 ```
 
-掲載説明と権限の理由は [listing.md](listing.md)、掲載画像は [日本語](screenshots/sift-overview-ja.png)と[英語](screenshots/sift-overview-en.png)を使用します。
+当時の掲載画像は現在の対応範囲と異なるため削除しました。現在の掲載説明と権限の理由は [listing.md](listing.md) を参照してください。
 
 ## 変更点
 

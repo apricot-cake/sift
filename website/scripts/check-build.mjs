@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { demoPosts, demoVideos } from "../src/data/demo-posts.ts";
+import { demoPosts } from "../src/data/demo-posts.ts";
 import {
   attribute,
   hasClass,
@@ -72,27 +72,9 @@ for (const { elements } of pages) {
 assert.ok(
   pages[0].elements.some((element) => hasClass(element, "product-github")),
 );
-for (const { elements } of pages) {
-  assert.ok(
-    elements.some(
-      (element) =>
-        element.tagName === "iframe" &&
-        attribute(element, "src") ===
-          "https://www.youtube-nocookie.com/embed/KqO-4fv2Qsw",
-    ),
-  );
-}
 assert.ok(existsSync(new URL("demo/", dist)), "デモ画像がありません");
 assert.ok(demoPosts.length > 0, "投稿データがありません");
-assert.equal(demoVideos.length, 6, "動画データは6件にしてください");
 assert.equal(demoPosts.filter((post) => post.likes >= 100).length, 2);
-assert.equal(demoVideos.filter((video) => video.publishedDays <= 90).length, 3);
-assert.ok(
-  demoVideos.every(
-    (video, index) => index === 0 || demoVideos[index - 1].views >= video.views,
-  ),
-  "動画が人気順になっていません",
-);
 for (const { html, elements } of pages) {
   assert.ok(
     !elements.some((element) =>
@@ -110,24 +92,13 @@ for (const { html, elements } of pages) {
     elements.filter((element) =>
       /^[0-3]$/.test(attribute(element, "data-step") ?? ""),
     ).length,
-    8,
+    4,
     "各デモの再生位置は4区間にしてください",
-  );
-  assert.ok(
-    elements.some((element) => attribute(element, "data-mode") === "social"),
-  );
-  assert.ok(
-    elements.some((element) => attribute(element, "data-mode") === "youtube"),
   );
   assert.equal(
     elements.filter((element) => hasClass(element, "replay-post")).length,
     demoPosts.length,
     "投稿が静的HTMLに出力されていません",
-  );
-  assert.equal(
-    elements.filter((element) => hasClass(element, "replay-video")).length,
-    demoVideos.length,
-    "動画が静的HTMLに出力されていません",
   );
   assert.ok(
     !elements.some(
@@ -141,15 +112,6 @@ for (const { html, elements } of pages) {
         (element) => attribute(element, "data-likes") === String(post.likes),
       ),
       `投稿の反応数がありません: ${post.handle}`,
-    );
-  }
-  for (const video of demoVideos) {
-    assert.ok(
-      elements.some(
-        (element) =>
-          attribute(element, "data-days") === String(video.publishedDays),
-      ),
-      `動画の公開時期がありません: ${video.id}`,
     );
   }
   const scripts = elements.filter((element) => element.tagName === "script");
