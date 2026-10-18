@@ -1,14 +1,6 @@
 # sift
 
-sift は、X・Blueskyでイラストを探すためのSNSイラストフィルターです。いいね数や画像の有無、返信・引用・リポストの除外で投稿を絞り込みます。画像の内容からイラストかどうかを自動判定する機能はありません。
-
-## 公式サイト
-
-<https://apricot-cake.github.io/sift/>
-
-## インストール
-
-[Chrome ウェブストア](https://chromewebstore.google.com/detail/sift/jglehalaegleehefcefnfmmbblgkomeh)
+[公式サイト](https://apricot-cake.github.io/sift/)
 
 ## 環境構築からビルドまで
 
