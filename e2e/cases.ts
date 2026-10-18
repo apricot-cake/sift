@@ -110,7 +110,7 @@ export const unsupportedCases: readonly UnsupportedCase[] = [
   {
     id: "unsupported-site",
     site: "none",
-    url: "https://apricot-cake.com/",
+    url: "https://apricot-cake.github.io/sift/",
   },
 ];
 export function requiredFilterEvidence(_target: CompatibilityCase): string[] {

@@ -201,12 +201,7 @@ export function createUnsupportedCases(): LiveCase[] {
           }
           if (target.id === "unsupported-site")
             await expect
-              .poll(() =>
-                visible(
-                  page,
-                  `${aria("banner")} >>> ${aria("link", "@apricot-cake")}`,
-                ),
-              )
+              .poll(() => visible(page, "#product-introduction-sentence"))
               .toBe(true);
           if (target.id === "unsupported-fanbox") {
             await expect
