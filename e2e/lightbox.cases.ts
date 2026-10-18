@@ -84,8 +84,18 @@ export function createLightboxCases(): LiveCase[] {
           expect(before.timelineAvailable).toBe(true);
           expect(before.filteringEnabled).toBe(true);
           expect(before.metricSampleCount).toBeGreaterThan(0);
-          await photoLink.press("Enter");
+          const photoHref = await photoLink.evaluate((node) =>
+            node.getAttribute("href"),
+          );
+          expect(photoHref).toMatch(/\/status\/\d+\/photo\/\d+$/);
           await photoLink.dispose();
+          // パネル操作後も実リンクへのクリックでページへ入力を戻す。
+          // Locatorで現在の要素と位置の安定を確認し、仮想化で古いhandleを使わない。
+          await page
+            .locator(
+              `article[data-testid="tweet"] a[href=${JSON.stringify(photoHref)}]`,
+            )
+            .click();
           await expect
             .poll(() => new URL(page.url()).pathname)
             .toMatch(/\/status\/\d+\/photo\/\d+$/);

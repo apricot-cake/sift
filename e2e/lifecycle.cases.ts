@@ -1,7 +1,15 @@
 import type { JSHandle, Page } from "puppeteer-core";
 import { expect } from "vitest";
 import { selectPartialChoice } from "../scripts/compatibility/filter-choice.ts";
-import { aria, element, evidence, visible } from "./browser-queries.ts";
+import { parseMetric } from "../utils/filter-core.ts";
+import {
+  aria,
+  element,
+  evidence,
+  fillNumber,
+  text,
+  visible,
+} from "./browser-queries.ts";
 import { cases, lifecycleCases } from "./cases.ts";
 import {
   acquireCasePage,
@@ -167,10 +175,15 @@ export function createLifecycleCases(): LiveCase[] {
             )?.index ?? -1;
           // 一覧の取得と候補件数の更新は、パネルの表示より後に完了する。
           await expect
-            .poll(async () => partialIndex(await readCounts()), {
-              message: "遷移前に投稿を除外できる条件が必要です",
-            })
+            .poll(async () => (await readCounts())[0])
             .toBeGreaterThan(0);
+          if (target.site !== "x") {
+            await expect
+              .poll(async () => partialIndex(await readCounts()), {
+                message: "遷移前に投稿を除外できる条件が必要です",
+              })
+              .toBeGreaterThan(0);
+          }
           const counts = await readCounts();
           await completeInitialLoad(session, page, task, "ready");
           const index = partialIndex(counts);
@@ -178,7 +191,57 @@ export function createLifecycleCases(): LiveCase[] {
             body: JSON.stringify({ counts, index }),
             contentType: "application/json",
           });
-          await (await element(panel, options, index)).click();
+          if (index > 0) await (await element(panel, options, index)).click();
+          else {
+            expect(
+              target.site,
+              "数値入力への切り替えはXの最低いいね数だけに使う",
+            ).toBe("x");
+            // 既定候補の間に実投稿の指標が集まる場合も、一部を除外する条件を使う。
+            // Siftの集計値ではなく、サイト自身のいいね表示から数値を選ぶ。
+            const labels = await page.$$eval(
+              'article[data-testid="tweet"]',
+              (cards) =>
+                cards.map(
+                  (card) =>
+                    card
+                      .querySelector(
+                        '[data-testid="like"], [data-testid="unlike"]',
+                      )
+                      ?.getAttribute("aria-label") ?? "",
+                ),
+            );
+            const values = [
+              ...new Set(
+                labels
+                  .filter((label) => /^\d/.test(label))
+                  .map(parseMetric)
+                  .filter(Number.isFinite),
+              ),
+            ].sort((a, b) => a - b);
+            expect(
+              values.length,
+              "部分除外の検証に必要な異なるいいね数がありません",
+            ).toBeGreaterThan(1);
+            const threshold = values[Math.floor(values.length / 2)];
+            if (threshold === undefined) throw Error("除外条件を選べません");
+            await (
+              await element(panel, `${options} >>> ${text("数値を入力")}`)
+            ).click();
+            await fillNumber(
+              panel,
+              aria("spinbutton", "数値を入力"),
+              threshold,
+            );
+            await evidence(task, "lifecycle-custom-minimum", {
+              body: JSON.stringify({
+                threshold,
+                sampleCount: labels.length,
+                distinctCounts: values.length,
+              }),
+              contentType: "application/json",
+            });
+          }
           await expect
             .poll(() =>
               page.$$eval(
@@ -187,6 +250,19 @@ export function createLifecycleCases(): LiveCase[] {
               ),
             )
             .toBeGreaterThan(0);
+          if (target.site === "x") {
+            expect(
+              await page.$$eval(
+                'article[data-testid="tweet"]',
+                (cards) =>
+                  cards.filter(
+                    (card) =>
+                      !card.closest('[data-sift-filter-state="hidden"]'),
+                  ).length,
+              ),
+              "部分除外後も条件に合う投稿を残す",
+            ).toBeGreaterThan(0);
+          }
 
           const closedWidth = await page.evaluate(() => innerWidth);
           const assertAutomaticClose = await observeAutomaticPanelClose(
