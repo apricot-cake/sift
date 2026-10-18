@@ -4,7 +4,7 @@ sift は、X・Blueskyでイラストを探すためのSNSイラストフィル�
 
 ## 公式サイト
 
-<https://apricot-cake.com/sift>
+<https://apricot-cake.github.io/sift/>
 
 ## インストール
 
