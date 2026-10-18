@@ -3,9 +3,7 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { render } from "../../test/dom.ts";
 import { blueskyAdapter } from "./bluesky.ts";
-import { niconicoAdapter } from "./niconico.ts";
 import { xAdapter } from "./x.ts";
-import { youtubeAdapter } from "./youtube.ts";
 
 async function loadFixture(name: string): Promise<HTMLElement> {
   const html = await readFile(
@@ -56,49 +54,5 @@ describe("対応サイトの HTML fixture", () => {
       hasImage: true,
       hasVideo: false,
     });
-  });
-
-  it("YouTube の再生数順動画の投稿日時を読む", async () => {
-    const page = await loadFixture("youtube-videos-popular");
-    const [post] = youtubeAdapter.getPostCards(page);
-    expect(
-      youtubeAdapter.isTimelineAvailable(page, { pathname: "/@sift/videos" }),
-    ).toBe(true);
-    expect(post).toBeDefined();
-    expect(youtubeAdapter.readPostId(post as Element)).toBe("abc123");
-    expect(youtubeAdapter.readCreatedAt(post as Element)).toBeGreaterThan(0);
-  });
-  it.each([
-    "/@example/search",
-    "/channel/UC123/search/",
-    "/c/example/search",
-    "/user/example/search",
-  ])("%s はカードが残っていても対象にしない", (pathname) => {
-    const root = render(
-      "<ytd-browse><ytd-video-renderer></ytd-video-renderer></ytd-browse>",
-    );
-    expect(youtubeAdapter.readPageSupport(root, { pathname })).toBe(
-      "unsupported",
-    );
-    expect(youtubeAdapter.isTimelineAvailable(root, { pathname })).toBe(false);
-    expect(
-      youtubeAdapter.readTimelineKey(root, { pathname, search: "" }),
-    ).toBeNull();
-  });
-  it("ニコニコ動画の再生数順検索のカードを読む", async () => {
-    const page = await loadFixture("niconico-search");
-    const [post] = niconicoAdapter.getPostCards(page);
-
-    expect(
-      niconicoAdapter.isTimelineAvailable(page, {
-        pathname: "/search/music",
-        search: "?sort=v&order=d",
-      }),
-    ).toBe(true);
-    expect(post).toBeDefined();
-    expect(niconicoAdapter.readPostId?.(post as Element)).toBe("sm456");
-    expect(niconicoAdapter.readCreatedAt?.(post as Element)).toBe(
-      Date.parse("2026-08-21T15:00:00.000Z"),
-    );
   });
 });

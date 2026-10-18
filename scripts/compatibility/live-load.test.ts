@@ -43,9 +43,6 @@ describe("実機検証の通信予算", () => {
         "https://public.api.bsky.app/xrpc/app.bsky.feed.getFeed?feed=secret",
       ),
     ).toBe("xrpc/app.bsky.feed.getFeed");
-    expect(
-      networkEndpoint("https://www.youtube.com/youtubei/v1/browse?key=secret"),
-    ).toBe("youtubei/v1/browse");
   });
   it("GraphQL変数からはページ追加の有無だけ分類する", () => {
     const prefix = "https://x.com/i/api/graphql/id/UserTweets?variables=";

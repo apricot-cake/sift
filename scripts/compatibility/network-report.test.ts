@@ -24,7 +24,7 @@ const base = {
 const lines = (...events: object[]) =>
   events.map((e) => JSON.stringify(e)).join("\n");
 describe("通信分類の集計", () => {
-  it.each(["bluesky", "youtube", "niconico"] as const)(
+  it.each(["bluesky"] as const)(
     "%s の要求と応答を他サイト・別runから分離する",
     (site) => {
       const request = { ...base, site, requestId: site };
@@ -48,9 +48,9 @@ describe("通信分類の集計", () => {
       runId: "run:1",
       site: "x",
     });
-    expect(parseNetworkReportArgs(["--site", "youtube", "run:1"])).toEqual({
+    expect(parseNetworkReportArgs(["--site", "bluesky", "run:1"])).toEqual({
       runId: "run:1",
-      site: "youtube",
+      site: "bluesky",
     });
     expect(() => parseNetworkReportArgs(["--site", "other"])).toThrow("--site");
     expect(() => parseNetworkReportArgs(["a", "b"])).toThrow("一つだけ");
@@ -144,19 +144,19 @@ describe("通信分類の集計", () => {
       );
       fs.writeFileSync(
         path.join(directory, "live-load.network.jsonl"),
-        lines(base, { ...base, requestId: "b", site: "youtube" }),
+        lines(base, { ...base, requestId: "b", site: "bluesky" }),
       );
       const result = writeNetworkReport(undefined, directory);
       expect(path.basename(result.output)).toBe("network-summary-run_1.json");
       expect(
         JSON.parse(fs.readFileSync(result.output, "utf8")).totals.requests,
       ).toBe(1);
-      const youtube = writeNetworkReport(undefined, directory, "youtube");
-      expect(path.basename(youtube.output)).toBe(
-        "network-summary-run_1-youtube.json",
+      const bluesky = writeNetworkReport(undefined, directory, "bluesky");
+      expect(path.basename(bluesky.output)).toBe(
+        "network-summary-run_1-bluesky.json",
       );
-      expect(JSON.parse(fs.readFileSync(youtube.output, "utf8")).scope).toBe(
-        "YouTube fetch/XHR",
+      expect(JSON.parse(fs.readFileSync(bluesky.output, "utf8")).scope).toBe(
+        "Bluesky fetch/XHR",
       );
       expect(fs.existsSync(result.output)).toBe(true);
       expect(() => writeNetworkReport("missing", directory)).toThrow(

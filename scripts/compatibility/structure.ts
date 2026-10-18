@@ -10,7 +10,7 @@ export interface StructureNode {
 export function captureRoute(input: string): string {
   const url = new URL(input);
   const query = new URLSearchParams();
-  for (const key of ["f", "filter", "sort", "sortKey", "sortOrder"]) {
+  for (const key of ["f", "filter"]) {
     for (const value of url.searchParams.getAll(key).sort())
       query.append(key, value);
   }

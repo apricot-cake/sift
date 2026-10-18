@@ -37,7 +37,6 @@ import {
   releaseCasePage,
 } from "./live.ts";
 import type { LiveCase } from "./live-case.ts";
-import { selectNiconicoUserSort } from "./niconico-navigation.ts";
 import { changeXSearch } from "./x-navigation.ts";
 
 // サイドパネルでは背景タブ扱いでrequestAnimationFrameが停止することがある。
@@ -50,17 +49,6 @@ async function panelClick(handle: ElementHandle<Element>) {
   await handle.click();
 }
 const regions = {
-  youtube: {
-    card: "ytd-browse:not([hidden]) ytd-rich-item-renderer, ytd-browse:not([hidden]) ytd-video-renderer",
-    metric:
-      "#metadata-line span, .ytContentMetadataViewModelMetadataText, [class*='MetadataSubhead']",
-    sort: 'ytd-browse:not([hidden]) [role="combobox"], ytd-browse:not([hidden]) button[role="tab"], ytd-browse:not([hidden]) yt-chip-cloud-chip-renderer',
-  },
-  niconico: {
-    card: "[data-decoration-video-id], [data-video-id], .NC-VideoMediaObject, main article",
-    metric: "time[datetime], .NC-VideoRegisteredAtText-text",
-    sort: ".Selectbox-label",
-  },
   x: {
     card: 'article[data-testid="tweet"]',
     metric: 'button[data-testid="like"], button[data-testid="unlike"]',
@@ -72,17 +60,9 @@ const regions = {
     sort: '[data-testid^="profilePager-selector-"], [data-testid^="homeScreenFeedTabs-selector-"], [data-testid="searchScreen"] [role="tab"]',
   },
 };
-
 function regionFor(target: CompatibilityCase) {
-  if (target.niconicoSearch)
-    return {
-      card: '[data-decoration-video-id][data-anchor-page="search"][data-anchor-area="main"]',
-      metric: "time[datetime], .NC-VideoRegisteredAtText-text",
-      sort: aria("combobox", "ソートキーを選択"),
-    };
   return regions[target.site];
 }
-
 async function selectTab(page: Page, target: CompatibilityCase) {
   if (target.tab) {
     // 初期タブが空でも、対象タブへの切り替えは可能。
@@ -92,41 +72,10 @@ async function selectTab(page: Page, target: CompatibilityCase) {
         ? `a[role="tab"][href=${JSON.stringify(target.destination)}]`
         : target.site === "bluesky" && target.destination === "/search"
           ? `::-p-xpath(//*[@data-testid="searchScreen"]//*[@role="tab" and normalize-space(.)=${JSON.stringify(target.tab)}])`
-          : aria(target.site === "niconico" ? "link" : "tab", target.tab);
+          : aria("tab", target.tab);
     const locator = page.locator(navigation);
     await locator.wait();
-    // Bluesky の読み込みoverlayを待つ。再取得とスクロールはLocatorに任せる。
-    if (target.site === "youtube") {
-      const selected = await page.$eval(
-        navigation,
-        (node) =>
-          node.getAttribute("aria-selected") === "true" ||
-          node.matches(".ytTabShapeTabSelected, [selected]") ||
-          !!node.querySelector(".ytTabShapeTabSelected"),
-      );
-      if (new URL(page.url()).pathname !== target.destination || !selected)
-        await locator.click();
-      await expect
-        .poll(() => new URL(page.url()).pathname)
-        .toBe(target.destination);
-      await expect
-        .poll(() =>
-          page.$eval(
-            navigation,
-            (node) =>
-              node.getAttribute("aria-selected") === "true" ||
-              node.matches(".ytTabShapeTabSelected, [selected]") ||
-              !!node.querySelector(".ytTabShapeTabSelected"),
-          ),
-        )
-        .toBe(true);
-      // URLは先に変わるため、旧タブの並び順UIを操作しないよう再描画を待つ。
-      await page.waitForNetworkIdle({
-        idleTime: 500,
-        concurrency: 2,
-        timeout: 10000,
-      });
-    } else if (target.site === "bluesky") {
+    if (target.site === "bluesky") {
       const selected = await page.$eval(navigation, (node) => {
         const mark = node.querySelector('[style*="background-color"]');
         return (
@@ -178,7 +127,6 @@ async function selectTab(page: Page, target: CompatibilityCase) {
         .toBe("true");
   }
 }
-
 async function navigate(
   session: LiveSession,
   page: Page,
@@ -233,94 +181,14 @@ async function navigate(
       }),
       contentType: "application/json",
     });
-
   await expect
     .poll(() => new URL(page.url()).pathname)
     .toBe(target.destination);
-
-  if (target.niconicoSearch) {
-    const sort = aria("combobox", "ソートキーを選択");
-    await expect
-      .poll(() => page.$eval(sort, (node) => (node.textContent ?? "").trim()))
-      .toBe(target.niconicoSearch === "registeredAt" ? "投稿日時" : "再生数");
-    const query = new URL(page.url()).searchParams;
-    expect(query.get("sort")).toBe(target.niconicoSearch);
-    expect(query.get("order")).toBe("desc");
-  } else if (target.niconicoSort) {
-    await selectNiconicoUserSort(page, target.niconicoSort);
-    const query = new URL(page.url()).searchParams;
-    expect(query.get("sortKey") ?? "registeredAt").toBe(
-      target.niconicoSort === "再生数が多い順" ? "viewCount" : "registeredAt",
-    );
-    expect(query.get("sortOrder") ?? "desc").toBe("desc");
-  }
-  if (target.sort && target.sort !== "default") {
-    const names =
-      target.sort === "popular"
-        ? ["人気の動画", "Popular", "Most popular"]
-        : ["新しい順", "Latest", "Newest"];
-    const label =
-      target.sort === "popular"
-        ? /^(人気の動画|Popular|Most popular)$/
-        : /^(新しい順|Latest|Newest)$/;
-    const combo = 'ytd-browse:not([hidden]) [role="combobox"]';
-    await expect
-      .poll(() => visible(page, `${combo}, ${aria("tab", names)}`))
-      .toBe(true);
-    if (await page.$$eval(combo, (nodes) => nodes.length)) {
-      if (
-        !label.test(
-          (
-            await (
-              await element(page, combo)
-            ).evaluate((node) => (node as HTMLElement).innerText)
-          ).trim(),
-        )
-      ) {
-        await page.locator(combo).click();
-        await page.locator(aria("menuitem", names)).click();
-      }
-    } else {
-      const sortTab = aria("tab", names);
-      await page.locator(sortTab).wait();
-      if (
-        (await page.$eval(sortTab, (node) =>
-          node.getAttribute("aria-selected"),
-        )) !== "true"
-      )
-        await page.locator(sortTab).click();
-      await expect
-        .poll(() =>
-          page.$eval(sortTab, (node) => node.getAttribute("aria-selected")),
-        )
-        .toBe("true");
-    }
-    await page.waitForNetworkIdle({
-      idleTime: 500,
-      concurrency: 2,
-      timeout: 10000,
-    });
-    await expect
-      .poll(async () => {
-        if (await page.$(combo))
-          return label.test(
-            await page.$eval(combo, (node) => (node.textContent ?? "").trim()),
-          );
-        return (
-          (await page.$eval(aria("tab", names), (node) =>
-            node.getAttribute("aria-selected"),
-          )) === "true"
-        );
-      })
-      .toBe(true);
-  }
-
   await expect
     .poll(() => visible(page, regionFor(target).card), { timeout: 30000 })
     .toBe(true);
   await assertLivePage(session, page);
 }
-
 async function snapshot(
   page: Page,
   target: CompatibilityCase,
@@ -342,42 +210,24 @@ async function snapshot(
               ? '[data-testid="profileListScreen"] [data-testid="headerTitle"]'
               : aria("heading"),
           ]
-        : [
-            "sort",
-            target.sort === "default"
-              ? "ytd-browse:not([hidden]) ytd-rich-grid-renderer #header"
-              : selection.sort,
-          ],
+        : ["sort", selection.sort],
     ["card", selection.card],
-    ...(target.period
-      ? []
-      : ([["metric", selection.metric]] as [string, string][])),
+    ["metric", selection.metric],
   ];
-
-  if (target.site === "youtube" && !target.destination.endsWith("/shorts"))
-    selections.push(["date", selection.metric]);
   const cards = await page.$$(selection.card);
   const visibleCards: ElementHandle<Element>[] = [];
   for (const card of cards) if (await card.isVisible()) visibleCards.push(card);
   for (const [name, locator] of selections) {
     const shapes: StructureNode[] = [];
     const selectedCards =
-      name === "date" || (name === "metric" && target.site !== "youtube")
-        ? visibleCards.slice(0, 1)
-        : visibleCards;
-    const elements = ["metric", "date"].includes(name)
-      ? (
-          await Promise.all(selectedCards.map((card) => card.$$(locator)))
-        ).flat()
-      : await page.$$(locator);
+      name === "metric" ? visibleCards.slice(0, 1) : visibleCards;
+    const elements =
+      name === "metric"
+        ? (
+            await Promise.all(selectedCards.map((card) => card.$$(locator)))
+          ).flat()
+        : await page.$$(locator);
     for (const element of elements) {
-      if (
-        name === "date" &&
-        !(await element.evaluate((node) =>
-          /前|ago/i.test(node.textContent ?? ""),
-        ))
-      )
-        continue;
       if (
         await element.evaluate((node) => {
           for (
@@ -412,7 +262,6 @@ async function snapshot(
   }
   return result;
 }
-
 async function observations(page: Page, target: CompatibilityCase) {
   const selection = regionFor(target);
   const rows = await page.$$eval(
@@ -432,10 +281,7 @@ async function observations(page: Page, target: CompatibilityCase) {
           return true;
         })
         .map((card) => {
-          const cell =
-            card.closest(
-              '[data-testid="cellInnerDiv"], ytd-rich-item-renderer',
-            ) ?? card;
+          const cell = card.closest('[data-testid="cellInnerDiv"]') ?? card;
           // 本文の語句ではなく、サイトが表示する投稿種別の案内を読む。
           const quotedCards = [
             ...card.querySelectorAll('div[role="link"]'),
@@ -506,16 +352,9 @@ async function observations(page: Page, target: CompatibilityCase) {
             id:
               card.getAttribute("href") ??
               card
-                .querySelector(
-                  'a[href*="/status/"], a[href*="/post/"], a[href*="/watch"], a[href*="/shorts/"]',
-                )
+                .querySelector('a[href*="/status/"], a[href*="/post/"]')
                 ?.getAttribute("href") ??
               null,
-            date:
-              card.querySelector("time[datetime]")?.getAttribute("datetime") ||
-              card.querySelector(".NC-VideoRegisteredAtText-text")
-                ?.textContent ||
-              "",
             metrics: [...card.querySelectorAll(metric)].map(
               (e) => e.getAttribute("aria-label") || e.textContent || "",
             ),
@@ -566,37 +405,9 @@ async function observations(page: Page, target: CompatibilityCase) {
   );
   return rows.map((row) => ({
     ...row,
-    count: target.period ? Number.NaN : parseMetric(row.metrics[0] ?? ""),
-    ageDays:
-      target.site === "niconico"
-        ? (Date.now() - Date.parse(row.date)) / 86400000
-        : youtubeAge(row.metrics.find((t) => /前|ago/i.test(t)) ?? ""),
+    count: parseMetric(row.metrics[0] ?? ""),
   }));
 }
-
-// テスト側の独立した期待値。未対応表記を0日として合格させない。
-function youtubeAge(text: string): number {
-  const match = text.match(
-    /([\d.]+)\s*(秒|分|時間|日|週間|か月|ヶ月|年|seconds?|minutes?|hours?|days?|weeks?|months?|years?)\s*(前|ago)/i,
-  );
-  if (!match) return Number.NaN;
-  const unit = match[2]?.toLowerCase() ?? "";
-  const multiplier = /^(秒|second)/.test(unit)
-    ? 1 / 86400
-    : /^(分|minute)/.test(unit)
-      ? 1 / 1440
-      : /^(時間|hour)/.test(unit)
-        ? 1 / 24
-        : /^(日|day)/.test(unit)
-          ? 1
-          : /^(週間|week)/.test(unit)
-            ? 7
-            : /^(か月|ヶ月|month)/.test(unit)
-              ? 365.25 / 12
-              : 365.25;
-  return Number(match[1]) * multiplier;
-}
-
 async function inclusionFilter(
   session: LiveSession,
   page: Page,
@@ -631,18 +442,12 @@ async function inclusionFilter(
     contentType: "application/json",
   });
   const choice = selectPartialChoice(
-    available.filter((o) =>
-      Number.isFinite(
-        target.period ? periodDays(o.label) : parseMetric(o.label),
-      ),
-    ),
+    available.filter((o) => Number.isFinite(parseMetric(o.label))),
     total,
   );
   let threshold: number;
   if (choice) {
-    threshold = target.period
-      ? periodDays(choice.label)
-      : parseMetric(choice.label);
+    threshold = parseMetric(choice.label);
     // 投稿の追加取得で候補値と順序が変わるため、観測時のindexを操作に使わない。
     // ラベルが厳密に一致する実要素を保持し、消失・重複は失敗として扱う。
     const currentOptions = await panel.$$(options);
@@ -680,24 +485,6 @@ async function inclusionFilter(
     } finally {
       await Promise.all(currentOptions.map((option) => option.dispose()));
     }
-  } else if (target.period) {
-    const ages = [
-      ...new Set(
-        (await observations(page, target))
-          .map((r) => r.ageDays)
-          .filter(Number.isFinite),
-      ),
-    ].sort((a, b) => a - b);
-    expect(
-      ages.length,
-      "期間の適用を確認できる投稿日が必要です",
-    ).toBeGreaterThan(1);
-    threshold = Math.ceil(((ages[0] ?? 0) + (ages[1] ?? 0)) / 2);
-    await panelClick(
-      await element(panel, `${options} >>> ${text("期間を入力")}`),
-    );
-    const input = aria("spinbutton", "投稿期間");
-    await fillNumber(panel, input, threshold);
   } else {
     const counts = before.map((row) => row.count).filter(Number.isFinite);
     expect(
@@ -735,16 +522,15 @@ async function inclusionFilter(
               {
                 minReactionsEnabled?: boolean;
                 minReactions?: number;
-                postedWithinDays?: number;
               }
             >;
           };
         };
         const stored = saved.settings?.siteSettings?.[target.site];
-        return target.period
-          ? stored?.postedWithinDays === threshold
-          : stored?.minReactionsEnabled === true &&
-              stored.minReactions === threshold;
+        return (
+          stored?.minReactionsEnabled === true &&
+          stored.minReactions === threshold
+        );
       })
       .toBe(true);
   } finally {
@@ -760,10 +546,8 @@ async function inclusionFilter(
           rows.length > 0 &&
           rows.every(
             (r) =>
-              Number.isFinite(target.period ? r.ageDays : r.count) &&
-              ((target.period ? r.ageDays <= threshold : r.count >= threshold)
-                ? r.visible && r.height > 0
-                : !r.visible),
+              Number.isFinite(r.count) &&
+              (r.count >= threshold ? r.visible && r.height > 0 : !r.visible),
           )
         );
       })
@@ -776,9 +560,7 @@ async function inclusionFilter(
   }
   // 非同期で入れ替わる一覧は、条件と表示の一致を確認した同じ観測で判定する。
   const filtered = lastRows;
-  const excludedBefore = before.filter((r) =>
-    target.period ? r.ageDays > threshold : r.count < threshold,
-  );
+  const excludedBefore = before.filter((r) => r.count < threshold);
   expect(
     excludedBefore.every(
       (r) =>
@@ -786,9 +568,7 @@ async function inclusionFilter(
     ),
   ).toBe(true);
   expect(filtered.some((r) => r.visible)).toBe(
-    filtered.some((r) =>
-      target.period ? r.ageDays <= threshold : r.count >= threshold,
-    ),
+    filtered.some((r) => r.count >= threshold),
   );
   session.loadGuard.setContext(target.id, "minimum-clear");
   await panelClick(await element(panel, combo));
@@ -810,15 +590,6 @@ async function inclusionFilter(
     status: excludedBefore.length ? "verified" : "operation-only",
   };
 }
-
-function periodDays(label: string): number {
-  const match = label.match(/(\d+)\s*(週間|か月|ヶ月|年)/);
-  return match
-    ? Number(match[1]) *
-        (match[2] === "週間" ? 7 : match[2] === "年" ? 365 : 30)
-    : Number.NaN;
-}
-
 async function categoricalFilter(
   session: LiveSession,
   page: Page,
@@ -930,7 +701,6 @@ async function categoricalFilter(
     contentType: "application/json",
   });
 }
-
 export function createCompatibilityCases(): LiveCase[] {
   const entries: LiveCase[] = [];
   for (const target of groupByEntry(cases, compatibilityEntry)) {
@@ -947,19 +717,15 @@ export function createCompatibilityCases(): LiveCase[] {
         try {
           // 保存済みの強い条件で初期一覧を隠し、サイトの追加取得を誘発しない。
           // UIからの適用・解除と起動後の「指定なし」確認は、この後で個別に行う。
-          await session.api.evaluate(
-            `(async (site) => {
+          await session.api.evaluate(`(async (site) => {
           const stored = await chrome.storage.sync.get('settings');
           const settings = stored.settings ?? {siteSettings:{}};
           const previous = settings.siteSettings?.[site] ?? {};
-          const cleared = site === 'x' || site === 'bluesky'
-            ? {...previous,kind:'reactions',minReactionsEnabled:false,mediaEnabled:false,mediaMode:'any',hideReplies:false,hideQuotes:false,hideReposts:false}
-            : {...previous,kind:'metric',postedWithinDays:0};
+          const cleared = {...previous,minReactionsEnabled:false,mediaEnabled:false,mediaMode:'any',hideReplies:false,hideQuotes:false,hideReposts:false};
           if(JSON.stringify(previous) !== JSON.stringify(cleared)) {
             await chrome.storage.sync.set({settings:{...settings,siteSettings:{...settings.siteSettings,[site]:cleared}}});
           }
-        })(${JSON.stringify(target.site)})`,
-          );
+        })(${JSON.stringify(target.site)})`);
           await page.bringToFront();
           session.loadGuard.setContext(target.id, "navigate");
           await navigate(session, page, target, task, reused);
@@ -971,23 +737,10 @@ export function createCompatibilityCases(): LiveCase[] {
             }),
             contentType: "application/json",
           });
-
           session.loadGuard.setContext(target.id, "open-panel");
           const panel = await openPanel(session, page);
           await expect
-            .poll(() =>
-              visible(
-                panel,
-                aria(
-                  "heading",
-                  target.period
-                    ? "投稿期間"
-                    : target.site === "x" || target.site === "bluesky"
-                      ? "最低いいね数"
-                      : "最低再生回数",
-                ),
-              ),
-            )
+            .poll(() => visible(panel, aria("heading", "最低いいね数")))
             .toBe(true);
           await expect
             .poll(async () => (await readContext(session, page)).health?.state)
@@ -995,21 +748,6 @@ export function createCompatibilityCases(): LiveCase[] {
           const context = await readContext(session, page);
           expect(context.site).toBe(target.site);
           expect(context.timelineAvailable).toBe(true);
-
-          if (target.sort) expect(context.sortOrder).toBe(target.sort);
-          if (target.site === "youtube" || target.site === "niconico") {
-            await expect
-              .poll(() =>
-                panel.$$eval(
-                  aria("heading", "最低再生回数"),
-                  (nodes) => nodes.length,
-                ),
-              )
-              .toBe(0);
-            expect(
-              await panel.$$eval(aria("switch"), (nodes) => nodes.length),
-            ).toBe(0);
-          }
           for (const toggle of await panel.$$(aria("switch"))) {
             if (
               (await toggle.evaluate((node) =>
@@ -1106,60 +844,10 @@ export function createCompatibilityCases(): LiveCase[] {
               target,
               task,
             );
-            await evidence(
-              task,
-              target.period ? "period-filter" : "minimum-filter",
-              {
-                body: JSON.stringify(result),
-                contentType: "application/json",
-              },
-            );
-          }
-          if (
-            target.id === "niconico-popular" ||
-            target.id === "niconico-search-popular"
-          ) {
-            const requests: string[] = [];
-            const track = (request: import("puppeteer-core").HTTPRequest) => {
-              const url = new URL(request.url());
-              if (
-                url.pathname.includes("/videos") ||
-                url.pathname.startsWith("/search/")
-              )
-                requests.push(request.url());
-            };
-            const before = (await observations(page, target)).map(
-              (row) => row.id,
-            );
-            const pager = 'a[href*="page="]';
-            expect(
-              await page.$(pager),
-              "サイトのページ送りが残ること",
-            ).not.toBeNull();
-            page.on("request", track);
-            try {
-              await page.evaluate(() =>
-                window.scrollTo(0, document.documentElement.scrollHeight),
-              );
-              await new Promise((resolve) => setTimeout(resolve, 800));
-              expect(
-                requests,
-                "スクロールで次ページを取得しないこと",
-              ).toHaveLength(0);
-              expect(
-                (await observations(page, target)).map((row) => row.id),
-              ).toEqual(before);
-              await evidence(task, "native-pagination", {
-                body: JSON.stringify({
-                  requested: 0,
-                  unchanged: true,
-                  pager: true,
-                }),
-                contentType: "application/json",
-              });
-            } finally {
-              page.off("request", track);
-            }
+            await evidence(task, "minimum-filter", {
+              body: JSON.stringify(result),
+              contentType: "application/json",
+            });
           }
           await evidence(task, "candidate", {
             body: JSON.stringify(session.candidate),

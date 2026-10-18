@@ -6,13 +6,11 @@ import {
 } from "./page-health.ts";
 
 const good: PageHealthObservation = {
-  pageKey: "/videos:newest",
+  pageKey: "/home",
   support: "supported",
   empty: false,
-  requiresDates: false,
   sampledPosts: 3,
   readableMetrics: 3,
-  readableDates: 0,
 };
 describe("ページ情報の健全性", () => {
   it("不要な情報の欠損は内部診断だけに残す", () => {
@@ -40,35 +38,6 @@ describe("ページ情報の健全性", () => {
       tracker.observe({ ...partial, pageKey: "/other" }, 500).warnPartial,
     ).toBe(false);
   });
-  it("投稿期間だけの動画では反応数を診断せず、日付の取得を診断する", () => {
-    const tracker = new PageHealthTracker(100);
-    const video = {
-      ...good,
-      observesMetrics: false,
-      readableMetrics: 0,
-      readableDates: 3,
-    };
-    expect(tracker.observe(video, 0)).toMatchObject({
-      state: "ready",
-      readableMetrics: 0,
-    });
-    expect(
-      tracker.observe({ ...video, requiresDates: true, readableDates: 0 }, 1),
-    ).toMatchObject({ state: "loading", issue: "dates" });
-    expect(
-      tracker.observe({ ...video, requiresDates: true, readableDates: 0 }, 101),
-    ).toMatchObject({ state: "unreadable", issue: "dates" });
-    const partial = { ...video, requiresDates: true, readableDates: 2 };
-    expect(tracker.observe(partial, 102)).toMatchObject({
-      state: "degraded",
-      issue: "dates",
-      warnPartial: true,
-    });
-    expect(tracker.observe(partial, 202).warnPartial).toBe(true);
-    expect(
-      tracker.observe({ ...partial, requiresDates: false }, 203),
-    ).toMatchObject({ state: "ready", warnPartial: false });
-  });
   it("構造不明は対象外とせず、読み込み猶予後に失敗を報告する", () => {
     const tracker = new PageHealthTracker(100);
     expect(tracker.observe({ ...good, support: "unknown" }, 0).state).toBe(
@@ -91,16 +60,13 @@ describe("ページ情報の健全性", () => {
       tracker.observe({ ...none, empty: true, support: "unknown" }).state,
     ).toBe("unreadable");
   });
-  it("期間指定の必要情報と部分欠損を区別する", () => {
+  it("反応数の全件欠損と部分欠損を区別する", () => {
     const tracker = new PageHealthTracker(0);
     expect(tracker.observe(good).state).toBe("ready");
-    expect(tracker.observe({ ...good, requiresDates: true })).toMatchObject({
-      state: "unreadable",
-      issue: "dates",
+    expect(tracker.observe({ ...good, readableMetrics: 1 })).toMatchObject({
+      state: "degraded",
+      issue: "metrics",
     });
-    expect(
-      tracker.observe({ ...good, requiresDates: true, readableDates: 1 }),
-    ).toMatchObject({ state: "degraded", issue: "dates" });
     expect(tracker.observe({ ...good, readableMetrics: 0 })).toMatchObject({
       state: "unreadable",
       issue: "metrics",
@@ -110,9 +76,9 @@ describe("ページ情報の健全性", () => {
     const tracker = new PageHealthTracker(100);
     const broken = { ...good, support: "unknown" as const };
     tracker.observe(broken, 0);
-    expect(tracker.observe({ ...broken, pageKey: "/streams" }, 200).state).toBe(
-      "loading",
-    );
+    expect(
+      tracker.observe({ ...broken, pageKey: "/profile/other" }, 200).state,
+    ).toBe("loading");
     expect(
       tracker.observe({ ...good, support: "unsupported" }, 201).state,
     ).toBe("unsupported");
@@ -123,7 +89,6 @@ describe("ページ情報の健全性", () => {
         state: "ready",
         sampledPosts: 0,
         readableMetrics: 1,
-        readableDates: 0,
       }),
     ).toBe(false);
     expect(isPageHealth(new PageHealthTracker().observe(good))).toBe(true);

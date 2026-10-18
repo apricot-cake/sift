@@ -1,7 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { blueskyAdapter } from "./adapters/bluesky.ts";
 import { xAdapter } from "./adapters/x.ts";
-import { youtubeAdapter } from "./adapters/youtube.ts";
 import { TimelineViewport } from "./timeline-viewport.ts";
 
 let viewport: TimelineViewport;
@@ -385,14 +384,6 @@ describe.each([
     nextPath: "/profile/other.test",
     markup:
       '<div data-testid="feedItem-by-example.test" data-sift-filter-state="matched"><a href="/profile/example.test/post/123">投稿</a><button data-testid="likeBtn"></button></div>',
-  },
-  {
-    name: "YouTube",
-    adapter: youtubeAdapter,
-    path: "/@music/videos",
-    nextPath: "/@news/videos",
-    markup:
-      '<ytd-video-renderer data-sift-filter-state="matched"><a id="video-title" href="/watch?v=123">動画</a></ytd-video-renderer><ytd-browse><button role="tab" aria-selected="true">人気の動画</button></ytd-browse>',
   },
 ])("$name の位置復元", ({ adapter, path, nextPath, markup }) => {
   function prepare(): void {

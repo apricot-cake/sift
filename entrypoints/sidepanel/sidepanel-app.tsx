@@ -1,5 +1,4 @@
 import {
-  CalendarClock,
   CircleMinus,
   Image,
   ListFilter,
@@ -20,19 +19,10 @@ import {
   isFilterContextResponse,
 } from "../../utils/filter-context.ts";
 import { t } from "../../utils/i18n.ts";
-import {
-  type MetricAggregationAge,
-  metricAggregationScope,
-} from "../../utils/metric-aggregation-scope.ts";
 import { metricThresholdSuggestions } from "../../utils/metric-threshold-suggestions.ts";
 import { isKnownUnsupportedSite } from "../../utils/panel-connection.ts";
 import {
-  countWithinPeriod,
-  PUBLICATION_PERIODS,
-} from "../../utils/publication-period.ts";
-import {
   defaults,
-  type MetricSiteSettings,
   normalizeSettings,
   type ReactionSiteSettings,
   type Settings,
@@ -310,16 +300,10 @@ export function SidepanelApp(): React.JSX.Element {
               return;
             }
             const siteSettings = settingsFor(stored, context.site);
-            const next = withSiteSettings(
-              stored,
-              context.site,
-              siteSettings.kind !== "metric"
-                ? { ...siteSettings, minReactionsEnabled: false }
-                : {
-                    ...siteSettings,
-                    postedWithinDays: 0,
-                  },
-            );
+            const next = withSiteSettings(stored, context.site, {
+              ...siteSettings,
+              minReactionsEnabled: false,
+            });
             initializedMinimums.current.add(context.site);
             await settingsItem.setValue(next);
             const [savedTab] = await browser.tabs.query({
@@ -426,9 +410,7 @@ export function SidepanelApp(): React.JSX.Element {
   const selectedSettings = settingsFor(settings, selectedSite);
   const manualActive = manualSites[selectedSite] === true;
   const manualMinimum =
-    selectedSettings.kind === "reactions"
-      ? (selectedSettings.manualMinimum ?? selectedSettings.minReactions)
-      : 0;
+    selectedSettings.manualMinimum ?? selectedSettings.minReactions;
   const filteringEnabled = pageFilteringEnabled;
 
   const updateFiltering = (enabled: boolean): void => {
@@ -458,7 +440,7 @@ export function SidepanelApp(): React.JSX.Element {
 
   const saveSiteSettings = (
     site: SiteSettingsKey,
-    nextSiteSettings: ReactionSiteSettings | MetricSiteSettings,
+    nextSiteSettings: ReactionSiteSettings,
   ): void => {
     saveSettings(withSiteSettings(settings, site, nextSiteSettings));
   };
@@ -467,13 +449,10 @@ export function SidepanelApp(): React.JSX.Element {
     key: Key,
     value: ReactionSiteSettings[Key],
   ): void => {
-    if (selectedSettings.kind === "reactions") {
-      saveSiteSettings(selectedSite, { ...selectedSettings, [key]: value });
-    }
+    saveSiteSettings(selectedSite, { ...selectedSettings, [key]: value });
   };
 
   const setManualMinimum = (value: number, enabled: boolean): void => {
-    if (selectedSettings.kind !== "reactions") return;
     setManualSites((sites) => ({ ...sites, [selectedSite]: true }));
     saveSiteSettings(selectedSite, {
       ...selectedSettings,
@@ -483,7 +462,6 @@ export function SidepanelApp(): React.JSX.Element {
   };
 
   const toggleManualMinimum = (enabled: boolean): void => {
-    if (selectedSettings.kind !== "reactions") return;
     setManualSites((sites) => ({ ...sites, [selectedSite]: enabled }));
     if (enabled) setManualMinimum(manualMinimum, true);
     else
@@ -521,6 +499,7 @@ export function SidepanelApp(): React.JSX.Element {
     <main
       className="min-h-screen bg-background text-foreground"
       data-sift-sidepanel=""
+      data-sift-site={activeSite ?? undefined}
     >
       <div className="relative mx-auto flex min-h-screen max-w-xl flex-col p-6">
         <div data-filter-controls="">
@@ -555,30 +534,22 @@ export function SidepanelApp(): React.JSX.Element {
             activeSite !== null &&
             !healthBlocksControls && (
               <div className="text-sm leading-6 text-muted-foreground">
-                <p className="m-0">{t("sidepanelYouTubeUnsupportedTitle")}</p>
+                <p className="m-0">{t("sidepanelUnsupportedTitle")}</p>
                 <div className="mt-6">
                   <p className="m-0 font-medium">
-                    {t("sidepanelYouTubeSupportedPagesTitle")}
+                    {t("sidepanelSupportedPagesTitle")}
                   </p>
                   <ul className="mb-0 mt-3 list-disc space-y-1 pl-5">
-                    {activeSite === "youtube" ? (
-                      <li>{t("sidepanelYouTubeSupportedChannelVideos")}</li>
-                    ) : activeSite === "niconico" ? (
-                      <li>{t("sidepanelNiconicoSupportedSortHint")}</li>
-                    ) : (
-                      <>
-                        <li>{t("sidepanelSupportedFollowing")}</li>
-                        <li>{t("sidepanelSupportedLists")}</li>
-                        <li>{t("sidepanelSupportedLatestSearch")}</li>
-                        <li>
-                          {t(
-                            activeSite === "x"
-                              ? "sidepanelSupportedXProfiles"
-                              : "sidepanelSupportedProfiles",
-                          )}
-                        </li>
-                      </>
-                    )}
+                    <li>{t("sidepanelSupportedFollowing")}</li>
+                    <li>{t("sidepanelSupportedLists")}</li>
+                    <li>{t("sidepanelSupportedLatestSearch")}</li>
+                    <li>
+                      {t(
+                        activeSite === "x"
+                          ? "sidepanelSupportedXProfiles"
+                          : "sidepanelSupportedProfiles",
+                      )}
+                    </li>
                   </ul>
                 </div>
               </div>
@@ -591,120 +562,94 @@ export function SidepanelApp(): React.JSX.Element {
                 disabled={!filteringIsAvailable}
               >
                 <div>
-                  {selectedSettings.kind === "metric" ? (
-                    <PublicationPeriodPicker
-                      settings={selectedSettings}
-                      dates={activeContext?.metricCreatedAtMs ?? []}
-                      total={activeContext?.metricSampleCount ?? 0}
-                      truncated={activeContext?.metricContextTruncated === true}
-                      onChange={(patch) =>
-                        saveSiteSettings(selectedSite, {
-                          ...selectedSettings,
-                          ...patch,
-                        })
-                      }
-                    />
-                  ) : (
-                    <section data-minimum-group="">
-                      <h2 className="m-0 pb-3 text-sm font-medium">
-                        <ItemLabel icon={ListFilter}>
-                          {t("optionsMinLikes")}
-                        </ItemLabel>
-                      </h2>
-                      <ReactionThresholdSuggestions
-                        truncated={
-                          activeContext?.metricContextTruncated === true
-                        }
-                        minimumEnabled={selectedSettings.minReactionsEnabled}
-                        onManual={() => toggleManualMinimum(true)}
-                        onClear={() => toggleManualMinimum(false)}
-                        selectionEnabled={
-                          !manualActive && selectedSettings.minReactionsEnabled
-                        }
-                        currentMinimum={selectedSettings.minReactions}
-                        metricCounts={activeContext?.metricCounts ?? []}
-                        metricCreatedAtMs={
-                          activeContext?.metricCreatedAtMs ?? []
-                        }
-                        onSelect={(minimum) => {
-                          setManualSites((sites) => ({
-                            ...sites,
-                            [selectedSite]: false,
-                          }));
-                          saveSiteSettings(selectedSite, {
-                            ...selectedSettings,
-                            manualMinimum,
-                            minReactions: minimum,
-                            minReactionsEnabled: true,
-                          });
-                        }}
-                      >
-                        <ThresholdSetting
-                          label={t("optionsManualMinimum")}
-                          min={0}
-                          onValueChange={(value) =>
-                            setManualMinimum(value, true)
-                          }
-                          suffix={t("sidepanelLikeSuggestionMinimumSuffix")}
-                          value={manualMinimum}
-                        />
-                      </ReactionThresholdSuggestions>
-                    </section>
-                  )}
-                  {selectedSettings.kind === "reactions" && (
-                    <MediaSetting
-                      enabled={selectedSettings.mediaEnabled}
-                      mode={selectedSettings.mediaMode}
-                      onChange={(mediaEnabled, mediaMode) =>
-                        saveSiteSettings(selectedSite, {
-                          ...selectedSettings,
-                          mediaEnabled,
-                          mediaMode,
-                        })
-                      }
-                    />
-                  )}
-                </div>
-
-                {selectedSettings.kind === "reactions" && (
-                  <section data-filter-section="">
-                    <h2>
-                      <ItemLabel icon={CircleMinus}>
-                        {t("optionsSectionExclude")}
+                  <section data-minimum-group="">
+                    <h2 className="m-0 pb-3 text-sm font-medium">
+                      <ItemLabel icon={ListFilter}>
+                        {t("optionsMinLikes")}
                       </ItemLabel>
                     </h2>
-                    <SettingRow
-                      icon={MessageCircle}
-                      label={t("optionsHideReplies")}
+                    <ReactionThresholdSuggestions
+                      truncated={activeContext?.metricContextTruncated === true}
+                      minimumEnabled={selectedSettings.minReactionsEnabled}
+                      onManual={() => toggleManualMinimum(true)}
+                      onClear={() => toggleManualMinimum(false)}
+                      selectionEnabled={
+                        !manualActive && selectedSettings.minReactionsEnabled
+                      }
+                      currentMinimum={selectedSettings.minReactions}
+                      metricCounts={activeContext?.metricCounts ?? []}
+                      onSelect={(minimum) => {
+                        setManualSites((sites) => ({
+                          ...sites,
+                          [selectedSite]: false,
+                        }));
+                        saveSiteSettings(selectedSite, {
+                          ...selectedSettings,
+                          manualMinimum,
+                          minReactions: minimum,
+                          minReactionsEnabled: true,
+                        });
+                      }}
                     >
-                      <Switch
-                        aria-label={t("optionsHideReplies")}
-                        checked={selectedSettings.hideReplies}
-                        onCheckedChange={(value) =>
-                          updateReactionSetting("hideReplies", value)
-                        }
+                      <ThresholdSetting
+                        label={t("optionsManualMinimum")}
+                        min={0}
+                        onValueChange={(value) => setManualMinimum(value, true)}
+                        suffix={t("sidepanelLikeSuggestionMinimumSuffix")}
+                        value={manualMinimum}
                       />
-                    </SettingRow>
-                    <SettingRow icon={Quote} label={t("optionsHideQuotes")}>
-                      <Switch
-                        aria-label={t("optionsHideQuotes")}
-                        checked={selectedSettings.hideQuotes}
-                        onCheckedChange={(value) =>
-                          updateReactionSetting("hideQuotes", value)
-                        }
-                      />
-                    </SettingRow>
-                    <SettingRow icon={Repeat2} label={t("optionsHideReposts")}>
-                      <Switch
-                        aria-label={t("optionsHideReposts")}
-                        checked={selectedSettings.hideReposts}
-                        onCheckedChange={(value) =>
-                          updateReactionSetting("hideReposts", value)
-                        }
-                      />
-                    </SettingRow>
+                    </ReactionThresholdSuggestions>
                   </section>
-                )}
+                  <MediaSetting
+                    enabled={selectedSettings.mediaEnabled}
+                    mode={selectedSettings.mediaMode}
+                    onChange={(mediaEnabled, mediaMode) =>
+                      saveSiteSettings(selectedSite, {
+                        ...selectedSettings,
+                        mediaEnabled,
+                        mediaMode,
+                      })
+                    }
+                  />
+                </div>
+
+                <section data-filter-section="">
+                  <h2>
+                    <ItemLabel icon={CircleMinus}>
+                      {t("optionsSectionExclude")}
+                    </ItemLabel>
+                  </h2>
+                  <SettingRow
+                    icon={MessageCircle}
+                    label={t("optionsHideReplies")}
+                  >
+                    <Switch
+                      aria-label={t("optionsHideReplies")}
+                      checked={selectedSettings.hideReplies}
+                      onCheckedChange={(value) =>
+                        updateReactionSetting("hideReplies", value)
+                      }
+                    />
+                  </SettingRow>
+                  <SettingRow icon={Quote} label={t("optionsHideQuotes")}>
+                    <Switch
+                      aria-label={t("optionsHideQuotes")}
+                      checked={selectedSettings.hideQuotes}
+                      onCheckedChange={(value) =>
+                        updateReactionSetting("hideQuotes", value)
+                      }
+                    />
+                  </SettingRow>
+                  <SettingRow icon={Repeat2} label={t("optionsHideReposts")}>
+                    <Switch
+                      aria-label={t("optionsHideReposts")}
+                      checked={selectedSettings.hideReposts}
+                      onCheckedChange={(value) =>
+                        updateReactionSetting("hideReposts", value)
+                      }
+                    />
+                  </SettingRow>
+                </section>
               </fieldset>
             )}
         </div>
@@ -758,8 +703,6 @@ export function SidepanelApp(): React.JSX.Element {
                     site: {
                       x: "X",
                       bluesky: "Bluesky",
-                      youtube: "YouTube",
-                      niconico: "ニコニコ動画",
                     }[resetSite],
                   })}
           </p>
@@ -837,149 +780,6 @@ function SettingRow({
   );
 }
 
-function PublicationPeriodPicker({
-  settings,
-  dates,
-  total,
-  truncated = false,
-  onChange,
-}: {
-  settings: MetricSiteSettings;
-  dates: readonly number[];
-  total: number;
-  truncated?: boolean;
-  onChange: (patch: Partial<MetricSiteSettings>) => void;
-}): React.JSX.Element {
-  const [manual, setManual] = useState(false);
-  const days = settings.postedWithinDays ?? 0;
-  const custom =
-    days > 0 &&
-    (manual || !PUBLICATION_PERIODS.some((period) => period.days === days));
-  const inputRef = useRef<HTMLDivElement>(null);
-  const savedDays = settings.manualPeriodDays ?? 30;
-  return (
-    <section data-period-group="">
-      <h2>
-        <ItemLabel icon={CalendarClock}>{t("optionsPostingPeriod")}</ItemLabel>
-      </h2>
-      <p className="mt-3 mb-5 text-xs text-muted-foreground">
-        {t("sidepanelPeriodFilterHint")}
-      </p>
-      <Select
-        value={days === 0 ? "none" : custom ? "custom" : String(days)}
-        onValueChange={(value) => {
-          setManual(value === "custom");
-          onChange({
-            postedWithinDays:
-              value === "none"
-                ? 0
-                : value === "custom"
-                  ? savedDays
-                  : Number(value),
-          });
-        }}
-      >
-        <div data-minimum-picker="" data-custom={custom} ref={inputRef}>
-          {custom && (
-            <div data-custom-minimum="">
-              <EditableNumberInput
-                ariaLabel={t("optionsPostingPeriod")}
-                min={1}
-                value={days}
-                onValueChange={(value) =>
-                  onChange({ postedWithinDays: value, manualPeriodDays: value })
-                }
-              />
-              <span className="text-sm text-muted-foreground">
-                {t("optionsPeriodDaysSuffix")}
-              </span>
-            </div>
-          )}
-          <SelectTrigger aria-label={t("optionsPostingPeriod")}>
-            {!custom && <SelectValue />}
-          </SelectTrigger>
-        </div>
-        <SelectContent
-          data-minimum-menu=""
-          align="end"
-          style={{ width: "min(240px, calc(100vw - 48px))" }}
-          className="max-h-[var(--radix-select-content-available-height)] overflow-y-auto"
-          onCloseAutoFocus={(event) => {
-            const input = inputRef.current?.querySelector("input");
-            if (input) {
-              event.preventDefault();
-              input.focus();
-            }
-          }}
-        >
-          <SelectItem value="none">
-            {t("optionsMinimumNone")}
-            <span data-choice-count="">
-              {total.toLocaleString()}
-              {t("sidepanelMinimumSuggestionCountSuffix")}
-            </span>
-          </SelectItem>
-          {PUBLICATION_PERIODS.map((period) => (
-            <SelectItem key={period.days} value={String(period.days)}>
-              {t(
-                period.unit === "week"
-                  ? "optionsPeriodWeeks"
-                  : period.unit === "month"
-                    ? "optionsPeriodMonths"
-                    : "optionsPeriodYears",
-                { count: period.value },
-              )}
-              <span data-choice-count="">
-                {countWithinPeriod(dates, period.days).toLocaleString()}
-                {t("sidepanelMinimumSuggestionCountSuffix")}
-              </span>
-            </SelectItem>
-          ))}
-          <SelectItem value="custom">{t("optionsManualPeriod")}</SelectItem>
-        </SelectContent>
-      </Select>
-      <p className="mb-0 mt-4 text-xs leading-5 text-muted-foreground">
-        {t(truncated ? "sidepanelSampleScope" : "sidepanelPeriodScope", {
-          count: total,
-        })}
-      </p>
-      {dates.length < total && (
-        <p className="mb-0 mt-2 text-xs leading-5 text-muted-foreground">
-          {t("sidepanelPeriodUnknown", { count: total - dates.length })}
-        </p>
-      )}
-    </section>
-  );
-}
-
-function ThresholdSetting({
-  label,
-  min,
-  onValueChange,
-  suffix,
-  value,
-}: {
-  label: string;
-  min: number;
-  onValueChange: (value: number) => void;
-  suffix?: string;
-  value: number;
-}): React.JSX.Element {
-  return (
-    <div data-custom-minimum="">
-      <EditableNumberInput
-        ariaLabel={label}
-        min={min}
-        value={value}
-        onValueChange={onValueChange}
-      />
-      {suffix && (
-        <span className="text-sm text-muted-foreground">{suffix}</span>
-      )}
-    </div>
-  );
-}
-
 function ReactionThresholdSuggestions({
   minimumEnabled,
   onManual,
@@ -988,7 +788,6 @@ function ReactionThresholdSuggestions({
   selectionEnabled,
   currentMinimum,
   metricCounts,
-  metricCreatedAtMs,
   truncated = false,
   onSelect,
 }: {
@@ -1000,7 +799,6 @@ function ReactionThresholdSuggestions({
   currentMinimum: number;
   truncated?: boolean;
   metricCounts: readonly number[];
-  metricCreatedAtMs: readonly number[];
   onSelect: (minimum: number) => void;
 }): React.JSX.Element {
   const suggestions = metricThresholdSuggestions(metricCounts, currentMinimum);
@@ -1021,28 +819,11 @@ function ReactionThresholdSuggestions({
     notation: "compact",
     maximumFractionDigits: 1,
   });
-  const scope = metricAggregationScope(metricCreatedAtMs, Date.now());
-
-  function formatAge(age: MetricAggregationAge): string {
-    const key =
-      age.unit === "day"
-        ? "sidepanelMinimumSuggestionAgeDays"
-        : age.unit === "month"
-          ? "sidepanelMinimumSuggestionAgeMonths"
-          : "sidepanelMinimumSuggestionAgeYears";
-    return t(key, { count: formatter.format(age.value) });
-  }
-
   const scopeText = truncated
     ? t("sidepanelSampleScope", { count: metricCounts.length })
-    : scope
-      ? t("sidepanelLikeSuggestionScope", {
-          count: formatter.format(metricCounts.length),
-          oldest: formatAge(scope.oldest),
-        })
-      : t("sidepanelLikeSuggestionScopeWithoutDates", {
-          count: formatter.format(metricCounts.length),
-        });
+    : t("sidepanelLikeSuggestionScope", {
+        count: formatter.format(metricCounts.length),
+      });
 
   return (
     <div data-threshold-suggestions="">
@@ -1233,5 +1014,33 @@ function MediaSetting({
         </SelectContent>
       </Select>
     </section>
+  );
+}
+
+function ThresholdSetting({
+  label,
+  min,
+  onValueChange,
+  suffix,
+  value,
+}: {
+  label: string;
+  min: number;
+  onValueChange: (value: number) => void;
+  suffix?: string;
+  value: number;
+}): React.JSX.Element {
+  return (
+    <div data-custom-minimum="">
+      <EditableNumberInput
+        ariaLabel={label}
+        min={min}
+        value={value}
+        onValueChange={onValueChange}
+      />
+      {suffix && (
+        <span className="text-sm text-muted-foreground">{suffix}</span>
+      )}
+    </div>
   );
 }

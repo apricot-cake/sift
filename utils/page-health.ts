@@ -6,7 +6,7 @@ export type PageHealthState =
   | "unsupported"
   | "unreadable"
   | "degraded";
-export type PageHealthIssue = "page" | "posts" | "metrics" | "dates";
+export type PageHealthIssue = "page" | "posts" | "metrics";
 
 export interface PageHealth {
   warnPartial?: boolean;
@@ -14,19 +14,15 @@ export interface PageHealth {
   issue?: PageHealthIssue;
   sampledPosts: number;
   readableMetrics: number;
-  readableDates: number;
 }
 
 export interface PageHealthObservation {
   requiresMetrics?: boolean;
-  observesMetrics?: boolean;
   pageKey: string;
   support: PageSupport;
   empty: boolean;
-  requiresDates: boolean;
   sampledPosts: number;
   readableMetrics: number;
-  readableDates: number;
 }
 
 /** 一時的な描き直しを猶予し、カード未取得を空一覧とは扱わない。 */
@@ -43,25 +39,13 @@ export class PageHealthTracker {
   }
 
   observe(observation: PageHealthObservation, now = Date.now()): PageHealth {
-    const {
-      pageKey,
-      support,
-      empty,
-      requiresDates,
-      observesMetrics = true,
-      sampledPosts,
-      readableMetrics,
-      readableDates,
-    } = observation;
-    const counts = { sampledPosts, readableMetrics, readableDates };
+    const { pageKey, support, empty, sampledPosts, readableMetrics } =
+      observation;
+    const counts = { sampledPosts, readableMetrics };
     const requiredIssue =
-      observesMetrics &&
-      observation.requiresMetrics &&
-      readableMetrics < sampledPosts
+      observation.requiresMetrics && readableMetrics < sampledPosts
         ? "metrics"
-        : requiresDates && readableDates < sampledPosts
-          ? "dates"
-          : undefined;
+        : undefined;
     const partialKey =
       support === "supported" && sampledPosts > 0 && requiredIssue
         ? `${pageKey}:${requiredIssue}`
@@ -83,11 +67,9 @@ export class PageHealthTracker {
         ? "page"
         : sampledPosts === 0
           ? "posts"
-          : observesMetrics && readableMetrics === 0
+          : readableMetrics === 0
             ? "metrics"
-            : requiresDates && readableDates === 0
-              ? "dates"
-              : undefined;
+            : undefined;
     if (issue) {
       const key = `${pageKey}:${issue}`;
       if (key !== this.failureKey) {
@@ -102,12 +84,7 @@ export class PageHealthTracker {
       };
     }
     this.failureKey = "";
-    const partial =
-      observesMetrics && readableMetrics < sampledPosts
-        ? "metrics"
-        : requiresDates && readableDates < sampledPosts
-          ? "dates"
-          : undefined;
+    const partial = readableMetrics < sampledPosts ? "metrics" : undefined;
     return {
       state: partial ? "degraded" : "ready",
       warnPartial:
@@ -133,11 +110,10 @@ export function isPageHealth(value: unknown): value is PageHealth {
     (health.warnPartial === undefined ||
       typeof health.warnPartial === "boolean") &&
     (health.issue === undefined ||
-      ["page", "posts", "metrics", "dates"].includes(health.issue)) &&
-    [health.sampledPosts, health.readableMetrics, health.readableDates].every(
+      ["page", "posts", "metrics"].includes(health.issue)) &&
+    [health.sampledPosts, health.readableMetrics].every(
       (n) => Number.isSafeInteger(n) && n >= 0,
     ) &&
-    health.readableMetrics <= health.sampledPosts &&
-    health.readableDates <= health.sampledPosts
+    health.readableMetrics <= health.sampledPosts
   );
 }

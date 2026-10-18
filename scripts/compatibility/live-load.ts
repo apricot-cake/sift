@@ -3,7 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import type { HTTPRequest, Page } from "puppeteer-core";
 
-export type LiveSite = "x" | "bluesky" | "youtube" | "niconico";
+export type LiveSite = "x" | "bluesky";
 export function liveSite(url: string): LiveSite | undefined {
   let host: string;
   try {
@@ -26,9 +26,6 @@ export function liveSite(url: string): LiveSite | undefined {
     host.endsWith(".host.bsky.network")
   )
     return "bluesky";
-  if (host === "youtube.com" || host.endsWith(".youtube.com")) return "youtube";
-  if (host === "nicovideo.jp" || host.endsWith(".nicovideo.jp"))
-    return "niconico";
   return undefined;
 }
 
@@ -113,10 +110,6 @@ export function networkEndpoint(rawUrl: string): string {
     /^\/xrpc\/((?:app\.bsky|com\.atproto)\.[A-Za-z.]{1,100})$/,
   );
   if (xrpc) return `xrpc/${xrpc[1]}`;
-  const youtube = route.match(
-    /^\/youtubei\/v1\/(browse|next|player|search|guide|log_event|att|notification\/get_notification_menu|account\/account_menu)$/,
-  );
-  if (youtube) return `youtubei/v1/${youtube[1]}`;
   // その他のパスの自由入力部分も保存しない。
   const known = new Set([
     "home",

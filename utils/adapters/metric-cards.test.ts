@@ -7,9 +7,7 @@ import {
 } from "../filter-context.ts";
 import { blueskyAdapter } from "./bluesky.ts";
 import { collectMetricCards } from "./metric-cards.ts";
-import { niconicoAdapter } from "./niconico.ts";
 import { xAdapter } from "./x.ts";
-import { youtubeAdapter } from "./youtube.ts";
 
 function root(html: string) {
   const element = document.createElement("div");
@@ -20,8 +18,6 @@ describe("上限付きの集計対象", () => {
   it.each([
     [xAdapter, "x-following"],
     [blueskyAdapter, "bluesky-home"],
-    [youtubeAdapter, "youtube-videos-popular"],
-    [niconicoAdapter, "niconico-search"],
   ] as const)("%sの通常のカード集合を維持する", (adapter, fixture) => {
     const page = root(
       readFileSync(
@@ -60,13 +56,7 @@ describe("上限付きの集計対象", () => {
     expect(read).toHaveBeenCalledTimes(4);
     expect(sample).toEqual({ cards: [], truncated: true });
   });
-  it("同じYouTubeセルの重複表示を数えない", () => {
-    const page = root(
-      "<ytd-rich-item-renderer><ytd-rich-grid-media></ytd-rich-grid-media><yt-lockup-view-model></yt-lockup-view-model></ytd-rich-item-renderer>",
-    );
-    expect(youtubeAdapter.getMetricPostCards(page).cards).toHaveLength(1);
-  });
-  it("引用・退避画面・不正な動画リンクの範囲を広げない", () => {
+  it("引用と退避画面の範囲を広げない", () => {
     expect(
       xAdapter.getMetricPostCards(
         root(
@@ -81,13 +71,6 @@ describe("上限付きの集計対象", () => {
         ),
       ).cards,
     ).toHaveLength(0);
-    expect(
-      niconicoAdapter.getMetricPostCards(
-        root(
-          '<article><a href="https://evil.example/watch/sm1">1</a></article>',
-        ),
-      ).cards,
-    ).toHaveLength(0);
   });
   it("上限を超える応答や不正な範囲フラグを受け入れない", () => {
     const response = {
@@ -99,7 +82,6 @@ describe("上限付きの集計対象", () => {
       continuousLoadingWarning: false,
       metricSampleCount: 1,
       metricCounts: [1],
-      metricCreatedAtMs: [],
       metricContextTruncated: true,
     };
     expect(isFilterContextResponse(response)).toBe(true);
@@ -138,12 +120,6 @@ describe("上限付きの集計対象", () => {
         ...response,
         metricSampleCount: 1000,
         metricCounts: Array(1001).fill(1),
-      }),
-    ).toBe(false);
-    expect(
-      isFilterContextResponse({
-        ...response,
-        metricCreatedAtMs: Array(1001).fill(1),
       }),
     ).toBe(false);
   });

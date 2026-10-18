@@ -112,14 +112,12 @@ export function parseMetric(value: unknown): number {
 export interface Post {
   mediaMatches: boolean;
   metricCount: number;
-  createdAtMs: number;
   isReply: boolean;
   isQuote: boolean;
   isRepost: boolean;
 }
 
 export interface InclusionThreshold {
-  maximumAgeHours?: number | null;
   minimum: number | null;
 }
 
@@ -138,8 +136,6 @@ export type ClassifyReason =
   | "quote"
   | "repost"
   | "indeterminate-metric"
-  | "indeterminate-age"
-  | "older-than-period"
   | "no-inclusion-filter"
   | "filter-match"
   | "below-threshold";
@@ -152,7 +148,6 @@ export interface ClassifyResult {
 export function classifyPost(
   post: Post,
   settings: ClassifyThresholds,
-  nowMs = Date.now(),
 ): ClassifyResult {
   if (settings.mediaEnabled && !post.mediaMatches) {
     return { state: "hidden", reason: "no-media" };
@@ -170,10 +165,7 @@ export function classifyPost(
     return { state: "hidden", reason: "quote" };
   }
 
-  if (
-    settings.inclusion.minimum === null &&
-    settings.inclusion.maximumAgeHours == null
-  ) {
+  if (settings.inclusion.minimum === null) {
     return { state: "visible", reason: "no-inclusion-filter" };
   }
 
@@ -193,15 +185,5 @@ export function classifyPost(
     }
   }
 
-  if (settings.inclusion.maximumAgeHours != null) {
-    if (!Number.isFinite(post.createdAtMs))
-      return { state: "visible", reason: "indeterminate-age" };
-    if (
-      (nowMs - post.createdAtMs) / 3600000 >
-      settings.inclusion.maximumAgeHours
-    ) {
-      return { state: "hidden", reason: "older-than-period" };
-    }
-  }
   return { state: "matched", reason: "filter-match" };
 }

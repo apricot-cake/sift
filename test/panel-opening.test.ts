@@ -31,7 +31,7 @@ const api = vi.hoisted(() => ({
     onUpdated: { addListener: vi.fn() },
     onRemoved: { addListener: vi.fn() },
     sendMessage: vi.fn(async () => ({
-      site: "youtube",
+      site: "x",
       timelineAvailable: false,
     })),
     query: vi.fn(async () => []),
@@ -72,7 +72,7 @@ beforeEach(async () => {
     url: "https://example.com/",
   });
   api.tabs.sendMessage.mockResolvedValue({
-    site: "youtube",
+    site: "x",
     timelineAvailable: false,
   });
   vi.stubGlobal("__SIFT_LOCAL_DEPLOY__", false);
@@ -98,7 +98,6 @@ function trackedPage(url = "https://x.com/NASA") {
     site: "x",
     pageKey: url,
     timelineKey: url,
-    sortOrder: "newest",
     timelineAvailable: true,
     filteringEnabled: true,
   };
@@ -298,7 +297,7 @@ it.each(["https://example.com/", "chrome://newtab/", undefined])(
 it("対応サイトは開いてから注入する", async () => {
   api.action.onClicked.addListener.mock.calls[0]?.[0]({
     id: 7,
-    url: "https://www.youtube.com/@Google/videos",
+    url: "https://x.com/Google",
   });
   expect(api.sidePanel.open).toHaveBeenCalledWith({ tabId: 7 });
   expect(api.sidePanel.setOptions).toHaveBeenCalledWith({

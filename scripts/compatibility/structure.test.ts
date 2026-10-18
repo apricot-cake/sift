@@ -71,11 +71,9 @@ describe("互換性検証の構造比較", () => {
     expect(captureRoute("https://x.com/search?q=other&f=top")).toBe(
       "/search?f=top",
     );
-    expect(
-      captureRoute(
-        "https://www.nicovideo.jp/user/1/video?sortOrder=desc&sortKey=viewCount",
-      ),
-    ).toBe("/user/1/video?sortKey=viewCount&sortOrder=desc");
+    expect(captureRoute("https://x.com/search?src=typed_query&q=cat")).toBe(
+      "/search",
+    );
   });
   it("投稿本文・指標値・リンク先・動的ID・Sift属性は比較しない", () => {
     const first = snapshot(

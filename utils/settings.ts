@@ -2,13 +2,10 @@
 import type { ClassifyThresholds } from "./filter-core.ts";
 
 export type MediaMode = "any" | "images" | "video";
-export type ReactionSiteSettingsKey = "x" | "bluesky";
-export type MetricSiteSettingsKey = "youtube" | "niconico";
-export type SiteSettingsKey = ReactionSiteSettingsKey | MetricSiteSettingsKey;
+export type SiteSettingsKey = "x" | "bluesky";
 
 export interface ReactionSiteSettings {
   readonly manualMinimum?: number;
-  readonly kind: "reactions";
   readonly mediaEnabled: boolean;
   readonly mediaMode: MediaMode;
   readonly minReactionsEnabled: boolean;
@@ -18,17 +15,9 @@ export interface ReactionSiteSettings {
   readonly hideReposts: boolean;
 }
 
-export interface MetricSiteSettings {
-  readonly kind: "metric";
-  readonly postedWithinDays?: number;
-  readonly manualPeriodDays?: number;
-}
-
 export interface SiteSettingsMap {
   readonly x: ReactionSiteSettings;
   readonly bluesky: ReactionSiteSettings;
-  readonly youtube: MetricSiteSettings;
-  readonly niconico: MetricSiteSettings;
 }
 
 export type SiteSettings = SiteSettingsMap[SiteSettingsKey];
@@ -41,7 +30,6 @@ function defaultReactionSiteSettings(
   minReactions: number,
 ): Readonly<ReactionSiteSettings> {
   return Object.freeze({
-    kind: "reactions",
     mediaEnabled: false,
     mediaMode: "any",
     minReactionsEnabled: true,
@@ -52,16 +40,10 @@ function defaultReactionSiteSettings(
   });
 }
 
-function defaultMetricSiteSettings(): Readonly<MetricSiteSettings> {
-  return Object.freeze({ kind: "metric" });
-}
-
 export const defaults: Readonly<Settings> = Object.freeze({
   siteSettings: Object.freeze({
     x: defaultReactionSiteSettings(1000),
     bluesky: defaultReactionSiteSettings(1000),
-    youtube: defaultMetricSiteSettings(),
-    niconico: defaultMetricSiteSettings(),
   }),
 });
 
@@ -108,7 +90,6 @@ function normalizeReactionSiteSettings(
             1000000000,
           ),
         }),
-    kind: "reactions",
     mediaEnabled:
       typeof source.mediaEnabled === "boolean"
         ? source.mediaEnabled
@@ -141,29 +122,10 @@ function normalizeReactionSiteSettings(
   };
 }
 
-function normalizeMetricSiteSettings(value: unknown): MetricSiteSettings {
-  const source = objectSource(value);
-  return {
-    kind: "metric",
-    ...(source.postedWithinDays === undefined
-      ? {}
-      : {
-          postedWithinDays: clampInteger(source.postedWithinDays, 0, 0, 36500),
-        }),
-    ...(source.manualPeriodDays === undefined
-      ? {}
-      : {
-          manualPeriodDays: clampInteger(source.manualPeriodDays, 30, 1, 36500),
-        }),
-  };
-}
-
 export function normalizeSettings(value: unknown): Settings {
   const source = objectSource(value);
   const storedSiteSettings = objectSource(source.siteSettings);
-  const normalizeReactionFor = (
-    key: ReactionSiteSettingsKey,
-  ): ReactionSiteSettings =>
+  const normalizeReactionFor = (key: SiteSettingsKey): ReactionSiteSettings =>
     normalizeReactionSiteSettings(
       storedSiteSettings[key],
       defaults.siteSettings[key],
@@ -172,8 +134,6 @@ export function normalizeSettings(value: unknown): Settings {
   const siteSettings: SiteSettingsMap = {
     x: normalizeReactionFor("x"),
     bluesky: normalizeReactionFor("bluesky"),
-    youtube: normalizeMetricSiteSettings(storedSiteSettings.youtube),
-    niconico: normalizeMetricSiteSettings(storedSiteSettings.niconico),
   };
 
   return { siteSettings };
@@ -197,25 +157,7 @@ export function withSiteSettings(
   });
 }
 
-export function thresholdsFor(
-  settings: SiteSettings,
-  sortOrder?: string,
-): ClassifyThresholds {
-  if (settings.kind === "metric") {
-    return {
-      mediaEnabled: false,
-      hideReplies: false,
-      hideQuotes: false,
-      hideReposts: false,
-      inclusion: {
-        minimum: null,
-        maximumAgeHours:
-          sortOrder === "popular" && settings.postedWithinDays
-            ? settings.postedWithinDays * 24
-            : null,
-      },
-    };
-  }
+export function thresholdsFor(settings: SiteSettings): ClassifyThresholds {
   return {
     mediaEnabled: settings.mediaEnabled,
     hideReplies: settings.hideReplies,

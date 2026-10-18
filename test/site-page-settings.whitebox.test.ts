@@ -10,11 +10,9 @@ import {
 } from "../utils/settings.ts";
 import { render } from "./dom.ts";
 
-const NOW = Date.parse("2026-09-22T12:00:00Z");
 const BASE_POST: Post = {
   mediaMatches: true,
   metricCount: 1_000,
-  createdAtMs: NOW - 48 * 3_600_000,
   isReply: false,
   isQuote: false,
   isRepost: false,
@@ -30,8 +28,7 @@ function classifyWith(
   });
   return classifyPost(
     { ...BASE_POST, ...post },
-    thresholdsFor(settingsFor(settings, site), "popular"),
-    NOW,
+    thresholdsFor(settingsFor(settings, site)),
   );
 }
 
@@ -82,35 +79,6 @@ const PAGE_CASES: readonly PageCase[] = [
         '<div data-testid="homeScreenFeedTabs-selector-Following">Following</div>',
     },
   },
-  {
-    name: "YouTube",
-    url: "https://www.youtube.com/@sift/videos",
-    adapter: ADAPTERS[2] as ServiceAdapter,
-    accepted: {
-      pathname: "/@sift/videos",
-      markup:
-        '<ytd-browse><button role="tab" aria-selected="true">人気の動画</button></ytd-browse><ytd-video-renderer></ytd-video-renderer>',
-    },
-    rejected: {
-      pathname: "/watch",
-      markup: "<ytd-video-renderer></ytd-video-renderer>",
-    },
-  },
-  {
-    name: "ニコニコ動画",
-    url: "https://www.nicovideo.jp/user/123/video",
-    adapter: ADAPTERS[3] as ServiceAdapter,
-    accepted: {
-      pathname: "/user/123/video",
-      markup:
-        '<article data-video-id="sm1"><a href="/watch/sm1">Sift</a></article>',
-    },
-    rejected: {
-      pathname: "/watch/sm1",
-      markup:
-        '<article data-video-id="sm1"><a href="/watch/sm1">Sift</a></article>',
-    },
-  },
 ];
 
 describe("サイトと対象ページ", () => {
@@ -127,7 +95,6 @@ describe("サイトと対象ページ", () => {
       expect(
         adapter.isTimelineAvailable(render(accepted.markup), {
           pathname: accepted.pathname,
-          search: "?sortKey=viewCount&sortOrder=desc&sort=v&order=d",
         }),
       ).toBe(true);
       expect(
@@ -174,33 +141,6 @@ describe("サイト別の設定項目", () => {
         });
         expect(settingsFor(settings, site).mediaMode).toBe(mediaMode);
       }
-    },
-  );
-
-  it.each(["youtube", "niconico"] as const)(
-    "%s の投稿期間だけを判定へ反映し、旧再生数・新しい動画除外設定を捨てる",
-    (site) => {
-      expect(classifyWith(site, { postedWithinDays: 1 })).toMatchObject({
-        reason: "older-than-period",
-      });
-      expect(classifyWith(site, { postedWithinDays: 2 })).toMatchObject({
-        reason: "filter-match",
-      });
-      expect(classifyWith(site, { postedWithinDays: 0 })).toMatchObject({
-        reason: "no-inclusion-filter",
-      });
-      expect(
-        classifyWith(site, {
-          minCount: 1001,
-          minCountEnabled: true,
-          maxCount: 0,
-          maxCountEnabled: true,
-          hidePublishedWithinEnabled: true,
-          hidePublishedWithinValue: 365,
-          hidePublishedWithinUnit: "day",
-          hideMembersOnly: true,
-        }),
-      ).toMatchObject({ reason: "no-inclusion-filter" });
     },
   );
 });

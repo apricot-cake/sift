@@ -12,7 +12,6 @@ const settings: ClassifyThresholds = {
 const post = {
   mediaMatches: true,
   metricCount: 10,
-  createdAtMs: Number.NaN,
   isReply: false,
   isQuote: false,
   isRepost: false,

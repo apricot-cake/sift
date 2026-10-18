@@ -1,7 +1,6 @@
 import type { JsonTestResults } from "vitest/node";
 import {
   type CompatibilityCase,
-  directInitializationCaseIds,
   requiredFilterEvidence,
 } from "../../e2e/cases.ts";
 
@@ -131,27 +130,6 @@ export function assertLiveCoverage(
       throw new Error(
         `${target.id}: ${target.state} の判定・操作欄・非表示状態の確認が不足しています。`,
       );
-    if (directInitializationCaseIds.some((id) => id === target.id)) {
-      const records = result.meta.liveEvidence ?? [];
-      const spa = records.filter(
-        (item) => item.name === "spa-unsupported-state",
-      );
-      const direct = records.filter(
-        (item) => item.name === "direct-initialization",
-      );
-      if (
-        spa.length !== 1 ||
-        spa[0]?.data.state !== "unsupported" ||
-        spa[0]?.data.timelineAvailable !== false ||
-        spa[0]?.data.controls !== 0 ||
-        spa[0]?.data.hidden !== 0 ||
-        direct.length !== 1 ||
-        direct[0]?.data.directlyLoaded !== true
-      )
-        throw new Error(
-          `${target.id}: サイト内遷移と直接アクセスの確認が不足しています。`,
-        );
-    }
   }
   if (missing.length)
     throw new Error(`代表ページで除外効果が未確認です: ${missing.join(", ")}`);

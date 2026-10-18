@@ -8,53 +8,28 @@ import {
 } from "./settings.ts";
 
 describe("normalizeSettings", () => {
-  it("対応を外したサイトの保存値を除外し、他サイトの値を維持する", () => {
+  it("対応を外したサイトの保存値を除外し、SNSの値を維持する", () => {
     const settings = normalizeSettings({
       siteSettings: {
         x: { manualMinimum: 234, minReactions: 123 },
+        bluesky: { minReactions: 456, mediaEnabled: true, mediaMode: "images" },
+        youtube: { kind: "metric", postedWithinDays: 30 },
+        niconico: { kind: "metric", postedWithinDays: 365 },
         fanbox: { kind: "likes", minReactions: 100 },
       },
     });
-    expect(Object.keys(settings.siteSettings)).toEqual([
-      "x",
-      "bluesky",
-      "youtube",
-      "niconico",
-    ]);
+    expect(Object.keys(settings.siteSettings)).toEqual(["x", "bluesky"]);
     expect(settings.siteSettings.x).toMatchObject({
       manualMinimum: 234,
       minReactions: 123,
     });
+    expect(settings.siteSettings.bluesky).toMatchObject({
+      minReactions: 456,
+      mediaEnabled: true,
+      mediaMode: "images",
+    });
     expect(normalizeSettings(settings)).toEqual(settings);
   });
-  it.each(["youtube", "niconico"] as const)(
-    "%s は旧再生数・新しい動画除外・メンバー限定設定を捨て、投稿期間だけを保存する",
-    (site) => {
-      const saved = normalizeSettings({
-        siteSettings: {
-          [site]: {
-            maxCountEnabled: true,
-            maxCount: 12345,
-            minCountEnabled: true,
-            minCount: 999999,
-            manualMinimum: 42,
-            hidePublishedWithinEnabled: true,
-            hidePublishedWithinValue: 2,
-            hidePublishedWithinUnit: "year",
-            hideMembersOnly: true,
-            postedWithinDays: "365",
-            manualPeriodDays: "42",
-          },
-        },
-      });
-      expect(saved.siteSettings[site]).toEqual({
-        kind: "metric",
-        postedWithinDays: 365,
-        manualPeriodDays: 42,
-      });
-      expect(normalizeSettings(saved)).toEqual(saved);
-    },
-  );
   it.each(["x", "bluesky"] as const)(
     "%s の手動値を候補の適用値と別に保持する",
     (site) => {
@@ -89,8 +64,6 @@ describe("normalizeSettings", () => {
       minReactions: 1000,
     });
     expect(defaults.siteSettings.bluesky.minReactions).toBe(1000);
-    expect(defaults.siteSettings.youtube).toEqual({ kind: "metric" });
-    expect(defaults.siteSettings.niconico).toEqual({ kind: "metric" });
   });
 
   it("メディア条件は無効で、オンにしたときはメディアありを既定にする", () => {
@@ -146,20 +119,6 @@ describe("normalizeSettings", () => {
     });
   });
 
-  it("再生数を使うサービスの設定を独立して保持する", () => {
-    const base = normalizeSettings({});
-    const changed = withSiteSettings(base, "youtube", {
-      ...settingsFor(base, "youtube"),
-      postedWithinDays: 365,
-    });
-
-    expect(changed.siteSettings.youtube).toMatchObject({
-      postedWithinDays: 365,
-    });
-    expect(changed.siteSettings.x).toEqual(base.siteSettings.x);
-    expect(changed.siteSettings.niconico).toEqual(base.siteSettings.niconico);
-  });
-
   it("廃止したSoundCloud設定は読み込まない", () => {
     const settings = normalizeSettings({
       siteSettings: { soundcloud: { minCount: 1 } },
@@ -182,8 +141,7 @@ describe("normalizeSettings", () => {
 
     expect(settings).toEqual({ siteSettings: defaults.siteSettings });
   });
-
-  it("旧形式の期間内だけ表示を新しい動画の除外として読み込まない", () => {
+  it("旧形式の期間設定をSNSの設定へ引き継がない", () => {
     const settings = normalizeSettings({
       siteSettings: {
         x: {
@@ -197,65 +155,10 @@ describe("normalizeSettings", () => {
     expect("periodMode" in settings.siteSettings.x).toBe(false);
     expect("periodValue" in settings.siteSettings.x).toBe(false);
     expect("periodUnit" in settings.siteSettings.x).toBe(false);
-    expect(settings.siteSettings.youtube).toEqual({ kind: "metric" });
-  });
-
-  it("旧形式の公開時期設定を有効な新しい動画の除外へ移行しない", () => {
-    const settings = normalizeSettings({
-      siteSettings: {
-        youtube: {
-          publishedWithinEnabled: true,
-          publishedWithinValue: 2,
-          publishedWithinUnit: "week",
-        },
-      },
-    });
-
-    expect(settings.siteSettings.youtube).toEqual({ kind: "metric" });
-    expect("publishedWithinEnabled" in settings.siteSettings.youtube).toBe(
-      false,
-    );
   });
 });
 
 describe("thresholdsFor", () => {
-  it.each(["youtube", "niconico"] as const)(
-    "%s は再生数順で投稿期間だけを適用する",
-    (site) => {
-      const settings = normalizeSettings({
-        siteSettings: {
-          [site]: {
-            minCountEnabled: true,
-            minCount: 10000,
-            maxCountEnabled: true,
-            maxCount: 100,
-            hidePublishedWithinEnabled: true,
-            hideMembersOnly: true,
-            postedWithinDays: 30,
-          },
-        },
-      }).siteSettings[site];
-      expect(thresholdsFor(settings, "popular").inclusion).toEqual({
-        minimum: null,
-        maximumAgeHours: 720,
-      });
-      for (const sort of [
-        "newest",
-        "default",
-        "relevance",
-        "unknown",
-        undefined,
-      ])
-        expect(thresholdsFor(settings, sort).inclusion).toEqual({
-          minimum: null,
-          maximumAgeHours: null,
-        });
-      expect(
-        thresholdsFor({ ...settings, postedWithinDays: 0 }, "popular").inclusion
-          .maximumAgeHours,
-      ).toBeNull();
-    },
-  );
   it("選択したサイトの設定から反応数の判定条件を作る", () => {
     const stored = normalizeSettings({
       siteSettings: {

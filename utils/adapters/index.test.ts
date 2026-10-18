@@ -2,9 +2,7 @@ import { describe, expect, it } from "vitest";
 import { SITE_MATCHES } from "../site-matches.ts";
 import { blueskyAdapter } from "./bluesky.ts";
 import { ADAPTERS, hostMatchesPattern, selectAdapter } from "./index.ts";
-import { niconicoAdapter } from "./niconico.ts";
 import { xAdapter } from "./x.ts";
-import { youtubeAdapter } from "./youtube.ts";
 
 describe("ページに対してアダプターを選ぶ", () => {
   it("各アダプターは自分のパターンにだけ答え、他のパターンには答えない", () => {
@@ -26,8 +24,8 @@ describe("ページに対してアダプターを選ぶ", () => {
     expect(selectAdapter("x.com")).toBe(xAdapter);
     expect(selectAdapter("twitter.com")).toBe(xAdapter);
     expect(selectAdapter("bsky.app")).toBe(blueskyAdapter);
-    expect(selectAdapter("www.youtube.com")).toBe(youtubeAdapter);
-    expect(selectAdapter("www.nicovideo.jp")).toBe(niconicoAdapter);
+    expect(selectAdapter("www.youtube.com")).toBeNull();
+    expect(selectAdapter("www.nicovideo.jp")).toBeNull();
     expect(selectAdapter("official.fanbox.cc")).toBeNull();
     expect(selectAdapter("fanbox.cc")).toBeNull();
     expect(selectAdapter("notfanbox.cc")).toBeNull();

@@ -66,7 +66,6 @@ export function startContentRuntime(
   let metricContextCache: {
     metricSampleCount: number;
     metricCounts: number[];
-    metricCreatedAtMs: number[];
     metricContextTruncated: boolean;
   } | null = null;
   const loadWarningTracker = adapter.readPostId
@@ -77,7 +76,6 @@ export function startContentRuntime(
   let healthCounts: {
     sampledPosts: number;
     readableMetrics: number;
-    readableDates: number;
   } | null = null;
 
   function pageHealth() {
@@ -89,24 +87,17 @@ export function startContentRuntime(
         readableMetrics: cards.filter((card) =>
           Number.isFinite(adapter.readMetricCount?.(card)),
         ).length,
-        readableDates: cards.filter((card) =>
-          Number.isFinite(adapter.readCreatedAt?.(card)),
-        ).length,
       };
     }
-    const sort = adapter.readSortOrder?.(document, location);
-    const thresholds = thresholdsFor(selectedSiteSettings(), sort);
+    const thresholds = thresholdsFor(selectedSiteSettings());
     return healthTracker.observe({
-      pageKey: `${pageKey()}:${sort ?? ""}`,
+      pageKey: pageKey(),
       support:
         adapter.readPageSupport?.(document, location) ??
         (timelineAvailable() ? "supported" : "unsupported"),
       empty: adapter.hasEmptyTimeline?.(document) ?? false,
-      observesMetrics: adapter.readMetricCount !== undefined,
       requiresMetrics:
         filteringEnabled() && thresholds.inclusion.minimum !== null,
-      requiresDates:
-        filteringEnabled() && thresholds.inclusion.maximumAgeHours != null,
       ...healthCounts,
     });
   }
@@ -149,7 +140,7 @@ export function startContentRuntime(
     siteSettings: ReturnType<typeof selectedSiteSettings>,
   ): boolean {
     const { hasImage, hasVideo } = adapter.readMedia(postCard);
-    if (siteSettings.kind !== "reactions" || !siteSettings.mediaEnabled) {
+    if (!siteSettings.mediaEnabled) {
       return true;
     }
     const mediaMode = siteSettings.mediaMode;
@@ -165,7 +156,6 @@ export function startContentRuntime(
   function metricContextForContext(): {
     metricSampleCount: number;
     metricCounts: number[];
-    metricCreatedAtMs: number[];
     metricContextTruncated: boolean;
   } {
     const siteSettings = selectedSiteSettings();
@@ -173,39 +163,31 @@ export function startContentRuntime(
       return {
         metricSampleCount: 0,
         metricCounts: [],
-        metricCreatedAtMs: [],
         metricContextTruncated: false,
       };
     }
     if (metricContextCache !== null) return metricContextCache;
 
-    const thresholds = thresholdsFor(
-      siteSettings,
-      adapter.readSortOrder?.(document, location),
-    );
+    const thresholds = thresholdsFor(siteSettings);
     const withoutMinimum = {
       ...thresholds,
       inclusion: {
         ...thresholds.inclusion,
         minimum: null,
-        maximumAgeHours: null,
       },
     };
 
     let metricSampleCount = 0;
     const metricCounts: number[] = [];
-    const metricCreatedAtMs: number[] = [];
     // パネルを開いたままでも、巨大なページを問い合わせのたびに全走査しない。
     // 先頭から同じ上限で切ることで、応答配列だけでなく読み取り処理も制限する。
     const sample = adapter.getMetricPostCards(document);
     for (const postCard of sample.cards) {
       const metricCount = adapter.readMetricCount?.(postCard) ?? Number.NaN;
-      const createdAtMs = adapter.readCreatedAt?.(postCard) ?? Number.NaN;
       const result = classifyPost(
         {
           mediaMatches: matchesMediaFilter(postCard, siteSettings),
           metricCount,
-          createdAtMs,
           isReply: adapter.readIsReply?.(postCard) ?? false,
           isQuote: adapter.readIsQuote?.(postCard) ?? false,
           isRepost: adapter.readIsRepost(postCard),
@@ -220,14 +202,10 @@ export function startContentRuntime(
       if (Number.isSafeInteger(metricCount) && metricCount >= 0) {
         metricCounts.push(metricCount);
       }
-      if (Number.isSafeInteger(createdAtMs)) {
-        metricCreatedAtMs.push(createdAtMs);
-      }
     }
     metricContextCache = {
       metricSampleCount,
       metricCounts,
-      metricCreatedAtMs,
       metricContextTruncated: sample.truncated,
     };
     return metricContextCache;
@@ -404,10 +382,7 @@ export function startContentRuntime(
     }
 
     const siteSettings = selectedSiteSettings();
-    const thresholds = thresholdsFor(
-      siteSettings,
-      adapter.readSortOrder?.(document, location),
-    );
+    const thresholds = thresholdsFor(siteSettings);
     const loadObservations: ContinuousLoadObservation[] = [];
     const updates: {
       cell: HTMLElement;
@@ -433,7 +408,6 @@ export function startContentRuntime(
         {
           mediaMatches: matchesMediaFilter(postCard, siteSettings),
           metricCount: adapter.readMetricCount?.(postCard) ?? Number.NaN,
-          createdAtMs: adapter.readCreatedAt?.(postCard) ?? Number.NaN,
           isReply: adapter.readIsReply?.(postCard) ?? false,
           isQuote: adapter.readIsQuote?.(postCard) ?? false,
           isRepost: adapter.readIsRepost(postCard),
@@ -575,7 +549,6 @@ export function startContentRuntime(
       return {
         health: pageHealth(),
         site: adapter.settingsKey,
-        sortOrder: adapter.readSortOrder?.(document, location) ?? "unknown",
         pageTitle: document.title,
         pageKey: pageKey(),
         timelineKey: adapter.readTimelineKey?.(document, location) ?? null,

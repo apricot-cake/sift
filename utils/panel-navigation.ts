@@ -5,7 +5,7 @@ export interface PanelPage {
   url: string | null;
   context?: Pick<
     FilterContextResponse,
-    "pageKey" | "timelineKey" | "sortOrder" | "timelineAvailable"
+    "pageKey" | "timelineKey" | "timelineAvailable"
   >;
   pendingMedia?: { url: string; since: number };
 }
@@ -17,13 +17,6 @@ export function panelPageUrl(value: string | undefined): string | null {
   try {
     const url = new URL(value);
     url.hash = "";
-    if (
-      url.hostname === "www.nicovideo.jp" &&
-      url.pathname.startsWith("/search/")
-    ) {
-      for (const key of ["rd", "rf", "rp"]) url.searchParams.delete(key);
-      url.searchParams.sort();
-    }
     return url.href;
   } catch {
     return null;
@@ -48,7 +41,6 @@ export function panelPageContext(
   return {
     pageKey: context.pageKey,
     timelineKey: context.timelineKey ?? null,
-    sortOrder: context.sortOrder,
     timelineAvailable: context.timelineAvailable,
   };
 }
@@ -66,14 +58,6 @@ export function hasLeftPanelPage(
     previous.timelineKey &&
     current.timelineKey &&
     previous.timelineKey !== current.timelineKey
-  )
-    return true;
-  if (
-    previous.sortOrder &&
-    current.sortOrder &&
-    previous.sortOrder !== "unknown" &&
-    current.sortOrder !== "unknown" &&
-    previous.sortOrder !== current.sortOrder
   )
     return true;
   return (

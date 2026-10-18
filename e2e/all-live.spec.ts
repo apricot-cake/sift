@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, test } from "vitest";
-import { groupByEntry, liveCasePriority } from "./cases.ts";
+import { groupByEntry } from "./cases.ts";
 import { createCompatibilityCases } from "./compatibility.cases.ts";
 import { createEmptyCases } from "./empty.cases.ts";
 import { createLifecycleCases } from "./lifecycle.cases.ts";
@@ -25,7 +25,6 @@ const entries = groupByEntry(
     ...createLightboxCases(),
   ],
   (entry) => entry.entry,
-  (entry) => liveCasePriority(entry.id),
 );
 for (const entry of entries) {
   test(entry.id, async ({ task }) => {

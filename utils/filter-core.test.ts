@@ -76,7 +76,6 @@ describe("classifyPost", () => {
         {
           mediaMatches: true,
           metricCount: 500,
-          createdAtMs: Number.NaN,
           isReply: false,
           isQuote: false,
           isRepost: false,
@@ -92,7 +91,6 @@ describe("classifyPost", () => {
         {
           mediaMatches: true,
           metricCount: 499,
-          createdAtMs: Number.NaN,
           isReply: false,
           isQuote: false,
           isRepost: false,
@@ -108,7 +106,6 @@ describe("classifyPost", () => {
         {
           mediaMatches: true,
           metricCount: 0,
-          createdAtMs: Number.NaN,
           isReply: false,
           isQuote: false,
           isRepost: false,
@@ -127,7 +124,6 @@ describe("classifyPost", () => {
         {
           mediaMatches: false,
           metricCount: 1000,
-          createdAtMs: Number.NaN,
           isReply: false,
           isQuote: false,
           isRepost: false,
@@ -143,7 +139,6 @@ describe("classifyPost", () => {
         {
           mediaMatches: true,
           metricCount: 1000,
-          createdAtMs: Number.NaN,
           isReply: false,
           isQuote: false,
           isRepost: true,
@@ -159,7 +154,6 @@ describe("classifyPost", () => {
         {
           mediaMatches: true,
           metricCount: 1000,
-          createdAtMs: Number.NaN,
           isReply: true,
           isQuote: false,
           isRepost: false,
@@ -175,7 +169,6 @@ describe("classifyPost", () => {
         {
           mediaMatches: true,
           metricCount: 1000,
-          createdAtMs: Number.NaN,
           isReply: false,
           isQuote: true,
           isRepost: false,
@@ -191,7 +184,6 @@ describe("classifyPost", () => {
         {
           mediaMatches: true,
           metricCount: Number.NaN,
-          createdAtMs: Number.NaN,
           isReply: false,
           isQuote: false,
           isRepost: false,
@@ -199,66 +191,5 @@ describe("classifyPost", () => {
         settings,
       ),
     ).toEqual({ state: "visible", reason: "indeterminate-metric" });
-  });
-
-  it("指定期間より古い動画を隠す", () => {
-    const now = Date.parse("2026-09-02T12:00:00Z");
-    expect(
-      classifyPost(
-        {
-          mediaMatches: true,
-          metricCount: 0,
-          createdAtMs: now - 25 * 3600000,
-          isReply: false,
-          isQuote: false,
-          isRepost: false,
-        },
-        {
-          ...settings,
-          inclusion: { minimum: null, maximumAgeHours: 24 },
-        },
-        now,
-      ),
-    ).toEqual({ state: "hidden", reason: "older-than-period" });
-  });
-
-  it("指定した投稿期間内の動画を残す", () => {
-    const now = Date.parse("2026-09-02T12:00:00Z");
-    expect(
-      classifyPost(
-        {
-          mediaMatches: true,
-          metricCount: 500,
-          createdAtMs: now - 23 * 3600000,
-          isReply: false,
-          isQuote: false,
-          isRepost: false,
-        },
-        {
-          ...settings,
-          inclusion: { minimum: 500, maximumAgeHours: 24 },
-        },
-        now,
-      ),
-    ).toEqual({ state: "matched", reason: "filter-match" });
-  });
-
-  it("公開時期を読めない動画は隠さない", () => {
-    expect(
-      classifyPost(
-        {
-          mediaMatches: true,
-          metricCount: 500,
-          createdAtMs: Number.NaN,
-          isReply: false,
-          isQuote: false,
-          isRepost: false,
-        },
-        {
-          ...settings,
-          inclusion: { minimum: 500, maximumAgeHours: 24 },
-        },
-      ),
-    ).toEqual({ state: "visible", reason: "indeterminate-age" });
   });
 });

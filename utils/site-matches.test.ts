@@ -8,8 +8,6 @@ describe("SITE_MATCHES", () => {
         "https://x.com/*",
         "https://twitter.com/*",
         "https://bsky.app/*",
-        "https://www.youtube.com/*",
-        "https://www.nicovideo.jp/*",
       ]),
     );
   });
@@ -26,7 +24,7 @@ describe("SITE_MATCHES", () => {
     expect(isSupportedSiteUrl("https://x.com/home")).toBe(true);
     expect(isSupportedSiteUrl("https://official.fanbox.cc/posts")).toBe(false);
     expect(isSupportedSiteUrl("https://www.youtube.com/watch?v=test")).toBe(
-      true,
+      false,
     );
     expect(isSupportedSiteUrl("http://x.com/home")).toBe(false);
     expect(isSupportedSiteUrl("https://example.com/")).toBe(false);

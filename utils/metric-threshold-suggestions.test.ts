@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { metricThresholdSuggestions } from "./metric-threshold-suggestions.ts";
 
-describe("再生回数の候補", () => {
+describe("最低いいね数の候補", () => {
   it("空配列やゼロと不正値も安全に扱う", () => {
     expect(metricThresholdSuggestions([], 100)).toEqual([]);
     expect(metricThresholdSuggestions([0, -1, NaN, Infinity], 0)).toEqual([
@@ -22,7 +22,7 @@ describe("再生回数の候補", () => {
     ]);
   });
 
-  it("突出した動画があっても途中の段階を省略しない", () => {
+  it("突出した投稿があっても途中の段階を省略しない", () => {
     const values = [120, 180, 240, 310, 420, 560, 1_000_000];
 
     const result = metricThresholdSuggestions(values, 300);

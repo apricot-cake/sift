@@ -76,7 +76,6 @@ try {
   for (const site of ["x", "bluesky"])
     unfiltered.siteSettings[site] = {
       ...unfiltered.siteSettings[site],
-      kind: "reactions",
       minReactionsEnabled: false,
       mediaEnabled: false,
       mediaMode: "any",
@@ -150,6 +149,9 @@ try {
               new URL(location.href).searchParams.get("tabId"),
             ),
             text: document.body.innerText,
+            site: document
+              .querySelector("[data-sift-sidepanel]")
+              ?.getAttribute("data-sift-site"),
             controls: document.querySelectorAll(
               "button[role=combobox],button[role=switch]",
             ).length,
@@ -194,38 +196,12 @@ try {
     results.push({ label, pass: false, ...observation });
     throw Error(`検証失敗: ${label}`);
   }
-  const x = (p) => p.controls > 0 && /最低いいね数|Minimum likes/.test(p.text);
-  const youtube = (p) =>
-    p.controls === 1 && /投稿期間|Posted within/.test(p.text);
-  async function selectPopular(page) {
-    const combo = 'ytd-browse:not([hidden]) [role="combobox"]';
-    const selector = (role) =>
-      ["人気の動画", "Popular", "Most popular"]
-        .map((name) => `::-p-aria([role="${role}"][name="${name}"])`)
-        .join(", ");
-    const tab = selector("tab");
-    await page.page.waitForSelector(`${combo}, ${tab}`, { visible: true });
-    if (await page.page.$$eval(combo, (nodes) => nodes.length)) {
-      const current = await page.page.$eval(combo, (node) =>
-        node.textContent.trim(),
-      );
-      if (!/^(人気の動画|Popular|Most popular)$/.test(current)) {
-        await page.page.locator(combo).click();
-        await page.page.locator(selector("menuitem")).click();
-      }
-    } else {
-      if (
-        (await page.page.$eval(tab, (node) =>
-          node.getAttribute("aria-selected"),
-        )) !== "true"
-      )
-        await page.page.locator(tab).click();
-      await page.page
-        .locator(tab)
-        .filter((node) => node.getAttribute("aria-selected") === "true")
-        .wait();
-    }
-  }
+  const forSite = (site) => (p) =>
+    p.site === site &&
+    p.controls > 0 &&
+    /最低いいね数|Minimum likes/.test(p.text);
+  const x = forSite("x");
+  const bluesky = forSite("bluesky");
   const first = await newPage("https://x.com/NASA");
   await delay(2000);
   const closedWidth = await evaluate(first.client, "innerWidth");
@@ -233,7 +209,9 @@ try {
   await check("Xプロフィールに接続", first, x);
   await first.page.reload({ waitUntil: "domcontentloaded" });
   await check("同じX一覧の再読込後に復旧", first, x);
-  first.url = "https://www.youtube.com/@Google/videos";
+  first.url = "https://bsky.app/profile/bsky.app";
+  loadGuard.beginCase(first.page);
+  loadGuard.setContext("connection-smoke-bluesky", "navigate-bluesky");
   await first.page.goto(first.url, { waitUntil: "domcontentloaded" });
   await check(
     "別サイトへの移動でパネルが閉じ、ページ幅が戻る",
@@ -241,34 +219,18 @@ try {
     undefined,
     closedWidth,
   );
-  await selectPopular(first);
   await action(first);
-  await check("アクション後にYouTubeへ再接続", first, youtube);
-  first.url = "https://www.youtube.com/@Google/streams";
-  // 同一チャンネルの移動はサイト自身のタブを使い、文書全体を再取得しない。
-  const streamsTab = ["ライブ", "Live"]
-    .map((name) => `::-p-aria([role="tab"][name="${name}"])`)
-    .join(", ");
-  await first.page.locator(streamsTab).click();
-  await first.page.waitForFunction(
-    (pathname) => location.pathname === pathname,
-    { timeout: 30000 },
-    "/@Google/streams",
-  );
-  await first.page.waitForNetworkIdle({
-    idleTime: 500,
-    concurrency: 2,
-    timeout: 10000,
-  });
-  await selectPopular(first);
+  await check("明示アクションでBlueskyへ再接続", first, bluesky);
+  await first.page.locator('::-p-aria([role="tab"][name="フィード"])').click();
   await check(
-    "同じサイト内でも元の一覧を離れたら閉じ、ページ幅が戻る",
+    "元の一覧を離れたら閉じ、ページ幅が戻る",
     first,
     undefined,
     closedWidth,
   );
+  await first.page.locator('::-p-aria([role="tab"][name="投稿"])').click();
   await action(first);
-  await check("明示アクションで移動先のYouTubeパネルを開く", first, youtube);
+  await check("明示アクションでBlueskyの投稿パネルを開く", first, bluesky);
   // 未開封タブへの切替ではパネルを引き継がず、開封済みタブへ戻ると復帰する。
   // プロフィール固有資源は最初のタブと共用する。
   const second = await newPage("https://x.com/NASA");
@@ -281,11 +243,11 @@ try {
     closedWidth,
   );
   await activate(first);
-  await check("元のYouTubeタブでパネルが再表示される", first, youtube);
+  await check("元のBlueskyタブでパネルが再表示される", first, bluesky);
   await action(second);
   await check("明示アクションで別タブのXパネルを開く", second, x);
   await activate(first);
-  await check("YouTubeタブのパネル内容が保持される", first, youtube);
+  await check("Blueskyタブのパネル内容が保持される", first, bluesky);
   await activate(second);
   await check("Xタブの独立したパネルが再表示される", second, x);
   report.pass = true;

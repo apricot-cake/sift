@@ -5,7 +5,3 @@ ignore-hidden = false
 [default.extend-identifiers]
 # 可変フォントの幅を表すOpenTypeの軸タグ。
 wdth = "wdth"
-
-[default.extend-words]
-# YouTubeのスペイン語の相対日時（例: hace 12 horas）。
-hace = "hace"

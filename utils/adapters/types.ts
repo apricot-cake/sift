@@ -21,10 +21,6 @@ export interface ServiceAdapter {
     root: ParentNode,
     page: Pick<Location, "pathname" | "search">,
   ): string;
-  readSortOrder?(
-    root: ParentNode,
-    page: Pick<Location, "pathname" | "search">,
-  ): "newest" | "popular" | "relevance" | "default" | "unknown";
   readonly id: string;
   // このサービス向けに manifest が登録する match パターン。
   readonly matches: readonly string[];
@@ -58,8 +54,6 @@ export interface ServiceAdapter {
   ): string | null;
   // 反応数で絞り込むサービスだけが実装する。
   readMetricCount?(postCard: Element): number;
-  // 公開時刻を一覧から読めるサービスだけが実装する。読めない場合は NaN。
-  readCreatedAt?(postCard: Element): number;
   readMedia(postCard: Element): PostMedia;
   // 返信・引用の区別を画面に持つサービスだけが実装する。
   readIsReply?(postCard: Element): boolean;

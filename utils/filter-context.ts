@@ -10,12 +10,6 @@ export interface FilterContextRequest {
 
 export interface FilterContextResponse {
   readonly health?: PageHealth;
-  readonly sortOrder?:
-    | "newest"
-    | "popular"
-    | "relevance"
-    | "default"
-    | "unknown";
   readonly site: SiteSettingsKey;
   readonly pageTitle: string;
   readonly pageKey: string;
@@ -24,15 +18,10 @@ export interface FilterContextResponse {
   readonly filteringEnabled: boolean;
   readonly continuousLoadingWarning: boolean;
   readonly metricContextTruncated?: boolean;
-  /** 数値と投稿期間の条件を除いた現在の条件に合う、パネル集計用サンプルの投稿数。 */
+  /** 最低いいね数の条件を除いた現在の条件に合う、パネル集計用サンプルの投稿数。 */
   readonly metricSampleCount: number;
   /** 上記サンプルのうち、X / Bluesky の反応数を読めた投稿の反応数。 */
   readonly metricCounts: readonly number[];
-  /**
-   * 最低値を除いた現在の条件に合う投稿の公開日時。日付を読めない投稿は
-   * 入れないので、`metricCounts` と同じ長さであるとは限らない。
-   */
-  readonly metricCreatedAtMs: readonly number[];
 }
 
 export function isFilterContextRequest(
@@ -54,16 +43,7 @@ export function isFilterContextResponse(
   const response = value as Partial<FilterContextResponse>;
   return (
     (response.health === undefined || isPageHealth(response.health)) &&
-    (response.sortOrder === undefined ||
-      response.sortOrder === "newest" ||
-      response.sortOrder === "popular" ||
-      response.sortOrder === "relevance" ||
-      response.sortOrder === "default" ||
-      response.sortOrder === "unknown") &&
-    (response.site === "x" ||
-      response.site === "bluesky" ||
-      response.site === "youtube" ||
-      response.site === "niconico") &&
+    (response.site === "x" || response.site === "bluesky") &&
     typeof response.pageTitle === "string" &&
     typeof response.pageKey === "string" &&
     (response.timelineKey === undefined ||
@@ -83,12 +63,6 @@ export function isFilterContextResponse(
     response.metricCounts.length <= FILTER_CONTEXT_METRIC_LIMIT &&
     response.metricCounts.every(
       (count) => Number.isSafeInteger(count) && count >= 0,
-    ) &&
-    Array.isArray(response.metricCreatedAtMs) &&
-    response.metricCreatedAtMs.length <= response.metricSampleCount &&
-    response.metricCreatedAtMs.length <= FILTER_CONTEXT_METRIC_LIMIT &&
-    response.metricCreatedAtMs.every((createdAtMs) =>
-      Number.isSafeInteger(createdAtMs),
     )
   );
 }

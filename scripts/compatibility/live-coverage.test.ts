@@ -7,11 +7,10 @@ import {
 } from "./live-coverage.ts";
 
 const target: CompatibilityCase = {
-  id: "niconico-popular",
-  site: "niconico",
-  start: "https://www.nicovideo.jp/user/1",
-  destination: "/user/1/video",
-  period: true,
+  id: "x-profile",
+  site: "x",
+  start: "https://x.com/NASA",
+  destination: "/NASA",
 };
 function report(names: string[], count = 1): JsonTestResults {
   return {
@@ -26,15 +25,24 @@ function report(names: string[], count = 1): JsonTestResults {
             status: "passed",
             failureMessages: [],
             meta: {
-              liveEvidence: names.map((name) => ({
-                name,
-                data: {
-                  hidden: count,
-                  applied: true,
-                  cleared: true,
-                  noOverfilter: true,
-                },
-              })),
+              liveEvidence: names
+                .concat(
+                  [
+                    "media-filter",
+                    "reply-filter",
+                    "quote-filter",
+                    "repost-filter",
+                  ].filter((name) => !names.includes(name)),
+                )
+                .map((name) => ({
+                  name,
+                  data: {
+                    hidden: count,
+                    applied: true,
+                    cleared: true,
+                    noOverfilter: true,
+                  },
+                })),
             },
           },
         ],
@@ -54,60 +62,29 @@ function specOf(value: JsonTestResults) {
   return spec;
 }
 
-test.each(["spa-unsupported-state", "direct-initialization"])(
-  "直接アクセスの代表で%sの証拠が欠けたら合格にしない",
-  (missing) => {
-    const value = report([]);
-    const spec = specOf(value);
-    const id = "unsupported-empty-youtube-channel-search";
-    spec.title = id;
-    const state = {
-      state: "unsupported",
-      timelineAvailable: false,
-      controls: 0,
-      hidden: 0,
-    };
-    spec.meta.liveEvidence = [
-      { name: "unsupported-state", data: state },
-      { name: "spa-unsupported-state", data: state },
-      { name: "direct-initialization", data: { directlyLoaded: true } },
-    ];
-    const check = () => assertLiveCoverage(value, [], [], [], [{ id }]);
-    expect(check).not.toThrow();
-    spec.meta.liveEvidence = spec.meta.liveEvidence.filter(
-      (item) => item.name !== missing,
-    );
-    expect(check).toThrow("サイト内遷移と直接アクセス");
-  },
-);
-
 test("キャッシュ無効の代表は成功と準備完了の証拠を必要とする", () => {
   const value = report([]);
   const spec = specOf(value);
   const proof = {
-    site: "niconico",
+    site: "x",
     cacheDisabledDuringInitialization: true,
     cacheRestored: true,
     state: "ready",
   };
   spec.meta.liveEvidence = [{ name: "initialization-cache", data: proof }];
-  expect(() => assertInitializationCoverage(value, ["niconico"])).not.toThrow();
-  expect(() =>
-    assertInitializationCoverage(value, ["niconico", "youtube"]),
-  ).toThrow("youtube");
-  proof.cacheDisabledDuringInitialization = false;
-  expect(() => assertInitializationCoverage(value, ["niconico"])).toThrow(
-    "niconico",
+  expect(() => assertInitializationCoverage(value, ["x"])).not.toThrow();
+  expect(() => assertInitializationCoverage(value, ["x", "bluesky"])).toThrow(
+    "bluesky",
   );
+  proof.cacheDisabledDuringInitialization = false;
+  expect(() => assertInitializationCoverage(value, ["x"])).toThrow("x");
   proof.cacheDisabledDuringInitialization = true;
   spec.status = "failed";
-  expect(() => assertInitializationCoverage(value, ["niconico"])).toThrow(
-    "niconico",
-  );
+  expect(() => assertInitializationCoverage(value, ["x"])).toThrow("x");
 });
 test("ページの全項目で操作と除外効果を確認した結果を受け付ける", () => {
   expect(() =>
-    assertLiveCoverage(report(["period-filter"]), [target]),
+    assertLiveCoverage(report(["minimum-filter"]), [target]),
   ).not.toThrow();
 });
 
@@ -133,23 +110,9 @@ test("ライトボックスの設定・集計・表示・復帰・直接アク�
   }
 });
 
-test("ニコニコ再生数順は投稿期間の証跡を必要とする", () => {
-  const popular: CompatibilityCase = {
-    ...target,
-    niconicoSort: "再生数が多い順",
-    period: true,
-  };
-  expect(() =>
-    assertLiveCoverage(report(["period-filter"]), [popular]),
-  ).not.toThrow();
-  expect(() =>
-    assertLiveCoverage(report(["minimum-filter"]), [popular]),
-  ).toThrow("period-filter");
-});
-
 test("同じサイトの代表ページに効果確認があれば他ページは操作確認で受け付ける", () => {
-  const combined = report(["period-filter"]);
-  const second = specOf(report(["period-filter"], 0));
+  const combined = report(["minimum-filter"]);
+  const second = specOf(report(["minimum-filter"], 0));
   second.title = "second";
   suiteOf(combined).assertionResults.push(second);
   expect(() =>
@@ -158,7 +121,7 @@ test("同じサイトの代表ページに効果確認があれば他ページ�
 });
 
 test("別サイトの効果確認で代用しない", () => {
-  const combined = report(["period-filter"]);
+  const combined = report(["minimum-filter"]);
   const other = specOf(
     report(
       [
@@ -171,15 +134,18 @@ test("別サイトの効果確認で代用しない", () => {
       0,
     ),
   );
-  other.title = "x";
+  other.title = "bluesky";
   suiteOf(combined).assertionResults.push(other);
   expect(() =>
-    assertLiveCoverage(combined, [target, { ...target, id: "x", site: "x" }]),
-  ).toThrow("x: minimum-filter");
+    assertLiveCoverage(combined, [
+      target,
+      { ...target, id: "bluesky", site: "bluesky" },
+    ]),
+  ).toThrow("bluesky: minimum-filter");
 });
 
 test("除外件数があっても解除確認の欠落を拒否する", () => {
-  const value = report(["period-filter"]);
+  const value = report(["minimum-filter"]);
   const attachment = specOf(value).meta.liveEvidence?.[0];
   if (!attachment) throw new Error("テスト用の添付がありません");
   attachment.data = { hidden: 1, applied: true, noOverfilter: true };
@@ -187,19 +153,14 @@ test("除外件数があっても解除確認の欠落を拒否する", () => {
     "操作・解除・誤除外",
   );
 });
-test("指標の証跡で投稿期間の検証を代用しない", () => {
-  expect(() =>
-    assertLiveCoverage(report(["minimum-filter"]), [target]),
-  ).toThrow("period-filter");
-});
 test("操作だけで除外対象がない結果は効果確認としない", () => {
   expect(() =>
-    assertLiveCoverage(report(["period-filter"], 0), [target]),
+    assertLiveCoverage(report(["minimum-filter"], 0), [target]),
   ).toThrow("未確認");
 });
 test("未実行ページや重複実行がある結果を拒否する", () => {
   expect(() =>
-    assertLiveCoverage(report(["period-filter"]), [
+    assertLiveCoverage(report(["minimum-filter"]), [
       target,
       { ...target, id: "missing" },
     ]),
@@ -207,7 +168,7 @@ test("未実行ページや重複実行がある結果を拒否する", () => {
 });
 
 test("同名の成功ケースで未実行ケースを代用しない", () => {
-  const value = report(["period-filter"]);
+  const value = report(["minimum-filter"]);
   suiteOf(value).assertionResults.push(specOf(value));
   expect(() =>
     assertLiveCoverage(value, [target, { ...target, id: "missing" }]),
@@ -217,14 +178,14 @@ test("同名の成功ケースで未実行ケースを代用しない", () => {
 test.each(["failed", "skipped", "pending", "todo"] as const)(
   "証跡があっても %s の結果は受け付けない",
   (status) => {
-    const value = report(["period-filter"]);
+    const value = report(["minimum-filter"]);
     specOf(value).status = status;
     expect(() => assertLiveCoverage(value, [target])).toThrow("完全な成功結果");
   },
 );
 
 test("同じ証跡を重ねた結果は受け付けない", () => {
-  const value = report(["period-filter", "period-filter"]);
+  const value = report(["minimum-filter", "minimum-filter"]);
   expect(() => assertLiveCoverage(value, [target])).toThrow("検証記録");
 });
 

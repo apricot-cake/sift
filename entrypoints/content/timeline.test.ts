@@ -2,9 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fakeBrowser } from "wxt/testing/fake-browser";
 import { ContentScriptContext } from "wxt/utils/content-script-context";
 import { blueskyAdapter } from "../../utils/adapters/bluesky.ts";
-import { niconicoAdapter } from "../../utils/adapters/niconico.ts";
 import { xAdapter } from "../../utils/adapters/x.ts";
-import { youtubeAdapter } from "../../utils/adapters/youtube.ts";
 import { startContentRuntime } from "../../utils/content-runtime.ts";
 import {
   FILTER_CONTEXT_METRIC_LIMIT,
@@ -120,100 +118,6 @@ describe("タイムラインのフィルター", () => {
       runtime.dispose();
     }
   });
-
-  it("YouTube の旧再生数・除外設定は適用せず、投稿期間だけで絞り込む", async () => {
-    const now = Date.now();
-    const clock = vi.spyOn(Date, "now").mockReturnValue(now);
-    history.replaceState({}, "", "/@sift/videos");
-    document.body.innerHTML = `
-      <ytd-browse><button role="tab" aria-selected="true">人気の動画</button></ytd-browse>
-      <ytd-video-renderer id="recent"><div id="metadata-line"><span>1回視聴</span><span>1日前</span></div></ytd-video-renderer>
-      <ytd-video-renderer id="old"><div id="metadata-line"><span>100万回視聴</span><span>3日前</span></div></ytd-video-renderer>
-      <ytd-video-renderer id="unknown"><yt-badge-shape aria-label="Members only"></yt-badge-shape></ytd-video-renderer>
-    `;
-    await fakeBrowser.storage.sync.set({
-      settings: {
-        siteSettings: {
-          youtube: {
-            minCountEnabled: true,
-            minCount: 999999999,
-            maxCountEnabled: true,
-            maxCount: 0,
-            hidePublishedWithinEnabled: true,
-            hidePublishedWithinValue: 365,
-            hidePublishedWithinUnit: "day",
-            hideMembersOnly: true,
-            postedWithinDays: 2,
-          },
-        },
-      },
-    });
-    const runtime = startContentRuntime(
-      new ContentScriptContext("sift-test"),
-      youtubeAdapter,
-    );
-    try {
-      await setFiltering(true);
-      await vi.waitFor(() => {
-        expect(
-          document
-            .querySelector("#recent")
-            ?.getAttribute("data-sift-filter-state"),
-        ).toBe("matched");
-        expect(
-          document
-            .querySelector("#old")
-            ?.getAttribute("data-sift-filter-reason"),
-        ).toBe("older-than-period");
-        expect(
-          document
-            .querySelector("#unknown")
-            ?.getAttribute("data-sift-filter-state"),
-        ).toBe("visible");
-      });
-      expect(await getFilterContext()).toMatchObject({
-        metricCounts: [],
-        metricSampleCount: 3,
-        metricCreatedAtMs: [now - 86400000, now - 3 * 86400000],
-        health: { issue: "dates", readableMetrics: 0, sampledPosts: 3 },
-      });
-    } finally {
-      runtime.dispose();
-      clock.mockRestore();
-    }
-  });
-  it("並び順を読めない対応ページは取得失敗になり、復旧後は正常に戻る", async () => {
-    history.replaceState({}, "", "/@example/videos");
-    document.body.innerHTML =
-      '<ytd-browse><button role="combobox">不明な表示</button><ytd-video-renderer><div id="metadata-line"><span>1万回視聴</span></div></ytd-video-renderer></ytd-browse>';
-    const clock = vi.spyOn(Date, "now").mockReturnValue(1000);
-    const runtime = startContentRuntime(
-      new ContentScriptContext("sift-test"),
-      youtubeAdapter,
-    );
-    try {
-      expect((await getFilterContext()).health).toMatchObject({
-        state: "loading",
-        issue: "page",
-      });
-      clock.mockReturnValue(10000);
-      expect((await getFilterContext()).health).toMatchObject({
-        state: "unreadable",
-        issue: "page",
-      });
-      const sortButton = document.querySelector("button");
-      if (!sortButton) throw new Error("並び順がありません");
-      sortButton.textContent = "人気の動画";
-      await vi.waitFor(async () =>
-        expect((await getFilterContext()).health?.state).toBe("ready"),
-      );
-      sortButton.textContent = "古い順";
-      expect((await getFilterContext()).health?.state).toBe("unsupported");
-    } finally {
-      runtime.dispose();
-      clock.mockRestore();
-    }
-  });
   it("指標の取得失敗を0件と混同せず、実投稿の更新で復旧する", async () => {
     document.body.innerHTML =
       '<article data-testid="tweet"><button data-testid="renamed-like"></button></article>';
@@ -300,20 +204,20 @@ describe("タイムラインのフィルター", () => {
       runtime.dispose();
     }
   });
-  it("指標と日付の不明値を分け、他条件に合う投稿数を期間集計の分母にする", async () => {
+  it("指標を読めない投稿も、他条件に合う集計対象の投稿数に含める", async () => {
     document.body.innerHTML = [
-      xPostMarkup("both-known"),
+      xPostMarkup("metric-known"),
       xPostMarkup("metric-missing"),
-      xPostMarkup("date-only-missing"),
-      xPostMarkup("both-unknown"),
+      xPostMarkup("another-metric-known"),
+      xPostMarkup("another-metric-missing"),
       xPostMarkup("other-filter"),
     ].join("");
     const values = [
-      { metric: "100", date: "1000" },
-      { metric: "unknown", date: "2000" },
-      { metric: "200", date: "unknown" },
-      { metric: "unknown", date: "unknown" },
-      { metric: "300", date: "3000", excluded: "true" },
+      { metric: "100" },
+      { metric: "unknown" },
+      { metric: "200" },
+      { metric: "unknown" },
+      { metric: "300", excluded: "true" },
     ];
     [...document.querySelectorAll("article")].forEach((card, index) => {
       Object.assign(card.dataset, values[index]);
@@ -321,14 +225,12 @@ describe("タイムラインのフィルター", () => {
     const runtime = startContentRuntime(new ContentScriptContext("sift-test"), {
       ...xAdapter,
       readMetricCount: (card) => Number(card.getAttribute("data-metric")),
-      readCreatedAt: (card) => Number(card.getAttribute("data-date")),
       readIsRepost: (card) => card.hasAttribute("data-excluded"),
     });
     try {
       expect(await getFilterContext()).toMatchObject({
         metricSampleCount: 4,
         metricCounts: [100, 200],
-        metricCreatedAtMs: [1000, 2000],
         metricContextTruncated: false,
       });
     } finally {
@@ -981,47 +883,6 @@ describe("タイムラインのフィルター", () => {
     runtime.dispose();
   });
 
-  it.each(["対象外ページ", "新しい順", "古い順"])(
-    "YouTubeの%sへ移るとフィルター状態を消す",
-    async (destination) => {
-      history.replaceState({}, "", "/@sift/videos");
-      document.body.innerHTML = `
-      <ytd-browse><button role="tab" aria-selected="true">人気の動画</button></ytd-browse>
-      <ytd-video-renderer>
-        <div id="metadata-line">
-          <span>1万回視聴</span>
-          <span>1日前</span>
-        </div>
-      </ytd-video-renderer>
-    `;
-      const runtime = startContentRuntime(
-        new ContentScriptContext("sift-test"),
-        youtubeAdapter,
-      );
-      await setFiltering(true);
-
-      await vi.waitFor(() => {
-        expect(
-          document.querySelector("[data-sift-filter-state]"),
-        ).not.toBeNull();
-      });
-
-      if (destination !== "対象外ページ") {
-        const chip = document.querySelector('[role="tab"]');
-        if (chip) chip.textContent = destination;
-      } else {
-        history.pushState({}, "", "/");
-      }
-      document.body.append(document.createElement("div"));
-
-      await vi.waitFor(() => {
-        expect(document.querySelector("[data-sift-filter-state]")).toBeNull();
-      });
-
-      runtime.dispose();
-    },
-  );
-
   it("戻る操作でキャッシュから復元された後もサイドパネルへ応答する", async () => {
     document.body.innerHTML = timelineMarkup;
     const runtime = startContentRuntime(
@@ -1057,16 +918,6 @@ describe("タイムラインのフィルター", () => {
         )
         .join(""),
     },
-    {
-      adapter: niconicoAdapter,
-      path: "/user/123/video?sortKey=viewCount&sortOrder=desc",
-      markup: [14000, 800]
-        .map(
-          (count, index) =>
-            `<article data-video-id="sm${index}"><a href="/watch/sm${index}">動画</a><span title="${count} 再生">${count}</span></article>`,
-        )
-        .join(""),
-    },
   ])(
     "$adapter.id の候補は最低値未満の投稿も集計する",
     async ({ adapter, path, markup }) => {
@@ -1081,7 +932,7 @@ describe("タイムラインのフィルター", () => {
         await vi.waitFor(async () => {
           await expect(getFilterContext()).resolves.toMatchObject({
             site: adapter.id,
-            metricCounts: adapter.id === "niconico" ? [] : [14000, 800],
+            metricCounts: [14000, 800],
             metricSampleCount: 2,
           });
         });
@@ -1090,41 +941,6 @@ describe("タイムラインのフィルター", () => {
       }
     },
   );
-
-  it("YouTube のパネル用集計は反応数を含めず、動画の投稿日時と総件数を返す", async () => {
-    history.replaceState({}, "", "/@sift/videos");
-    document.body.innerHTML = `
-      <ytd-browse><button role="tab" aria-selected="true">人気の動画</button></ytd-browse>
-      <ytd-video-renderer>
-        <div id="metadata-line">
-          <span class="inline-metadata-item">1.4万回視聴</span>
-          <span class="inline-metadata-item">1日前</span>
-        </div>
-      </ytd-video-renderer>
-      <ytd-video-renderer>
-        <div id="metadata-line">
-          <span class="inline-metadata-item">800回視聴</span>
-          <span class="inline-metadata-item">2日前</span>
-        </div>
-      </ytd-video-renderer>
-    `;
-    const runtime = startContentRuntime(
-      new ContentScriptContext("sift-test"),
-      youtubeAdapter,
-    );
-    await setFiltering(true);
-
-    await vi.waitFor(async () => {
-      await expect(getFilterContext()).resolves.toMatchObject({
-        site: "youtube",
-        metricCounts: [],
-        metricSampleCount: 2,
-        metricCreatedAtMs: expect.arrayContaining([expect.any(Number)]),
-      });
-    });
-
-    runtime.dispose();
-  });
 
   it("抽出の切替後も、表示に残る投稿を同じ位置に保つ", async () => {
     document.body.innerHTML = timelineMarkup;

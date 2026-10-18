@@ -143,7 +143,6 @@ body {
 }
 
 [data-sift-sidepanel] [data-minimum-group] > h2,
-[data-sift-sidepanel] [data-period-group] > h2,
 [data-sift-sidepanel] [data-filter-section] > h2 {
   font-size: 1rem;
   font-weight: 500;

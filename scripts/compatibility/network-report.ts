@@ -7,8 +7,6 @@ import type { LiveSite } from "./live-load.ts";
 const siteNames: Record<LiveSite, string> = {
   x: "X",
   bluesky: "Bluesky",
-  youtube: "YouTube",
-  niconico: "ニコニコ動画",
 };
 
 export function parseNetworkReportArgs(args: string[]) {
@@ -20,9 +18,7 @@ export function parseNetworkReportArgs(args: string[]) {
   if (positionals.length > 1)
     throw new Error("runId は一つだけ指定してください");
   if (!Object.hasOwn(siteNames, values.site))
-    throw new Error(
-      "--site は x, bluesky, youtube, niconico から指定してください",
-    );
+    throw new Error("--site は x, bluesky から指定してください");
   return { runId: positionals[0], site: values.site as LiveSite };
 }
 

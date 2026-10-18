@@ -10,7 +10,7 @@ import {
   text,
   visible,
 } from "./browser-queries.ts";
-import { cases, lifecycleCases } from "./cases.ts";
+import { lifecycleCases } from "./cases.ts";
 import {
   acquireCasePage,
   assertLivePage,
@@ -22,22 +22,6 @@ import {
   releaseCasePage,
 } from "./live.ts";
 import type { LiveCase } from "./live-case.ts";
-import { selectNiconicoUserSort } from "./niconico-navigation.ts";
-
-async function selectYoutube(page: Page, names: string | readonly string[]) {
-  const tab = aria("tab", names);
-  await page.locator(tab).wait();
-  const selected = () =>
-    page.$eval(
-      tab,
-      (node) =>
-        node.getAttribute("aria-selected") === "true" ||
-        node.matches(".ytTabShapeTabSelected, [selected]") ||
-        !!node.querySelector(".ytTabShapeTabSelected"),
-    );
-  if (!(await selected())) await page.locator(tab).click();
-  await expect.poll(selected).toBe(true);
-}
 
 async function selectBluesky(page: Page, name: string) {
   const tab = aria("tab", name);
@@ -54,20 +38,10 @@ async function selectBluesky(page: Page, name: string) {
   if (!(await selected())) await page.locator(tab).click();
   await expect.poll(selected).toBe(true);
 }
-
 export function createLifecycleCases(): LiveCase[] {
   const entries: LiveCase[] = [];
   for (const target of lifecycleCases) {
-    const entry =
-      target.site === "youtube" || target.site === "niconico"
-        ? (cases.find(
-            (candidate) =>
-              candidate.id ===
-              (target.site === "youtube"
-                ? "youtube-chip-popular"
-                : "niconico-popular"),
-          )?.start ?? target.url)
-        : target.url;
+    const entry = target.url;
     entries.push({
       id: target.id,
       entry,
@@ -83,34 +57,9 @@ export function createLifecycleCases(): LiveCase[] {
           session.loadGuard.setContext(target.id, "navigate");
           if (!reused)
             await page.goto(target.url, { waitUntil: "domcontentloaded" });
-          else if (target.site === "youtube" || target.site === "niconico") {
-            const expected = new URL(target.url);
-            const current = new URL(page.url());
-            expect(current.origin).toBe(expected.origin);
-            const root = expected.pathname.replace(/\/(videos|video)$/, "");
-            expect(
-              current.pathname === root ||
-                current.pathname.startsWith(`${root}/`),
-              "共有したページが検証対象のチャンネル・ユーザーであること",
-            ).toBe(true);
-            if (target.site === "youtube") await selectYoutube(page, "動画");
-            else if (current.pathname !== expected.pathname)
-              await page.locator(aria("link", "動画・シリーズ")).click();
-            await expect
-              .poll(() => new URL(page.url()).pathname)
-              .toBe(expected.pathname);
-          } else if (page.url() !== target.url)
+          else if (page.url() !== target.url)
             await page.goto(target.url, { waitUntil: "domcontentloaded" });
           await assertLivePage(session, page);
-          if (target.site === "youtube") {
-            await selectYoutube(page, [
-              "人気の動画",
-              "Popular",
-              "Most popular",
-            ]);
-          }
-          if (target.site === "niconico")
-            await selectNiconicoUserSort(page, "再生数が多い順");
           if (target.site === "bluesky") await selectBluesky(page, "投稿");
           session.loadGuard.setContext(target.id, "initial-list");
           const initialListStarted = Date.now();
@@ -123,8 +72,6 @@ export function createLifecycleCases(): LiveCase[] {
                 return visible(
                   page,
                   {
-                    youtube: "ytd-rich-item-renderer",
-                    niconico: ".NC-VideoMediaObject",
                     x: 'article[data-testid="tweet"]',
                     bluesky: '[data-testid^="feedItem-by-"]',
                   }[target.site],
@@ -263,19 +210,12 @@ export function createLifecycleCases(): LiveCase[] {
               "部分除外後も条件に合う投稿を残す",
             ).toBeGreaterThan(0);
           }
-
           const closedWidth = await page.evaluate(() => innerWidth);
           const assertAutomaticClose = await observeAutomaticPanelClose(
             session,
             page,
           );
-          if (target.site === "youtube")
-            await page
-              .locator(aria("tab", ["新しい順", "Latest", "Newest"]))
-              .click();
-          else if (target.site === "niconico")
-            await selectNiconicoUserSort(page, "投稿日時が新しい順");
-          else if (target.site === "bluesky")
+          if (target.site === "bluesky")
             await page.locator(aria("tab", "フィード")).click();
           else {
             const profilePath = new URL(target.url).pathname;
@@ -356,14 +296,7 @@ export function createLifecycleCases(): LiveCase[] {
               async () => (await readContext(session, page)).timelineAvailable,
             )
             .toBe(false);
-
-          if (target.site === "youtube")
-            await page
-              .locator(aria("tab", ["人気の動画", "Popular", "Most popular"]))
-              .click();
-          else if (target.site === "niconico")
-            await selectNiconicoUserSort(page, "再生数が多い順");
-          else if (target.site === "bluesky")
+          if (target.site === "bluesky")
             await page.locator(aria("tab", "投稿")).click();
           else await page.goBack({ waitUntil: "domcontentloaded" });
           // 一覧へ戻っても明示アクションまでは閉じたまま、絞り込みも再開しない。

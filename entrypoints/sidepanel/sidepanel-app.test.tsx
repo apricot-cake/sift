@@ -29,7 +29,6 @@ function context(site: FilterContextResponse["site"]): FilterContextResponse {
     continuousLoadingWarning: false,
     metricSampleCount: 1,
     metricCounts: [10],
-    metricCreatedAtMs: [],
   };
 }
 let root: Root;
@@ -52,8 +51,8 @@ beforeEach(() => {
   history.replaceState(null, "", "/sidepanel.html?tabId=1");
   vi.useFakeTimers();
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
-  tab = { id: 1, url: "https://www.youtube.com/@a/videos" };
-  request = async () => context("youtube");
+  tab = { id: 1, url: "https://x.com/a" };
+  request = async () => context("x");
   writes.length = 0;
   container = document.createElement("div");
   document.body.append(container);
@@ -91,8 +90,8 @@ describe("接続先と非同期応答", () => {
     expect(fakeBrowser.tabs.sendMessage).not.toHaveBeenCalledWith(2, {
       type: FILTER_CONTEXT_REQUEST,
     });
-    expect(container.querySelector("[data-period-group]")).not.toBeNull();
-    tab = { id: 1, url: "https://www.youtube.com/@a/videos" };
+    expect(container.querySelector("[data-minimum-group]")).not.toBeNull();
+    tab = { id: 1, url: "https://x.com/a" };
     await fakeBrowser.tabs.onActivated.trigger({ tabId: 1, windowId: 1 });
     await flush();
     expect(writes).toHaveLength(1);
@@ -110,52 +109,25 @@ describe("接続先と非同期応答", () => {
     );
     await flush();
     expect(writes).toHaveLength(1);
-    expect(container.querySelector("[data-period-group]")).not.toBeNull();
+    expect(container.querySelector("[data-minimum-group]")).not.toBeNull();
   });
-  it.each([
-    ["youtube", "https://www.youtube.com/@Google/videos"],
-    ["youtube", "https://www.youtube.com/@Google/streams"],
-    [
-      "niconico",
-      "https://www.nicovideo.jp/user/11045538/video?sortKey=viewCount&sortOrder=desc",
-    ],
-    ["niconico", "https://www.nicovideo.jp/search/test?sort=v&order=d"],
-  ] as const)("%s の再生数順には投稿期間だけを表示する", async (site, url) => {
-    tab = { id: 1, url };
-    request = async () => ({
-      ...context(site),
-      sortOrder: "popular",
-    });
-    await mount();
-    expect(container.querySelector("[data-period-group]")).not.toBeNull();
-    expect(container.querySelector("[data-minimum-group]")).toBeNull();
-    expect(container.querySelector("[data-maximum-views]")).toBeNull();
-    expect(container.querySelector("[data-publication-age]")).toBeNull();
-    expect(container.querySelector("[data-filter-section]")).toBeNull();
-    expect(container.textContent).toContain(t("optionsPostingPeriod"));
-    expect(container.querySelectorAll("[role=switch]")).toHaveLength(0);
-  });
-  it.each(["youtube", "niconico"] as const)(
-    "%s の新しい順では操作項目を表示しない",
+  it.each(["x", "bluesky"] as const)(
+    "%s の対象外ページでは操作項目を表示しない",
     async (site) => {
       tab = {
         id: 1,
         url:
-          site === "youtube"
-            ? "https://www.youtube.com/@Google/videos"
-            : "https://www.nicovideo.jp/user/11045538/video",
+          site === "x"
+            ? "https://x.com/Google"
+            : "https://bsky.app/profile/example.bsky.social",
       };
       request = async () => ({
         ...context(site),
-        sortOrder: "newest",
         timelineAvailable: false,
       });
       await mount();
       expect(container.querySelector("[data-minimum-group]")).toBeNull();
-      expect(container.querySelector("[data-period-group]")).toBeNull();
-      expect(container.textContent).toContain(
-        t("sidepanelYouTubeUnsupportedTitle"),
-      );
+      expect(container.textContent).toContain(t("sidepanelUnsupportedTitle"));
     },
   );
   it("対応を外したFANBOXでは対象外表示にして再接続しない", async () => {
@@ -185,7 +157,7 @@ describe("接続先と非同期応答", () => {
       await vi.advanceTimersByTimeAsync(2250);
     });
     expect(read).toHaveBeenCalledTimes(1);
-    slow.resolve(context("youtube"));
+    slow.resolve(context("x"));
     await flush();
     expect(writes).toHaveLength(1);
     expect(fakeBrowser.tabs.sendMessage).toHaveBeenCalledWith(1, {
@@ -200,7 +172,7 @@ describe("接続先と非同期応答", () => {
     tab = { id: 2, url: "https://x.com/example" };
     await fakeBrowser.tabs.onActivated.trigger({ tabId: 2, windowId: 1 });
     await flush();
-    old.resolve(context("youtube"));
+    old.resolve(context("x"));
     await flush();
     expect(writes).toHaveLength(0);
     expect(fakeBrowser.tabs.sendMessage).not.toHaveBeenCalledWith(2, {
@@ -216,7 +188,7 @@ describe("接続先と非同期応答", () => {
     request = () => old.promise;
     await mount();
     tab.url = "https://x.com/example";
-    old.resolve(context("youtube"));
+    old.resolve(context("x"));
     await flush();
     expect(writes).toHaveLength(0);
   });
@@ -251,18 +223,18 @@ describe("接続先と非同期応答", () => {
     const read = vi
       .fn()
       .mockImplementationOnce(() => old.promise)
-      .mockResolvedValue(context("youtube"));
+      .mockResolvedValue(context("x"));
     request = read;
     await mount();
     await fakeBrowser.tabs.onUpdated.trigger(1, { status: "loading" }, {
       ...tab,
     } as never);
     await flush();
-    old.resolve(context("niconico"));
+    old.resolve(context("bluesky"));
     await flush();
     expect(writes).toHaveLength(1);
-    expect(writes[0]?.siteSettings.niconico).toEqual(
-      defaults.siteSettings.niconico,
+    expect(writes[0]?.siteSettings.bluesky).toEqual(
+      defaults.siteSettings.bluesky,
     );
   });
   it("非表示中のタブ変更でも保存待ちの初期化を無効にする", async () => {
@@ -322,7 +294,7 @@ describe("接続先と非同期応答", () => {
     await mount();
     await act(async () => root.unmount());
     root = createRoot(container);
-    old.resolve(context("youtube"));
+    old.resolve(context("x"));
     await flush();
     expect(writes).toHaveLength(0);
   });

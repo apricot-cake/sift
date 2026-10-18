@@ -118,7 +118,6 @@ try {
   for (const site of ["x", "bluesky"])
     unfiltered.siteSettings[site] = {
       ...unfiltered.siteSettings[site],
-      kind: "reactions",
       minReactionsEnabled: false,
       mediaEnabled: false,
       mediaMode: "any",
@@ -126,7 +125,6 @@ try {
       hideQuotes: false,
       hideReposts: false,
     };
-  unfiltered.siteSettings.youtube = { kind: "metric" };
   await api.evaluate(
     (settings) => chrome.storage.sync.set({ settings }),
     unfiltered,
@@ -223,22 +221,22 @@ try {
     report.results.push({ label, expectedOpen: open, pass, ...state });
     if (!pass) throw Error(`検証失敗: ${label}`);
   }
-  const youtube = await create("https://www.youtube.com/@Google/videos");
+  const bluesky = await create("https://bsky.app/profile/bsky.app");
   const x = await create("https://x.com/NASA");
   const other = await create("https://example.com/");
-  for (const target of [youtube, x, other]) {
+  for (const target of [bluesky, x, other]) {
     await activate(target);
     target.closedWidth = await target.page.evaluate(() => innerWidth);
     await check("起動前の閉鎖状態", target, false);
   }
-  await action(youtube);
-  await check("YouTubeで明示的に開く", youtube, true);
+  await action(bluesky);
+  await check("Blueskyで明示的に開く", bluesky, true);
   for (let cycle = 1; cycle <= 2; cycle++) {
     for (const target of [x, other]) {
       await activate(target);
       await check(`往復${cycle}:未開封タブは閉じたまま`, target, false);
-      await activate(youtube);
-      await check(`往復${cycle}:YouTubeへ復帰`, youtube, true);
+      await activate(bluesky);
+      await check(`往復${cycle}:Blueskyへ復帰`, bluesky, true);
       await activate(target);
       await check(`往復${cycle}:復帰後も別タブは閉じたまま`, target, false);
     }
@@ -247,8 +245,8 @@ try {
   await check("対象外タブを明示的に開く", other, true);
   await api.evaluate((tabId) => chrome.sidePanel.close({ tabId }), other.tabId);
   await check("対象外タブを明示的に閉じる", other, false);
-  await activate(youtube);
-  await check("別タブ閉鎖後もYouTubeを復元", youtube, true);
+  await activate(bluesky);
+  await check("別タブ閉鎖後もBlueskyを復元", bluesky, true);
   await activate(other);
   await check("閉じた別タブを再表示しても開き直さない", other, false);
   report.pass = true;
