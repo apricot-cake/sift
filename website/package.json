@@ -14,7 +14,7 @@
   },
   "dependencies": {
     "@fontsource-variable/noto-sans-jp": "5.3.1",
-    "@lucide/astro": "1.56.0",
+    "@lucide/astro": "1.57.0",
     "astro": "7.3.8"
   },
   "devDependencies": {
