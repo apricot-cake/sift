@@ -253,7 +253,9 @@ export default defineBackground(() => {
     // 非アクティブなタブの遷移も検査する。タブ単位の記録は worker の休止を
     // またいで保持し、別タブのパネルには影響させない。
     const key = sidePanelOriginKey(tabId);
-    const stored = await browser.storage.session.get(key);
+    const pageKey = panelPageKey(tabId);
+    const stored = await browser.storage.session.get([key, pageKey]);
+    const opening = stored[pageKey] as PanelPage | undefined;
     if (!Object.hasOwn(stored, key)) return;
     const tab = await browser.tabs.get(tabId).catch(() => null);
     if (!tab) return;
@@ -261,6 +263,13 @@ export default defineBackground(() => {
     // 別 origin への遷移で activeTab が失効すると URL 自体が取得できない。
     // 読み込み完了時にも URL がない場合は、接続を維持できないので閉じる。
     if (origin !== stored[key] || origin === null) {
+      // tabs.getを待つ間にactionで再接続した場合、古い遷移で新しいパネルを閉じない。
+      const latest = await browser.storage.session.get([key, pageKey]);
+      if (
+        latest[key] !== stored[key] ||
+        (latest[pageKey] as PanelPage | undefined)?.id !== opening?.id
+      )
+        return;
       await sidePanel?.setOptions({ tabId, enabled: false });
       return;
     }

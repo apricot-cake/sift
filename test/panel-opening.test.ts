@@ -472,3 +472,39 @@ it("ローカルworkerだけが実行中ビルドIDを公開する", async () =>
     Object.getOwnPropertyDescriptor(globalThis, "__SIFT_RUNNING_BUILD_ID__"),
   ).toMatchObject({ value: "running-build", writable: false });
 });
+
+it("遅れた別サイト遷移の判定で、再接続して開いたパネルを閉じない", async () => {
+  const { stored } = trackedPage();
+  api.storage.session.get.mockImplementation(async () => ({ ...stored }));
+  const nextTab = {
+    id: 7,
+    active: true,
+    url: "https://bsky.app/profile/bsky.app",
+  };
+  const pending = Promise.withResolvers<typeof nextTab>();
+  api.tabs.get
+    .mockResolvedValue(nextTab)
+    .mockImplementationOnce(() => pending.promise);
+  api.tabs.onUpdated.addListener.mock.calls[0]?.[0](7, { status: "complete" });
+  await vi.waitFor(() => expect(api.tabs.get).toHaveBeenCalledOnce());
+  api.action.onClicked.addListener.mock.calls[0]?.[0](nextTab);
+  await vi.waitFor(() =>
+    expect(api.runtime.sendMessage).toHaveBeenCalledWith({
+      type: "sift:sidepanel-set-panel-tab",
+      tabId: 7,
+      resetMinimum: true,
+    }),
+  );
+  pending.resolve(nextTab);
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  expect(api.sidePanel.setOptions).toHaveBeenCalledWith({
+    tabId: 7,
+    path: "sidepanel.html?tabId=7",
+    enabled: true,
+  });
+  expect(api.sidePanel.setOptions).not.toHaveBeenCalledWith({
+    tabId: 7,
+    enabled: false,
+  });
+  expect(stored["sift:sidepanel-origin:7"]).toBe("https://bsky.app");
+});
