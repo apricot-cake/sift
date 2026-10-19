@@ -64,9 +64,6 @@
 .product-description p {
   margin: 0;
 }
-.product-kind {
-  white-space: nowrap;
-}
 .product-actions {
   display: flex;
   align-items: center;
