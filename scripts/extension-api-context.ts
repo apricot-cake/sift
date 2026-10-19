@@ -61,11 +61,51 @@ export async function createExtensionApiContext(
       );
     const context = matching[0];
     if (!context) throw new Error("拡張機能APIの実行contextがありません");
+    const contextAvailable = () =>
+      contexts.get(context.id)?.uniqueId === context.uniqueId;
+    // document/context の生成直後は、拡張APIの名前空間が未初期化の場合がある。
+    // 副作用のある評価を再実行せず、同じcontextの初期化だけを期限内で待つ。
+    const deadline = Date.now() + workerCommandTimeout;
+    while (true) {
+      if (page.isClosed() || !contextAvailable())
+        throw new Error("拡張機能APIの実行contextが失効しました");
+      const remaining = deadline - Date.now();
+      if (remaining <= 0)
+        throw new Error("拡張機能APIの初期化を5秒以内に確認できません");
+      const result = await session.send(
+        "Runtime.evaluate",
+        {
+          expression: `({
+            extensionId: globalThis.chrome?.runtime?.id ?? null,
+            ready: typeof globalThis.chrome?.storage?.sync?.get === "function" &&
+              typeof globalThis.chrome?.tabs?.query === "function" &&
+              typeof globalThis.chrome?.sidePanel?.getOptions === "function"
+          })`,
+          returnByValue: true,
+          uniqueContextId: context.uniqueId,
+        },
+        { timeout: remaining },
+      );
+      if (result.exceptionDetails)
+        throw new Error(JSON.stringify(result.exceptionDetails));
+      if (page.isClosed() || !contextAvailable())
+        throw new Error("拡張機能APIの実行contextが失効しました");
+      const state = result.result.value as {
+        extensionId: string | null;
+        ready: boolean;
+      };
+      if (state.extensionId !== null && state.extensionId !== extensionId)
+        throw new Error("拡張機能APIの実行元IDが一致しません");
+      if (state.extensionId === extensionId && state.ready === true) break;
+      await new Promise((resolve) =>
+        setTimeout(resolve, Math.min(100, Math.max(0, deadline - Date.now()))),
+      );
+    }
     return new ExtensionApiContext(
       page,
       session,
       context.uniqueId,
-      () => contexts.get(context.id)?.uniqueId === context.uniqueId,
+      contextAvailable,
       removeListeners,
     );
   } catch (error) {
