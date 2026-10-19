@@ -170,9 +170,10 @@ export const cases: CompatibilityCase[] = [
   {
     id: "x-quote-representative",
     site: "x",
-    start: "https://x.com/NASA",
-    destination: "/NASA",
-    tab: "ポスト",
+    start:
+      "https://x.com/search?q=%E3%82%A4%E3%83%A9%E3%82%B9%E3%83%88%20filter%3Aquote",
+    destination: "/search",
+    tab: "最新",
   },
   {
     id: "bluesky-following",
@@ -227,8 +228,11 @@ export const cases: CompatibilityCase[] = [
     id: "bluesky-list",
     site: "bluesky",
     start: "https://bsky.app",
-    destination: "/profile/apricot-cake.com/lists/3kldrwhjefi2w",
-    linkHrefs: ["/lists", "/profile/apricot-cake.com/lists/3kldrwhjefi2w"],
+    destination: "/profile/ruru-endpoint.bsky.social/lists/3kldrwhjefi2w",
+    linkHrefs: [
+      "/lists",
+      "/profile/ruru-endpoint.bsky.social/lists/3kldrwhjefi2w",
+    ],
     list: true,
   },
   {

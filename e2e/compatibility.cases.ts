@@ -150,7 +150,20 @@ async function navigate(
   if (target.linkHref)
     await page.locator(`a[href="${target.linkHref}"]`).click();
   for (const href of target.linkHrefs ?? []) {
-    await page.locator(`a[href="${href}"]`).click();
+    // Blueskyの初期レイアウト中に、リンク位置へ重なるフィードタブを押さない。
+    await page
+      .locator(`a[href="${href}"]`)
+      .filter((node) => {
+        if (!node.isConnected)
+          throw new Error("移動先リンクが再描画されました");
+        const rect = node.getBoundingClientRect();
+        const x = rect.x + rect.width / 2;
+        const y = rect.y + rect.height / 2;
+        if (x < 0 || y < 0 || x >= innerWidth || y >= innerHeight) return true;
+        const hit = document.elementFromPoint(x, y);
+        return !!hit && node.contains(hit);
+      })
+      .click();
     await expect.poll(() => new URL(page.url()).pathname).toBe(href);
   }
   if (target.linkLabel) {
