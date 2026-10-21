@@ -1,6 +1,6 @@
 # sift
 
-[公式サイト](https://apricot-cake.github.io/sift/)
+[紹介ページ](https://apricot-cake.github.io/sift/)
 
 ## 環境構築からビルドまで
 
