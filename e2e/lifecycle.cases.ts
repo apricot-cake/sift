@@ -1,5 +1,6 @@
 import type { JSHandle, Page } from "puppeteer-core";
 import { expect } from "vitest";
+import { rethrowWithDiagnostics } from "../scripts/compatibility/failure-diagnostics.ts";
 import { selectPartialChoice } from "../scripts/compatibility/filter-choice.ts";
 import { parseMetric } from "../utils/filter-core.ts";
 import {
@@ -347,46 +348,51 @@ export function createLifecycleCases(): LiveCase[] {
           });
           healthy = true;
         } catch (error) {
-          await evidence(task, "failure-native-page", {
-            body: JSON.stringify(
-              await page.evaluate(() => ({
-                url: location.href,
-                title: document.title,
-                readyState: document.readyState,
-                loadingIndicators: [
-                  ...document.querySelectorAll('[role="progressbar"]'),
-                ].filter((node) =>
-                  node.checkVisibility({ visibilityProperty: true }),
-                ).length,
-                alerts: [
-                  ...document.querySelectorAll(
-                    '[role="alert"], [data-testid="errorMessage"]',
-                  ),
-                ]
-                  .filter((node) =>
+          await rethrowWithDiagnostics(
+            error,
+            {
+              "failure-native-page": () =>
+                page.evaluate(() => ({
+                  url: location.href,
+                  title: document.title,
+                  readyState: document.readyState,
+                  loadingIndicators: [
+                    ...document.querySelectorAll('[role="progressbar"]'),
+                  ].filter((node) =>
                     node.checkVisibility({ visibilityProperty: true }),
-                  )
-                  .map((node) => node.textContent?.trim()),
-                activeHref: document.activeElement?.getAttribute("href"),
-                dialogs: [...document.querySelectorAll('[role="dialog"]')].map(
-                  (node) => ({
+                  ).length,
+                  alerts: [
+                    ...document.querySelectorAll(
+                      '[role="alert"], [data-testid="errorMessage"]',
+                    ),
+                  ]
+                    .filter((node) =>
+                      node.checkVisibility({ visibilityProperty: true }),
+                    )
+                    .map((node) => node.textContent?.trim()),
+                  activeHref: document.activeElement?.getAttribute("href"),
+                  dialogs: [
+                    ...document.querySelectorAll('[role="dialog"]'),
+                  ].map((node) => ({
                     visible: node.checkVisibility({ visibilityProperty: true }),
                     label: node.getAttribute("aria-label"),
-                  }),
-                ),
-                timestampLinks: [
-                  ...document.querySelectorAll(
-                    'article[data-testid="tweet"] a:has(time)',
-                  ),
-                ].map((node) => ({
-                  href: node.getAttribute("href"),
-                  visible: node.checkVisibility({ visibilityProperty: true }),
+                  })),
+                  timestampLinks: [
+                    ...document.querySelectorAll(
+                      'article[data-testid="tweet"] a:has(time)',
+                    ),
+                  ].map((node) => ({
+                    href: node.getAttribute("href"),
+                    visible: node.checkVisibility({ visibilityProperty: true }),
+                  })),
                 })),
-              })),
-            ),
-            contentType: "application/json",
-          }).catch(() => {});
-          throw error;
+            },
+            (name, data) =>
+              evidence(task, name, {
+                body: JSON.stringify(data),
+                contentType: "application/json",
+              }),
+          );
         } finally {
           try {
             if (opened || session.panelTargetId)

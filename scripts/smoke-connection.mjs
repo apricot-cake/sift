@@ -1,6 +1,10 @@
 import { randomUUID } from "node:crypto";
 import fs from "node:fs";
 import { LiveLoadGuard, liveSite } from "./compatibility/live-load.ts";
+import {
+  diagnosticMessage,
+  observeConnectionWorker,
+} from "./connection-diagnostics.ts";
 import { loadDevCandidate } from "./dev-browser-candidate.ts";
 import { createExtensionApiContext } from "./extension-api-context.ts";
 import { launchDevBrowser } from "./managed-dev-browser.ts";
@@ -28,18 +32,62 @@ async function evaluate(client, expression) {
     throw Error(JSON.stringify(result.exceptionDetails));
   return result.result.value;
 }
-let ownedBrowser, browser, api, backup;
+let ownedBrowser, browser, api, backup, disposeWorkerDiagnostics;
+let phase = "setup";
+const panelEventsKey = `siftConnectionEvents:${randomUUID()}`;
 const report = {
   date: new Date().toISOString(),
   method: "CDP Extensions.triggerAction (not a toolbar click)",
   pass: false,
   results,
   cleanupErrors: [],
+  diagnostics: [],
 };
+function diagnose(kind, data) {
+  if (report.diagnostics.length < 200)
+    report.diagnostics.push({ time: Date.now(), phase, kind, ...data });
+}
+async function panelDiagnostics() {
+  try {
+    const events = await api.evaluate((key) => {
+      const state = globalThis[key];
+      return state ? state.events.splice(0) : [];
+    }, panelEventsKey);
+    for (const event of events) diagnose("panel-event", event);
+  } catch (error) {
+    diagnose("panel-observer-error", { message: diagnosticMessage(error) });
+  }
+}
+async function connectionDiagnostics(page) {
+  try {
+    const state = await api.evaluate(async (tabId) => {
+      const stored = await chrome.storage.session.get([
+        `sift:sidepanel-origin:${tabId}`,
+        `sift:sidepanel-page:${tabId}`,
+      ]);
+      const opening = stored[`sift:sidepanel-page:${tabId}`];
+      return {
+        options: await chrome.sidePanel.getOptions({ tabId }),
+        savedOrigin: stored[`sift:sidepanel-origin:${tabId}`] ?? null,
+        openingId: opening?.id ?? null,
+        openingOrigin: opening?.url ? new URL(opening.url).origin : null,
+      };
+    }, page.tabId);
+    diagnose("connection-state", { tabId: page.tabId, ...state });
+  } catch (error) {
+    diagnose("connection-state-error", { message: diagnosticMessage(error) });
+  }
+  await panelDiagnostics();
+}
 fs.mkdirSync("test-results", { recursive: true });
 try {
   ownedBrowser = await launchDevBrowser(true);
   const candidate = await loadDevCandidate(ownedBrowser);
+  report.candidate = {
+    buildId: candidate.buildId,
+    sha256: candidate.sha256,
+    sourceHash: candidate.sourceHash,
+  };
   const ext = candidate.loaded.id;
   browser = await ownedBrowser.target().createCDPSession();
   report.chrome = await browser.send("Browser.getVersion");
@@ -48,6 +96,27 @@ try {
     ownedBrowser.defaultBrowserContext(),
     ext,
   );
+  disposeWorkerDiagnostics = await observeConnectionWorker(
+    ownedBrowser,
+    ext,
+    diagnose,
+  );
+  await api.evaluate((key) => {
+    const events = [];
+    const capture = (kind) => (event) => {
+      if (events.length < 100)
+        events.push({
+          time: Date.now(),
+          event: kind,
+          tabId: event.tabId ?? null,
+        });
+    };
+    const opened = capture("opened");
+    const closed = capture("closed");
+    chrome.sidePanel.onOpened.addListener(opened);
+    chrome.sidePanel.onClosed.addListener(closed);
+    globalThis[key] = { events, opened, closed };
+  }, panelEventsKey);
   const isPanel = (target) => {
     if (!URL.canParse(target.url())) return false;
     const url = new URL(target.url());
@@ -114,11 +183,13 @@ try {
       throw Error("接続先タブIDを取得できません");
   }
   async function action(page) {
+    phase = `action-${liveSite(page.url) ?? "other"}`;
     loadGuard.setContext(
       "connection-smoke",
       `action-${liveSite(page.url) ?? "other"}`,
     );
     await activate(page);
+    await connectionDiagnostics(page);
     const { targetInfos } = await browser.send("Target.getTargets", {
       filter: [{ type: "tab" }, { exclude: true }],
     });
@@ -129,6 +200,7 @@ try {
       id: ext,
       targetId: tabs[0].targetId,
     });
+    await connectionDiagnostics(page);
   }
   async function snapshot(page) {
     const panels = [];
@@ -167,6 +239,7 @@ try {
     };
   }
   async function check(label, page, predicate, closedWidth) {
+    phase = label;
     loadGuard.setContext("connection-smoke", label);
     await loadGuard.assertPage(page.page);
     let observation,
@@ -189,10 +262,12 @@ try {
           ? stable + 1
           : 0;
       if (stable >= 3) {
+        await connectionDiagnostics(page);
         results.push({ label, pass: true, ...observation });
         return;
       }
     }
+    await connectionDiagnostics(page);
     results.push({ label, pass: false, ...observation });
     throw Error(`検証失敗: ${label}`);
   }
@@ -254,6 +329,22 @@ try {
 } catch (error) {
   report.error = String(error);
 } finally {
+  phase = "cleanup";
+  if (api) {
+    await panelDiagnostics();
+    try {
+      await api.evaluate((key) => {
+        const state = globalThis[key];
+        if (!state) return;
+        chrome.sidePanel.onOpened.removeListener(state.opened);
+        chrome.sidePanel.onClosed.removeListener(state.closed);
+        delete globalThis[key];
+      }, panelEventsKey);
+    } catch (error) {
+      diagnose("panel-observer-error", { message: diagnosticMessage(error) });
+    }
+  }
+  await disposeWorkerDiagnostics?.();
   // 自分で作ったタブだけ閉じる。パネルを破棄してから設定を戻す。
   for (const page of created) {
     try {

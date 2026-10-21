@@ -1,4 +1,5 @@
 import { expect } from "vitest";
+import { rethrowWithDiagnostics } from "../scripts/compatibility/failure-diagnostics.ts";
 import { aria, evidence, text, visible } from "./browser-queries.ts";
 import { unsupportedCases, unsupportedEntry } from "./cases.ts";
 import {
@@ -299,30 +300,35 @@ export function createUnsupportedCases(): LiveCase[] {
           }
           healthy = true;
         } catch (error) {
-          await evidence(task, "failure-page", {
-            body: JSON.stringify(
-              await page.evaluate(() => ({
-                url: location.href,
-                title: document.title,
-                readyState: document.readyState,
-                activeHref: document.activeElement?.getAttribute("href"),
-                selectedTabs: [
-                  ...document.querySelectorAll('a[role="tab"]'),
-                ].map((node) => ({
-                  href: node.getAttribute("href"),
-                  selected: node.getAttribute("aria-selected"),
-                })),
-                dialogs: [...document.querySelectorAll('[role="dialog"]')].map(
-                  (node) => ({
+          await rethrowWithDiagnostics(
+            error,
+            {
+              "failure-page": () =>
+                page.evaluate(() => ({
+                  url: location.href,
+                  title: document.title,
+                  readyState: document.readyState,
+                  activeHref: document.activeElement?.getAttribute("href"),
+                  selectedTabs: [
+                    ...document.querySelectorAll('a[role="tab"]'),
+                  ].map((node) => ({
+                    href: node.getAttribute("href"),
+                    selected: node.getAttribute("aria-selected"),
+                  })),
+                  dialogs: [
+                    ...document.querySelectorAll('[role="dialog"]'),
+                  ].map((node) => ({
                     visible: node.checkVisibility({ visibilityProperty: true }),
                     label: node.getAttribute("aria-label"),
-                  }),
-                ),
-              })),
-            ),
-            contentType: "application/json",
-          }).catch(() => {});
-          throw error;
+                  })),
+                })),
+            },
+            (name, data) =>
+              evidence(task, name, {
+                body: JSON.stringify(data),
+                contentType: "application/json",
+              }),
+          );
         } finally {
           try {
             if (session.panelTargetId) await closePanel(session, page);

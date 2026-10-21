@@ -2,6 +2,7 @@ import type { ElementHandle, Page } from "puppeteer-core";
 import { expect, type RunnerTask } from "vitest";
 import { workerCommandTimeout } from "../scripts/browser-worker.ts";
 import { callFunction } from "../scripts/cdp-call.ts";
+import { rethrowWithDiagnostics } from "../scripts/compatibility/failure-diagnostics.ts";
 import { selectPartialChoice } from "../scripts/compatibility/filter-choice.ts";
 import { retryNameResolution } from "../scripts/compatibility/navigation.ts";
 import {
@@ -868,54 +869,48 @@ export function createCompatibilityCases(): LiveCase[] {
           });
           healthy = true;
         } catch (error) {
-          await evidence(task, "failure-cause", {
-            body: JSON.stringify({
-              message: String(error),
-              stack: error instanceof Error ? error.stack : undefined,
-            }),
-            contentType: "application/json",
-          });
-          await evidence(task, "failure-navigation", {
-            body: JSON.stringify({
-              url: page.url(),
-              title: await page.title(),
-              visibility: await page.evaluate(() => document.visibilityState),
-              tabs: await page.$$eval('[role="tab"]', (nodes) =>
-                nodes.map((node) => {
-                  const r = node.getBoundingClientRect();
-                  const hit = document.elementFromPoint(
-                    r.x + r.width / 2,
-                    r.y + r.height / 2,
-                  );
-                  return {
-                    text: node.textContent,
-                    href: node.getAttribute("href"),
-                    rect: { x: r.x, y: r.y, width: r.width, height: r.height },
-                    hit: hit?.outerHTML.slice(0, 500),
-                  };
-                }),
-              ),
-            }),
-            contentType: "application/json",
-          });
-          await evidence(task, "failure-tabs", {
-            body: JSON.stringify({
-              pageUrl: page.url(),
-              tabs: await session.api.evaluate(
-                "chrome.tabs.query({}).then(tabs=>tabs.map(({id,url,active})=>({id,url,active})))",
-              ),
-            }),
-            contentType: "application/json",
-          });
-          await evidence(task, "failure-context", {
-            body: JSON.stringify(
-              await readContext(session, page).catch((problem) => ({
-                error: String(problem),
-              })),
-            ),
-            contentType: "application/json",
-          });
-          throw error;
+          await rethrowWithDiagnostics(
+            error,
+            {
+              "failure-navigation": async () => ({
+                url: page.url(),
+                title: await page.title(),
+                visibility: await page.evaluate(() => document.visibilityState),
+                tabs: await page.$$eval('[role="tab"]', (nodes) =>
+                  nodes.map((node) => {
+                    const r = node.getBoundingClientRect();
+                    const hit = document.elementFromPoint(
+                      r.x + r.width / 2,
+                      r.y + r.height / 2,
+                    );
+                    return {
+                      text: node.textContent,
+                      href: node.getAttribute("href"),
+                      rect: {
+                        x: r.x,
+                        y: r.y,
+                        width: r.width,
+                        height: r.height,
+                      },
+                      hit: hit?.outerHTML.slice(0, 500),
+                    };
+                  }),
+                ),
+              }),
+              "failure-tabs": async () => ({
+                pageUrl: page.url(),
+                tabs: await session.api.evaluate(
+                  "chrome.tabs.query({}).then(tabs=>tabs.map(({id,url,active})=>({id,url,active})))",
+                ),
+              }),
+              "failure-context": () => readContext(session, page),
+            },
+            (name, data) =>
+              evidence(task, name, {
+                body: JSON.stringify(data),
+                contentType: "application/json",
+              }),
+          );
         } finally {
           try {
             await closePanel(session, page);
