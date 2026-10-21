@@ -155,7 +155,7 @@ export const cases: CompatibilityCase[] = [
   {
     id: "x-list",
     site: "x",
-    start: "https://x.com/ruru_endpoint/lists",
+    start: "https://x.com/mewmwemowmow/lists",
     destination: "/i/lists/2082750019069948060",
     linkLabel: "e",
     list: true,
