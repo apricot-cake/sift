@@ -142,3 +142,17 @@ React から使う場合は `t("name")` を呼びます。静的 HTML では `da
 シークレットは GitHub Actions で検査します。
 
 `.gitleaksignore` では、過去の `wxt.config.js` と `wxt.config.ts` に含まれる Chrome マニフェストの公開鍵について、検出されたコミットと行を指定して除外しています。この値は秘密鍵や認証情報ではありません。
+
+## Storybook で画面を確認する
+
+`pnpm run storybook` を実行し、内蔵ブラウザで <http://127.0.0.1:6007/> を開きます。
+サイドパネル全体の X・Bluesky・未接続・警告表示と、基本部品を確認できます。
+設定変更はプレビュー内のメモリだけに保存されます。ストーリーを切り替えると初期化されます。
+
+要素コメントを付けるときは、対象のストーリーを選び、ツールバーの「Open canvas in new tab」で
+単独表示を開き、その URL を内蔵ブラウザで表示します。
+ブラウザの「Annotate」で要素を選択してコメントを保存し、チャットで修正を依頼してください。
+サイドパネルの単独表示 URL は <http://127.0.0.1:6007/iframe.html?id=サイドパネル--x&viewMode=story> です。
+
+`pnpm run build:storybook` で静的ファイルを `.output/storybook` に出力できます。
+Storybook は表示と操作のプレビュー用で、サイト上のフィルタリングや拡張権限の実機検証は別途行います。
