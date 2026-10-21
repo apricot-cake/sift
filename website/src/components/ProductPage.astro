@@ -14,9 +14,9 @@ const base = `${import.meta.env.BASE_URL.replace(/\/$/, "")}/`;
   </header>
   <main id="main" tabindex="-1" class="product-page">
     <section class="product-intro" aria-labelledby="product-introduction-sentence">
-      <h1 id="product-introduction-sentence" class="product-page-title"><span>SNSのイラストを</span><span>その場で絞り込む</span></h1>
+      <h1 id="product-introduction-sentence" class="product-page-title"><span>SNSの投稿を</span><span>条件で絞り込む</span></h1>
       <div class="product-description" data-reveal>
-        <p>X・Blueskyの投稿を、いいね数や画像の有無で絞り込めます。</p>
+        <p>X・Blueskyでのイラスト探しに使えるChrome拡張機能です。</p>
       </div>
       <div data-reveal style="--reveal-delay: 160ms">
         <InstallLinks />
@@ -24,8 +24,8 @@ const base = `${import.meta.env.BASE_URL.replace(/\/$/, "")}/`;
     </section>
 
     <section class="product-demo" data-reveal aria-labelledby="product-social-heading">
-      <h2 id="product-social-heading">いつものタイムラインで、人気のイラストを</h2>
-      <p class="product-demo-description">X・Blueskyの対応するタイムラインやリストで、いいね数や画像の有無を指定して、読み込まれた投稿からイラストを探せます。</p>
+      <h2 id="product-social-heading">使い方</h2>
+      <p class="product-demo-description">対応するタイムラインやリストで、読み込まれた投稿をいいね数や画像の有無で絞り込みます。</p>
       <ReplayDemo />
     </section>
 
@@ -33,12 +33,12 @@ const base = `${import.meta.env.BASE_URL.replace(/\/$/, "")}/`;
       <div class="product-local-icon"><Lock size={70} stroke-width={1.5} aria-hidden="true" /></div>
       <div>
         <h2 id="product-local-heading">絞り込みはブラウザ内で</h2>
-        <p>ユーザーの閲覧データを外部に送信しません。</p>
+        <p>閲覧データを外部に送信しません。</p>
       </div>
     </section>
 
     <section class="product-install" data-reveal aria-labelledby="product-install-heading">
-      <h2 id="product-install-heading">使ってみる</h2>
+      <h2 id="product-install-heading">インストール</h2>
       <p class="product-availability">無料で使えるオープンソースの拡張機能です。</p>
       <InstallLinks />
     </section>
