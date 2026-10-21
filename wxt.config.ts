@@ -5,11 +5,12 @@ import { defineConfig } from "wxt";
 
 const buildKind = process.env.SIFT_BUILD_KIND;
 const localDeploy = buildKind === "local";
-const signedBuild = localDeploy;
-const buildId = localDeploy ? (process.env.SIFT_BUILD_ID ?? "") : "";
+const localBuild = localDeploy || buildKind === "candidate";
+const signedBuild = localBuild;
+const buildId = localBuild ? (process.env.SIFT_BUILD_ID ?? "") : "";
 
-if (localDeploy && buildId === "") {
-  throw new Error("ローカル配備ビルドには SIFT_BUILD_ID が必要です。");
+if (localBuild && buildId === "") {
+  throw new Error("ローカルビルドには SIFT_BUILD_ID が必要です。");
 }
 
 // バンドルした依存のライセンス文を配布物に同梱する。Vite の build.license は
@@ -55,12 +56,10 @@ export default defineConfig({
   // GeneratedI18nStructure）は locales/<default_locale>.yml から作られる＝
   // manifest.default_locale の設定が要る（下の manifest 節）。
   modules: ["@wxt-dev/i18n/module", "@wxt-dev/module-react"],
-  // ローカルビルドは候補へ出力し、実機検証後にのみ共有出力へ昇格する。
+  // 検証候補と日常版の中間成果物を分け、配備で検証候補を上書きしない。
   outDir:
     process.env.SIFT_OUTPUT_DIR ||
-    (localDeploy
-      ? resolve(import.meta.dirname, ".output", "candidate")
-      : resolve(import.meta.dirname, ".output", "store")),
+    resolve(import.meta.dirname, ".output", buildKind || "store"),
   outDirTemplate: "{{browser}}-mv{{manifestVersion}}",
   // WXT にブラウザを起動させてはならない。理由は独立に2つある。
   //   - 自動化の仕組みを通して開いたものは自動化フラグの指紋を持ち、X はそれを
@@ -113,6 +112,7 @@ export default defineConfig({
     plugins: [tailwindcss()],
     define: {
       __SIFT_LOCAL_DEPLOY__: JSON.stringify(localDeploy),
+      __SIFT_LOCAL_BUILD__: JSON.stringify(localBuild),
       __SIFT_BUILD_ID__: JSON.stringify(buildId),
     },
   }),

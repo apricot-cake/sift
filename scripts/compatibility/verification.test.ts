@@ -4,19 +4,19 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, test } from "vitest";
 import { artifactHash } from "./artifact.ts";
-import { promoteCandidate, sourceHash } from "./verification.ts";
+import { promoteLocalBuild, sourceHash } from "./verification.ts";
 
 const temporary: string[] = [];
 function fixture() {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "sift-verification-"));
   temporary.push(root);
-  const output = path.join(root, ".output", "candidate", "chrome-mv3");
+  const output = path.join(root, ".output", "local", "chrome-mv3");
   fs.mkdirSync(output, { recursive: true });
   fs.writeFileSync(path.join(output, "background.js"), "new-build");
   const current = path.join(root, ".output", "chrome-mv3");
   fs.mkdirSync(current);
   fs.writeFileSync(path.join(current, "background.js"), "daily-build");
-  const candidate = {
+  const build = {
     buildId: "build-1",
     output,
     sha256: artifactHash(output),
@@ -25,7 +25,7 @@ function fixture() {
   return {
     root,
     current,
-    candidate,
+    build,
   };
 }
 afterEach(() => {
@@ -33,7 +33,7 @@ afterEach(() => {
     fs.rmSync(directory, { recursive: true, force: true });
 });
 
-describe("候補成果物と配備の整合性", () => {
+describe("日常版成果物と配備の整合性", () => {
   test("別ビルドのサイト編集は除き、拡張機能の実装・テスト・未追跡ファイルの変更は検出する", () => {
     const { root } = fixture();
     execFileSync("git", ["init", "--quiet"], { cwd: root });
@@ -61,9 +61,25 @@ describe("候補成果物と配備の整合性", () => {
     expect(sourceHash(root)).not.toBe(initial);
   }, 15000);
   test("同じバイト列を配備し、日常版の旧成果物を退避する", () => {
-    const { candidate, root, current } = fixture();
-    expect(promoteCandidate(root, candidate)).toBe(current);
-    expect(artifactHash(current)).toBe(candidate.sha256);
+    const { build, root, current } = fixture();
+    const candidateOutput = path.join(
+      root,
+      ".output",
+      "candidate",
+      "chrome-mv3",
+    );
+    fs.mkdirSync(candidateOutput, { recursive: true });
+    fs.writeFileSync(
+      path.join(candidateOutput, "background.js"),
+      "candidate-build",
+    );
+    const candidateHash = artifactHash(candidateOutput);
+    const candidateRecord = path.join(root, ".output", "candidate.json");
+    fs.writeFileSync(candidateRecord, "candidate-record");
+    expect(promoteLocalBuild(root, build)).toBe(current);
+    expect(artifactHash(current)).toBe(build.sha256);
+    expect(artifactHash(candidateOutput)).toBe(candidateHash);
+    expect(fs.readFileSync(candidateRecord, "utf8")).toBe("candidate-record");
     const backup = fs
       .readdirSync(path.join(root, ".output"))
       .find((name) => name.startsWith("promote-"));
@@ -75,10 +91,10 @@ describe("候補成果物と配備の整合性", () => {
       ),
     ).toBe("daily-build");
   });
-  test("候補以外のディレクトリは昇格しない", () => {
-    const { candidate, root, current } = fixture();
+  test("日常版以外のディレクトリは配備しない", () => {
+    const { build, root, current } = fixture();
     expect(() =>
-      promoteCandidate(root, { ...candidate, output: current }),
+      promoteLocalBuild(root, { ...build, output: current }),
     ).toThrow("場所");
   });
 });

@@ -9,7 +9,7 @@ const root = path.resolve(import.meta.dirname, "..");
 export function prepareCandidate() {
   const sourceBefore = sourceHash(root);
   const candidate = buildExtension(
-    "local",
+    "candidate",
     "build",
     path.join(root, ".output", "candidate"),
   );

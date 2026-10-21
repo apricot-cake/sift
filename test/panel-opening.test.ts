@@ -81,6 +81,7 @@ beforeEach(async () => {
     timelineAvailable: false,
   });
   vi.stubGlobal("__SIFT_LOCAL_DEPLOY__", false);
+  vi.stubGlobal("__SIFT_LOCAL_BUILD__", false);
   const background = await import("../entrypoints/background.ts");
   background.default.main();
   api.sidePanel.setOptions.mockClear();
@@ -227,7 +228,7 @@ it("古い遷移判定の応答で開き直したパネルを閉じない", asyn
 });
 
 it("ローカルビルドIDはサイドパネルからの診断にだけ返す", async () => {
-  vi.stubGlobal("__SIFT_LOCAL_DEPLOY__", true);
+  vi.stubGlobal("__SIFT_LOCAL_BUILD__", true);
   vi.stubGlobal("__SIFT_BUILD_ID__", "running-build");
   const listener = api.runtime.onMessage.addListener.mock.calls[0]?.[0];
   const message = { type: "sift:get-local-build" };
@@ -245,7 +246,7 @@ it("ローカルビルドIDはサイドパネルからの診断にだけ返す",
       tab: { id: 7 },
     }),
   ).toBeUndefined();
-  vi.stubGlobal("__SIFT_LOCAL_DEPLOY__", false);
+  vi.stubGlobal("__SIFT_LOCAL_BUILD__", false);
   expect(
     listener(message, {
       url: "chrome-extension://test/sidepanel.html?tabId=7",
@@ -469,13 +470,43 @@ it("バックグラウンドのタブへ接続しない", async () => {
 
 it("ローカルworkerだけが実行中ビルドIDを公開する", async () => {
   expect(Object.hasOwn(globalThis, "__SIFT_RUNNING_BUILD_ID__")).toBe(false);
-  vi.stubGlobal("__SIFT_LOCAL_DEPLOY__", true);
+  vi.stubGlobal("__SIFT_LOCAL_BUILD__", true);
   vi.stubGlobal("__SIFT_BUILD_ID__", "running-build");
   const background = await import("../entrypoints/background.ts");
   background.default.main();
   expect(
     Object.getOwnPropertyDescriptor(globalThis, "__SIFT_RUNNING_BUILD_ID__"),
   ).toMatchObject({ value: "running-build", writable: false });
+});
+
+it("検証候補はビルドIDを返し、初回起動とパネル通知でも日常版の更新を確認しない", async () => {
+  vi.stubGlobal("__SIFT_LOCAL_BUILD__", true);
+  vi.stubGlobal("__SIFT_LOCAL_DEPLOY__", false);
+  vi.stubGlobal("__SIFT_BUILD_ID__", "candidate-build");
+  checkLocalBuild.mockResolvedValue(false);
+  api.action.onClicked.addListener.mock.calls[0]?.[0]({
+    id: 7,
+    url: "https://x.com/NASA",
+  });
+  api.sidePanel.onOpened.addListener.mock.calls[0]?.[0]({
+    path: "/sidepanel.html",
+    tabId: 7,
+    windowId: 1,
+  });
+  await vi.waitFor(() =>
+    expect(api.scripting.executeScript).toHaveBeenCalledWith({
+      target: { tabId: 7 },
+      files: ["/sift.js"],
+    }),
+  );
+  expect(checkLocalBuild).not.toHaveBeenCalled();
+  const listener = api.runtime.onMessage.addListener.mock.calls[0]?.[0];
+  await expect(
+    listener(
+      { type: "sift:get-local-build" },
+      { url: "chrome-extension://test/sidepanel.html?tabId=7" },
+    ),
+  ).resolves.toEqual({ buildId: "candidate-build" });
 });
 
 it("ローカルworkerの起動だけではNative Hostへ問い合わせない", async () => {

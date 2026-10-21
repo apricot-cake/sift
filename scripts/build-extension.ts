@@ -3,15 +3,13 @@ import { randomUUID } from "node:crypto";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-export type BuildKind = "local" | "store";
+export type BuildKind = "candidate" | "local" | "store";
 export type BuildAction = "build" | "zip";
 
 const ROOT = path.resolve(import.meta.dirname, "..");
 
 export function outputFor(kind: BuildKind): string {
-  if (kind === "local")
-    return path.join(ROOT, ".output", "candidate", "chrome-mv3");
-  return path.join(ROOT, ".output", "store", "chrome-mv3");
+  return path.join(ROOT, ".output", kind, "chrome-mv3");
 }
 
 export function buildExtension(
@@ -19,7 +17,7 @@ export function buildExtension(
   action: BuildAction = "build",
   outputDirectory?: string,
 ): { buildId: string; output: string } {
-  const buildId = kind === "local" ? randomUUID() : "";
+  const buildId = kind !== "store" ? randomUUID() : "";
   const wxt = path.join(ROOT, "node_modules", "wxt", "bin", "wxt.mjs");
   const env = {
     ...process.env,
@@ -53,10 +51,10 @@ export function buildExtension(
 }
 
 function parseKind(value: string | undefined): BuildKind {
-  if (value === "local" || value === "store") {
+  if (value === "candidate" || value === "local" || value === "store") {
     return value;
   }
-  throw new Error("ビルド種別は local または store を指定してください。");
+  throw new Error("ビルド種別は candidate、local、store を指定してください。");
 }
 
 function parseAction(value: string | undefined): BuildAction {

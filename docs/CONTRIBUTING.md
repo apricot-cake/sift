@@ -73,6 +73,8 @@ pnpm run browser:open
 
 候補は `.output\candidate\chrome-mv3` に作成します。各検証コマンドは専用プロファイルの Chrome を起動して候補を自動で読み込み、終了処理で Chrome を閉じます。手動確認用の開発用 Chrome が開いている場合は、先に閉じてください。
 
+検証候補にはビルド ID を含めますが、日常版の更新確認と `nativeMessaging` 権限は含めません。日常版の配備 ID が変わっても検証中の拡張機能は再読み込みされません。`deploy:local` は更新確認を有効にした日常版を `.output\local\chrome-mv3` にビルドして配備します。検証候補とその記録は上書きしません。
+
 日常版への配備は、main の主作業ツリーで次のコマンドを実行します。現在のソースをビルドし、`.output\chrome-mv3` へ配備します。
 
 ```powershell

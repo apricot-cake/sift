@@ -8,8 +8,9 @@ import {
   installReloadHost,
   publishBuildStamp,
 } from "../native-host/install.ts";
-import { promoteCandidate } from "./compatibility/verification.ts";
-import { prepareCandidate } from "./prepare-candidate.ts";
+import { buildExtension } from "./build-extension.ts";
+import { artifactHash } from "./compatibility/artifact.ts";
+import { promoteLocalBuild } from "./compatibility/verification.ts";
 
 const ROOT = path.resolve(import.meta.dirname, "..");
 
@@ -58,10 +59,13 @@ function main(): void {
   const deployed = deployLocalExtension({
     assertContext: () => assertWindowsUserContext("pnpm run deploy:local"),
     promote: () => {
-      const candidate = prepareCandidate();
+      const build = buildExtension("local");
       return {
-        buildId: candidate.buildId,
-        output: promoteCandidate(ROOT, candidate),
+        buildId: build.buildId,
+        output: promoteLocalBuild(ROOT, {
+          output: build.output,
+          sha256: artifactHash(build.output),
+        }),
       };
     },
     installHost: () => installReloadHost(),

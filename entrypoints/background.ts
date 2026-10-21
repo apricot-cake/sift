@@ -60,7 +60,7 @@ async function readFilterContext(
 }
 
 export default defineBackground(() => {
-  if (__SIFT_LOCAL_DEPLOY__) {
+  if (__SIFT_LOCAL_BUILD__) {
     Object.defineProperty(globalThis, "__SIFT_RUNNING_BUILD_ID__", {
       value: __SIFT_BUILD_ID__,
       configurable: true,
@@ -314,9 +314,9 @@ export default defineBackground(() => {
         ? checkLocalBuild(__SIFT_BUILD_ID__)
         : Promise.resolve(true);
     // ファイルの再取得ではなく、現在実行中のバックグラウンドがビルドIDを返す。
-    // ローカル配備の診断専用。通常ページ・content scriptからは受け付けない。
+    // 検証候補とローカル配備の診断専用。通常ページ・content scriptからは受け付けない。
     if (
-      __SIFT_LOCAL_DEPLOY__ &&
+      __SIFT_LOCAL_BUILD__ &&
       message?.type === "sift:get-local-build" &&
       panelSender
     )

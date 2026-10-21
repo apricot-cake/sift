@@ -33,21 +33,20 @@ export function sourceHash(root: string): string {
   return hash.digest("hex");
 }
 
-/** 配備済み成果物を退避して候補をコピーする。コピーの整合性を確認してから切り替える。 */
-export function promoteCandidate(
+/** 配備済み成果物を退避して日常版をコピーする。検証候補は変更しない。 */
+export function promoteLocalBuild(
   root: string,
-  candidate: CandidateBuild,
+  build: { output: string; sha256: string },
 ): string {
   const outputRoot = path.join(root, ".output");
   if (
-    path.resolve(candidate.output) !==
-    path.join(outputRoot, "candidate", "chrome-mv3")
+    path.resolve(build.output) !== path.join(outputRoot, "local", "chrome-mv3")
   )
-    throw new Error("候補成果物の場所が一致しません。");
+    throw new Error("日常版成果物の場所が一致しません。");
   const staging = fs.mkdtempSync(path.join(outputRoot, "promote-"));
   const staged = path.join(staging, "chrome-mv3");
-  fs.cpSync(candidate.output, staged, { recursive: true, errorOnExist: true });
-  if (artifactHash(staged) !== candidate.sha256)
+  fs.cpSync(build.output, staged, { recursive: true, errorOnExist: true });
+  if (artifactHash(staged) !== build.sha256)
     throw new Error("配備用コピーのハッシュが一致しません。");
   const destination = path.join(outputRoot, "chrome-mv3");
   const backup = path.join(staging, "previous");

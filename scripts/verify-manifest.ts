@@ -14,17 +14,15 @@ import { HOST_NAME } from "../native-host/install.ts";
 import config from "../wxt.config.ts";
 
 const kind = process.argv[2];
-if (kind !== "local" && kind !== "store") {
+if (kind !== "candidate" && kind !== "local" && kind !== "store") {
   throw new Error(
-    "manifest の検査には local または store を指定してください。",
+    "manifest の検査には candidate、local、store を指定してください。",
   );
 }
 const packageJson = JSON.parse(await readFile("package.json", "utf8"));
 const output = process.env.SIFT_OUTPUT_DIR
   ? path.join(process.env.SIFT_OUTPUT_DIR, "chrome-mv3")
-  : kind === "local"
-    ? ".output/candidate/chrome-mv3"
-    : ".output/store/chrome-mv3";
+  : path.join(".output", kind, "chrome-mv3");
 const generatedManifest = JSON.parse(
   await readFile(`${output}/manifest.json`, "utf8"),
 );
@@ -46,8 +44,8 @@ if (
 assert.equal(generatedManifest.manifest_version, 3);
 assert.equal(generatedManifest.name, declaredManifest.name);
 assert.equal(generatedManifest.description, declaredManifest.description);
-if (kind === "local") {
-  // ローカル配備は、安定した拡張機能 ID を保つ。
+if (kind !== "store") {
+  // 検証候補とローカル配備は、安定した拡張機能 ID を保つ。
   assert.equal(typeof declaredManifest.key, "string");
   assert.equal(generatedManifest.key, declaredManifest.key);
 } else {
@@ -154,11 +152,6 @@ if (kind === "local") {
     "ローカル配備ビルドに自己リロードのループ防止が無い",
   );
   assert.ok(
-    process.env.SIFT_BUILD_ID &&
-      generatedText.includes(process.env.SIFT_BUILD_ID),
-    "ローカル配備ビルドにbuild IDが埋め込まれていない",
-  );
-  assert.ok(
     generatedText.includes("pagehide"),
     "ローカル配備ビルドがサイドパネル終了時にNative Hostを切断しない",
   );
@@ -172,9 +165,16 @@ if (kind === "local") {
     assert.equal(
       generatedText.includes(localOnlyValue),
       false,
-      `ストア提出ビルドにローカル専用処理が残っている: ${localOnlyValue}`,
+      `${kind} ビルドに日常版専用処理が残っている: ${localOnlyValue}`,
     );
   }
+}
+if (kind !== "store") {
+  assert.ok(
+    process.env.SIFT_BUILD_ID &&
+      generatedText.includes(process.env.SIFT_BUILD_ID),
+    "ローカルビルドにbuild IDが埋め込まれていない",
+  );
 }
 console.log(
   `生成された chrome の ${kind} manifest は、ソースの宣言どおりのものを持っている`,
