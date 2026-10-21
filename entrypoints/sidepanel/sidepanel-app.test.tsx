@@ -7,10 +7,18 @@ import {
   type FilterContextResponse,
 } from "../../utils/filter-context.ts";
 import { t } from "../../utils/i18n.ts";
+import { checkPanelBuild } from "../../utils/local-build-reload.ts";
 import { defaults, type Settings } from "../../utils/settings.ts";
 import { settingsItem } from "../../utils/settings-storage.ts";
 import { TIMELINE_CONTROL } from "../../utils/timeline-controls.ts";
 import { SidepanelApp } from "./sidepanel-app.tsx";
+
+vi.mock("../../utils/local-build-reload.ts", async (importOriginal) => ({
+  ...(await importOriginal<
+    typeof import("../../utils/local-build-reload.ts")
+  >()),
+  checkPanelBuild: vi.fn(async () => true),
+}));
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -48,6 +56,8 @@ async function mount() {
   await flush();
 }
 beforeEach(() => {
+  vi.mocked(checkPanelBuild).mockResolvedValue(true);
+  vi.mocked(checkPanelBuild).mockClear();
   history.replaceState(null, "", "/sidepanel.html?tabId=1");
   vi.useFakeTimers();
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
@@ -80,6 +90,55 @@ afterEach(async () => {
   vi.useRealTimers();
 });
 describe("接続先と非同期応答", () => {
+  it("開くときに一度確認し、ページ情報の定期取得では確認しない", async () => {
+    await mount();
+    expect(checkPanelBuild).toHaveBeenCalledOnce();
+    await act(async () => vi.advanceTimersByTimeAsync(2250));
+    expect(checkPanelBuild).toHaveBeenCalledOnce();
+  });
+
+  it("起動時に新版を検知したら設定の初期化やフィルター有効化をしない", async () => {
+    vi.mocked(checkPanelBuild).mockResolvedValue(false);
+    await mount();
+    expect(writes).toHaveLength(0);
+    expect(fakeBrowser.tabs.sendMessage).not.toHaveBeenCalledWith(1, {
+      type: TIMELINE_CONTROL.setFiltering,
+      enabled: true,
+    });
+  });
+
+  it("操作直前の確認を待ち、新版なら設定を変更しない", async () => {
+    await mount();
+    writes.length = 0;
+    const pending = deferred<boolean>();
+    vi.mocked(checkPanelBuild).mockReturnValueOnce(pending.promise);
+    const toggle = container.querySelector<HTMLButtonElement>(
+      `button[aria-label="${t("optionsHideReplies")}"]`,
+    );
+    await act(async () => toggle?.click());
+    expect(checkPanelBuild).toHaveBeenCalledTimes(2);
+    expect(writes).toHaveLength(0);
+    pending.resolve(false);
+    await flush();
+    expect(writes).toHaveLength(0);
+    expect(toggle?.getAttribute("aria-checked")).toBe("false");
+  });
+
+  it("更新がなければ確認後に操作し、次の操作でも確認する", async () => {
+    await mount();
+    writes.length = 0;
+    const toggle = container.querySelector<HTMLButtonElement>(
+      `button[aria-label="${t("optionsHideReplies")}"]`,
+    );
+    await act(async () => toggle?.click());
+    await flush();
+    expect(writes.at(-1)?.siteSettings.x?.hideReplies).toBe(true);
+    await act(async () => toggle?.click());
+    await flush();
+    expect(writes.at(-1)?.siteSettings.x?.hideReplies).toBe(false);
+    expect(checkPanelBuild).toHaveBeenCalledTimes(3);
+  });
+
   it("別タブへ引き継がず、元のタブへ戻っても最低値を初期化し直さない", async () => {
     await mount();
     expect(writes).toHaveLength(1);

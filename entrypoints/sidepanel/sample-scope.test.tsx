@@ -11,6 +11,7 @@ import { settingsItem } from "../../utils/settings-storage.ts";
 import { SidepanelApp } from "./sidepanel-app.tsx";
 
 beforeEach(() => {
+  vi.stubGlobal("__SIFT_LOCAL_DEPLOY__", false);
   history.replaceState(null, "", "/sidepanel.html?tabId=1");
 });
 

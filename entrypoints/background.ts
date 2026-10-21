@@ -5,7 +5,10 @@ import {
   type FilterContextResponse,
   isFilterContextResponse,
 } from "../utils/filter-context.ts";
-import { startLocalBuildReload } from "../utils/local-build-reload.ts";
+import {
+  CHECK_LOCAL_BUILD,
+  checkLocalBuild,
+} from "../utils/local-build-reload.ts";
 import {
   hasLeftPanelPage,
   isXMediaNavigation,
@@ -62,11 +65,12 @@ export default defineBackground(() => {
       value: __SIFT_BUILD_ID__,
       configurable: true,
     });
-    startLocalBuildReload(__SIFT_BUILD_ID__);
   }
 
   const sidePanel = (browser as { sidePanel?: typeof browser.sidePanel })
     .sidePanel;
+  const panelActions = new Map<number, symbol>();
+  const panelNotifications = new Map<number, symbol>();
 
   // 旧版の自動開閉設定は Chrome のプロファイルに残る。有効なままだと
   // ツールバーのクリックが onClicked に届かず、activeTab の接続処理も
@@ -82,6 +86,9 @@ export default defineBackground(() => {
     if (tab.id === undefined) {
       return;
     }
+    const generation = Symbol();
+    panelActions.set(tab.id, generation);
+    const isCurrent = () => panelActions.get(tab.id as number) === generation;
 
     // 非同期のページ判定を待つと action のユーザー操作が失われるため、
     // 全サイトで最初の await より前に開く。
@@ -100,16 +107,25 @@ export default defineBackground(() => {
       enabled: true,
     });
     const panelOpening = sidePanel?.open({ tabId: tab.id });
+    // open はユーザー操作が有効な同期区間で呼ぶ。更新確認を待ってから
+    // 呼ぶと Chrome に拒まれるため、先に開き、新版ならリロードで閉じる。
+    const currentBuild = __SIFT_LOCAL_DEPLOY__
+      ? checkLocalBuild(__SIFT_BUILD_ID__)
+      : Promise.resolve(true);
     await Promise.all([savedTab, configured, panelOpening]);
+    if (!(await currentBuild) || !isCurrent()) return;
     if (isSupportedSiteUrl(tab.url)) {
       const target = { tabId: tab.id };
       await browser.scripting.insertCSS({ target, css: contentStyle });
+      if (!isCurrent()) return;
       await browser.scripting.executeScript({ target, files: ["/sift.js"] });
+      if (!isCurrent()) return;
       // カードが未描画でも閉じない。対応状況はパネルが継続して取得する。
       const context = await readFilterContext(tab.id);
       const current = await browser.storage.session.get(panelPageKey(tab.id));
       const latestTab = await browser.tabs.get(tab.id).catch(() => null);
       if (
+        isCurrent() &&
         context &&
         (current[panelPageKey(tab.id)] as PanelPage | undefined)?.id ===
           opening.id &&
@@ -125,6 +141,7 @@ export default defineBackground(() => {
     }
     // 既存のパネルを開き直す場合は onOpened が発火しないことがある。
     // 注入後にも所有タブを通知し、開き直したパネルの接続を更新する。
+    if (!isCurrent()) return;
     void browser.runtime
       .sendMessage({
         type: SIDE_PANEL_CONTROL.setPanelTab,
@@ -292,6 +309,10 @@ export default defineBackground(() => {
       sender.url ===
         `${browser.runtime.getURL("/sidepanel.html")}?tabId=${owner}` &&
       sender.tab === undefined;
+    if (message?.type === CHECK_LOCAL_BUILD && panelSender)
+      return __SIFT_LOCAL_DEPLOY__
+        ? checkLocalBuild(__SIFT_BUILD_ID__)
+        : Promise.resolve(true);
     // ファイルの再取得ではなく、現在実行中のバックグラウンドがビルドIDを返す。
     // ローカル配備の診断専用。通常ページ・content scriptからは受け付けない。
     if (
@@ -331,6 +352,8 @@ export default defineBackground(() => {
   });
 
   browser.tabs.onRemoved.addListener((tabId) => {
+    panelActions.delete(tabId);
+    panelNotifications.delete(tabId);
     void browser.storage.session.remove(sidePanelOriginKey(tabId));
     void browser.storage.session.remove(panelPageKey(tabId));
   });
@@ -342,24 +365,46 @@ export default defineBackground(() => {
       new URL(panel.path, browser.runtime.getURL("/sidepanel.html"))
         .pathname === "/sidepanel.html"
     ) {
-      void browser.storage.session.set({
-        [SIDE_PANEL_TAB_STORAGE_KEY]: panel.tabId,
-      });
-      void browser.runtime
-        .sendMessage({
-          type: SIDE_PANEL_CONTROL.setPanelTab,
-          tabId: panel.tabId,
-        })
-        .catch(() => {});
+      const tabId = panel.tabId;
+      const generation = Symbol();
+      panelNotifications.set(tabId, generation);
+      const notifyPanel = () => {
+        if (panelNotifications.get(tabId) !== generation) return;
+        void browser.storage.session.set({
+          [SIDE_PANEL_TAB_STORAGE_KEY]: tabId,
+        });
+        void browser.runtime
+          .sendMessage({
+            type: SIDE_PANEL_CONTROL.setPanelTab,
+            tabId,
+          })
+          .catch(() => {});
+      };
+      if (__SIFT_LOCAL_DEPLOY__)
+        void checkLocalBuild(__SIFT_BUILD_ID__).then((current) => {
+          if (current) notifyPanel();
+        });
+      else notifyPanel();
     }
   });
   sidePanel?.onClosed?.addListener((panel) => {
+    if (panel.tabId === undefined) {
+      panelActions.clear();
+      panelNotifications.clear();
+    } else {
+      panelActions.delete(panel.tabId);
+      panelNotifications.delete(panel.tabId);
+    }
+    const remainsClosed = (tabId: number) =>
+      !panelActions.has(tabId) && !panelNotifications.has(tabId);
     void browser.storage.session
       .get(SIDE_PANEL_TAB_STORAGE_KEY)
       .then((stored) => {
         if (
-          panel.tabId === undefined ||
-          stored[SIDE_PANEL_TAB_STORAGE_KEY] === panel.tabId
+          (panel.tabId === undefined ||
+            stored[SIDE_PANEL_TAB_STORAGE_KEY] === panel.tabId) &&
+          (typeof stored[SIDE_PANEL_TAB_STORAGE_KEY] !== "number" ||
+            remainsClosed(stored[SIDE_PANEL_TAB_STORAGE_KEY] as number))
         ) {
           void browser.storage.session.remove(SIDE_PANEL_TAB_STORAGE_KEY);
         }
@@ -368,7 +413,8 @@ export default defineBackground(() => {
       for (const tab of tabs) {
         if (
           tab.id !== undefined &&
-          (panel.tabId === undefined || panel.tabId === tab.id)
+          (panel.tabId === undefined || panel.tabId === tab.id) &&
+          remainsClosed(tab.id)
         ) {
           void browser.tabs
             .sendMessage(tab.id, {

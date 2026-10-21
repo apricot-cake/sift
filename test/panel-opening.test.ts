@@ -46,6 +46,9 @@ const api = vi.hoisted(() => ({
     executeScript: vi.fn(async () => undefined),
   },
 }));
+const checkLocalBuild = vi.hoisted(() =>
+  vi.fn(async (_ownBuild: string): Promise<boolean> => true),
+);
 vi.mock("wxt/browser", () => ({ browser: api }));
 vi.mock("../utils/filter-context.ts", () => ({
   FILTER_CONTEXT_REQUEST: "sift:get-filter-context",
@@ -53,13 +56,15 @@ vi.mock("../utils/filter-context.ts", () => ({
 }));
 
 vi.mock("../utils/local-build-reload.ts", () => ({
-  startLocalBuildReload: vi.fn(),
+  CHECK_LOCAL_BUILD: "sift:check-local-build",
+  checkLocalBuild,
 }));
 
 beforeEach(async () => {
   Reflect.deleteProperty(globalThis, "__SIFT_RUNNING_BUILD_ID__");
   vi.clearAllMocks();
   vi.resetModules();
+  checkLocalBuild.mockResolvedValue(true);
   api.storage.session.get.mockResolvedValue({
     "sift:sidepanel-tab-id": 7,
     "sift:sidepanel-origin:7": "https://x.com",
@@ -471,6 +476,182 @@ it("ローカルworkerだけが実行中ビルドIDを公開する", async () =>
   expect(
     Object.getOwnPropertyDescriptor(globalThis, "__SIFT_RUNNING_BUILD_ID__"),
   ).toMatchObject({ value: "running-build", writable: false });
+});
+
+it("ローカルworkerの起動だけではNative Hostへ問い合わせない", async () => {
+  vi.stubGlobal("__SIFT_LOCAL_DEPLOY__", true);
+  vi.stubGlobal("__SIFT_BUILD_ID__", "running-build");
+  const background = await import("../entrypoints/background.ts");
+  background.default.main();
+  expect(checkLocalBuild).not.toHaveBeenCalled();
+});
+
+it("更新確認を待つ間もユーザー操作内でパネルを開き、注入は確認後に行う", async () => {
+  vi.stubGlobal("__SIFT_LOCAL_DEPLOY__", true);
+  vi.stubGlobal("__SIFT_BUILD_ID__", "running-build");
+  const pending = Promise.withResolvers<boolean>();
+  checkLocalBuild.mockReturnValueOnce(pending.promise);
+  api.action.onClicked.addListener.mock.calls[0]?.[0]({
+    id: 7,
+    url: "https://x.com/NASA",
+  });
+  expect(api.sidePanel.open).toHaveBeenCalledWith({ tabId: 7 });
+  await vi.waitFor(() =>
+    expect(checkLocalBuild).toHaveBeenCalledWith("running-build"),
+  );
+  expect(api.scripting.insertCSS).not.toHaveBeenCalled();
+  expect(api.scripting.executeScript).not.toHaveBeenCalled();
+  expect(api.runtime.sendMessage).not.toHaveBeenCalled();
+  pending.resolve(true);
+  await vi.waitFor(() =>
+    expect(api.scripting.executeScript).toHaveBeenCalledWith({
+      target: { tabId: 7 },
+      files: ["/sift.js"],
+    }),
+  );
+});
+
+it("パネル起動時に更新を検知したら旧ビルドの注入と初期化通知を行わない", async () => {
+  vi.stubGlobal("__SIFT_LOCAL_DEPLOY__", true);
+  vi.stubGlobal("__SIFT_BUILD_ID__", "running-build");
+  checkLocalBuild.mockResolvedValue(false);
+  api.action.onClicked.addListener.mock.calls[0]?.[0]({
+    id: 7,
+    url: "https://x.com/NASA",
+  });
+  await vi.waitFor(() => expect(checkLocalBuild).toHaveBeenCalled());
+  // アクションの非同期処理が更新判定から復帰した後も処理を続けない。
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  expect(api.scripting.insertCSS).not.toHaveBeenCalled();
+  expect(api.scripting.executeScript).not.toHaveBeenCalled();
+  expect(api.runtime.sendMessage).not.toHaveBeenCalled();
+});
+
+it.each([{ tabId: 7 }, {}])(
+  "開いた通知の更新確認中に閉じたパネルの接続先を復活させない: %j",
+  async (closedPanel) => {
+    vi.stubGlobal("__SIFT_LOCAL_DEPLOY__", true);
+    vi.stubGlobal("__SIFT_BUILD_ID__", "running-build");
+    const pending = Promise.withResolvers<boolean>();
+    checkLocalBuild.mockReturnValueOnce(pending.promise);
+    api.sidePanel.onOpened.addListener.mock.calls[0]?.[0]({
+      path: "/sidepanel.html?tabId=7",
+      tabId: 7,
+      windowId: 1,
+    });
+    expect(checkLocalBuild).toHaveBeenCalledOnce();
+    api.sidePanel.onClosed.addListener.mock.calls[0]?.[0](closedPanel);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    api.storage.session.set.mockClear();
+    api.runtime.sendMessage.mockClear();
+    pending.resolve(true);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(api.storage.session.set).not.toHaveBeenCalled();
+    expect(api.runtime.sendMessage).not.toHaveBeenCalled();
+    expect(checkLocalBuild).toHaveBeenCalledOnce();
+  },
+);
+
+it("開いた通知の更新確認中にタブが閉じた場合も通知を破棄する", async () => {
+  vi.stubGlobal("__SIFT_LOCAL_DEPLOY__", true);
+  vi.stubGlobal("__SIFT_BUILD_ID__", "running-build");
+  const pending = Promise.withResolvers<boolean>();
+  checkLocalBuild.mockReturnValueOnce(pending.promise);
+  api.sidePanel.onOpened.addListener.mock.calls[0]?.[0]({
+    path: "/sidepanel.html?tabId=7",
+    tabId: 7,
+    windowId: 1,
+  });
+  api.tabs.onRemoved.addListener.mock.calls[0]?.[0](7);
+  pending.resolve(true);
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  expect(api.storage.session.set).not.toHaveBeenCalled();
+  expect(api.runtime.sendMessage).not.toHaveBeenCalled();
+});
+
+it.each([{ tabId: 7 }, {}])(
+  "アクションの更新確認中に閉じたら注入と初期化通知を再開しない: %j",
+  async (closedPanel) => {
+    vi.stubGlobal("__SIFT_LOCAL_DEPLOY__", true);
+    vi.stubGlobal("__SIFT_BUILD_ID__", "running-build");
+    const pending = Promise.withResolvers<boolean>();
+    checkLocalBuild.mockReturnValueOnce(pending.promise);
+    api.action.onClicked.addListener.mock.calls[0]?.[0]({
+      id: 7,
+      url: "https://x.com/NASA",
+    });
+    await vi.waitFor(() => expect(checkLocalBuild).toHaveBeenCalled());
+    api.sidePanel.onClosed.addListener.mock.calls[0]?.[0](closedPanel);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    pending.resolve(true);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(api.scripting.insertCSS).not.toHaveBeenCalled();
+    expect(api.scripting.executeScript).not.toHaveBeenCalled();
+    expect(api.runtime.sendMessage).not.toHaveBeenCalled();
+  },
+);
+
+it("開き直したパネルを、先に閉じた通知の遅れた処理で切断しない", async () => {
+  const pending = Promise.withResolvers<Record<string, unknown>>();
+  api.storage.session.get.mockReturnValueOnce(pending.promise);
+  api.sidePanel.onClosed.addListener.mock.calls[0]?.[0]({ tabId: 7 });
+  api.sidePanel.onOpened.addListener.mock.calls[0]?.[0]({
+    path: "/sidepanel.html?tabId=7",
+    tabId: 7,
+    windowId: 1,
+  });
+  pending.resolve({ "sift:sidepanel-tab-id": 7 });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  expect(api.storage.session.remove).not.toHaveBeenCalledWith(
+    "sift:sidepanel-tab-id",
+  );
+});
+
+it("パネルの操作時確認は更新判定の結果を返す", async () => {
+  vi.stubGlobal("__SIFT_LOCAL_DEPLOY__", true);
+  vi.stubGlobal("__SIFT_BUILD_ID__", "running-build");
+  const listener = api.runtime.onMessage.addListener.mock.calls[0]?.[0];
+  const sender = { url: "chrome-extension://test/sidepanel.html?tabId=7" };
+  checkLocalBuild.mockResolvedValueOnce(false);
+  await expect(
+    listener({ type: "sift:check-local-build" }, sender),
+  ).resolves.toBe(false);
+  expect(checkLocalBuild).toHaveBeenCalledWith("running-build");
+  await expect(
+    listener({ type: "sift:check-local-build" }, sender),
+  ).resolves.toBe(true);
+});
+
+it.each([
+  { url: "https://x.com/home", tab: { id: 7 } },
+  { url: "chrome-extension://test/sidepanel.html?tabId=7", tab: { id: 7 } },
+  { url: "chrome-extension://test/sidepanel.html" },
+  { url: "chrome-extension://test/other.html?tabId=7" },
+  { url: "chrome-extension://foreign/sidepanel.html?tabId=7" },
+])("パネル以外から更新確認を起動できない: %j", (sender) => {
+  vi.stubGlobal("__SIFT_LOCAL_DEPLOY__", true);
+  vi.stubGlobal("__SIFT_BUILD_ID__", "running-build");
+  const listener = api.runtime.onMessage.addListener.mock.calls[0]?.[0];
+  expect(listener({ type: "sift:check-local-build" }, sender)).toBeUndefined();
+  expect(checkLocalBuild).not.toHaveBeenCalled();
+});
+
+it("ストア版ではパネル操作を許可してNative Hostへ問い合わせない", async () => {
+  const listener = api.runtime.onMessage.addListener.mock.calls[0]?.[0];
+  await expect(
+    listener(
+      { type: "sift:check-local-build" },
+      { url: "chrome-extension://test/sidepanel.html?tabId=7" },
+    ),
+  ).resolves.toBe(true);
+  api.action.onClicked.addListener.mock.calls[0]?.[0]({
+    id: 7,
+    url: "https://x.com/NASA",
+  });
+  await vi.waitFor(() =>
+    expect(api.scripting.executeScript).toHaveBeenCalled(),
+  );
+  expect(checkLocalBuild).not.toHaveBeenCalled();
 });
 
 it("遅れた別サイト遷移の判定で、再接続して開いたパネルを閉じない", async () => {

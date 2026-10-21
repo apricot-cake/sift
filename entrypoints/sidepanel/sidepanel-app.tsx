@@ -19,6 +19,7 @@ import {
   isFilterContextResponse,
 } from "../../utils/filter-context.ts";
 import { t } from "../../utils/i18n.ts";
+import { checkPanelBuild } from "../../utils/local-build-reload.ts";
 import { metricThresholdSuggestions } from "../../utils/metric-threshold-suggestions.ts";
 import { isKnownUnsupportedSite } from "../../utils/panel-connection.ts";
 import {
@@ -81,6 +82,19 @@ export function SidepanelApp(): React.JSX.Element {
   const [pageFilteringEnabled, setPageFilteringEnabled] = useState(false);
   const pageFilteringExpected = useRef(false);
 
+  const runPanelAction = (action: () => void): void => {
+    const epoch = connectionEpoch.current;
+    void checkPanelBuild().then((current) => {
+      if (
+        current &&
+        panelMounted.current &&
+        epoch === connectionEpoch.current &&
+        document.visibilityState !== "hidden"
+      )
+        action();
+    });
+  };
+
   useEffect(() => {
     settingsRef.current = settings;
   }, [settings]);
@@ -120,6 +134,7 @@ export function SidepanelApp(): React.JSX.Element {
     const epoch = connectionEpoch.current;
     const page = activePageRef.current;
     const normalized = normalizeSettings(next);
+    settingsRef.current = normalized;
     setSettings(normalized);
     void settingsItem
       .setValue(normalized)
@@ -171,6 +186,9 @@ export function SidepanelApp(): React.JSX.Element {
   };
 
   useEffect(() => {
+    // 初回の設定初期化やフィルター有効化も、更新確認が終わるまで待つ。
+    // 定期的なページ情報取得では Native Host へ問い合わせない。
+    const openingBuild = checkPanelBuild();
     let refreshGeneration = 0;
     let activeRefresh: number | null = null;
     let disposed = false;
@@ -194,6 +212,7 @@ export function SidepanelApp(): React.JSX.Element {
         generation === refreshGeneration &&
         document.visibilityState !== "hidden";
       try {
+        if (!(await openingBuild) || !isCurrent()) return;
         const [tab] = await browser.tabs.query({
           active: true,
           currentWindow: true,
@@ -442,20 +461,25 @@ export function SidepanelApp(): React.JSX.Element {
     site: SiteSettingsKey,
     nextSiteSettings: ReactionSiteSettings,
   ): void => {
-    saveSettings(withSiteSettings(settings, site, nextSiteSettings));
+    saveSettings(withSiteSettings(settingsRef.current, site, nextSiteSettings));
   };
 
   const updateReactionSetting = <Key extends keyof ReactionSiteSettings>(
     key: Key,
     value: ReactionSiteSettings[Key],
   ): void => {
-    saveSiteSettings(selectedSite, { ...selectedSettings, [key]: value });
+    runPanelAction(() => {
+      saveSiteSettings(selectedSite, {
+        ...settingsFor(settingsRef.current, selectedSite),
+        [key]: value,
+      });
+    });
   };
 
   const setManualMinimum = (value: number, enabled: boolean): void => {
     setManualSites((sites) => ({ ...sites, [selectedSite]: true }));
     saveSiteSettings(selectedSite, {
-      ...selectedSettings,
+      ...settingsFor(settingsRef.current, selectedSite),
       manualMinimum: value,
       ...(enabled ? { minReactions: value, minReactionsEnabled: true } : {}),
     });
@@ -466,7 +490,7 @@ export function SidepanelApp(): React.JSX.Element {
     if (enabled) setManualMinimum(manualMinimum, true);
     else
       saveSiteSettings(selectedSite, {
-        ...selectedSettings,
+        ...settingsFor(settingsRef.current, selectedSite),
         minReactionsEnabled: false,
       });
   };
@@ -571,30 +595,38 @@ export function SidepanelApp(): React.JSX.Element {
                     <ReactionThresholdSuggestions
                       truncated={activeContext?.metricContextTruncated === true}
                       minimumEnabled={selectedSettings.minReactionsEnabled}
-                      onManual={() => toggleManualMinimum(true)}
-                      onClear={() => toggleManualMinimum(false)}
+                      onManual={() =>
+                        runPanelAction(() => toggleManualMinimum(true))
+                      }
+                      onClear={() =>
+                        runPanelAction(() => toggleManualMinimum(false))
+                      }
                       selectionEnabled={
                         !manualActive && selectedSettings.minReactionsEnabled
                       }
                       currentMinimum={selectedSettings.minReactions}
                       metricCounts={activeContext?.metricCounts ?? []}
-                      onSelect={(minimum) => {
-                        setManualSites((sites) => ({
-                          ...sites,
-                          [selectedSite]: false,
-                        }));
-                        saveSiteSettings(selectedSite, {
-                          ...selectedSettings,
-                          manualMinimum,
-                          minReactions: minimum,
-                          minReactionsEnabled: true,
-                        });
-                      }}
+                      onSelect={(minimum) =>
+                        runPanelAction(() => {
+                          setManualSites((sites) => ({
+                            ...sites,
+                            [selectedSite]: false,
+                          }));
+                          saveSiteSettings(selectedSite, {
+                            ...settingsFor(settingsRef.current, selectedSite),
+                            manualMinimum,
+                            minReactions: minimum,
+                            minReactionsEnabled: true,
+                          });
+                        })
+                      }
                     >
                       <ThresholdSetting
                         label={t("optionsManualMinimum")}
                         min={0}
-                        onValueChange={(value) => setManualMinimum(value, true)}
+                        onValueChange={(value) =>
+                          runPanelAction(() => setManualMinimum(value, true))
+                        }
                         suffix={t("sidepanelLikeSuggestionMinimumSuffix")}
                         value={manualMinimum}
                       />
@@ -604,11 +636,13 @@ export function SidepanelApp(): React.JSX.Element {
                     enabled={selectedSettings.mediaEnabled}
                     mode={selectedSettings.mediaMode}
                     onChange={(mediaEnabled, mediaMode) =>
-                      saveSiteSettings(selectedSite, {
-                        ...selectedSettings,
-                        mediaEnabled,
-                        mediaMode,
-                      })
+                      runPanelAction(() =>
+                        saveSiteSettings(selectedSite, {
+                          ...settingsFor(settingsRef.current, selectedSite),
+                          mediaEnabled,
+                          mediaMode,
+                        }),
+                      )
                     }
                   />
                 </div>
@@ -665,7 +699,10 @@ export function SidepanelApp(): React.JSX.Element {
                   {t("continuousLoadingWarningDescription")}
                 </p>
               </div>
-              <Button className="w-full" onClick={() => updateFiltering(false)}>
+              <Button
+                className="w-full"
+                onClick={() => runPanelAction(() => updateFiltering(false))}
+              >
                 {t("continuousLoadingWarningDisable")}
               </Button>
             </CardContent>
@@ -674,12 +711,14 @@ export function SidepanelApp(): React.JSX.Element {
 
         <footer className="mt-auto flex justify-end pt-8">
           <Button
-            onClick={() => {
-              setResetAllSites(false);
-              setResetSite(activeSite);
-              resetDialog.current?.showModal();
-              resetCancel.current?.focus();
-            }}
+            onClick={() =>
+              runPanelAction(() => {
+                setResetAllSites(false);
+                setResetSite(activeSite);
+                resetDialog.current?.showModal();
+                resetCancel.current?.focus();
+              })
+            }
             variant="ghost"
             size="sm"
           >
@@ -711,7 +750,10 @@ export function SidepanelApp(): React.JSX.Element {
               type="checkbox"
               className="mt-1"
               checked={resetAllSites}
-              onChange={(event) => setResetAllSites(event.target.checked)}
+              onChange={(event) => {
+                const checked = event.target.checked;
+                runPanelAction(() => setResetAllSites(checked));
+              }}
             />
             {t("optionsResetAllSites")}
           </label>
@@ -719,13 +761,13 @@ export function SidepanelApp(): React.JSX.Element {
             <Button
               ref={resetCancel}
               variant="outline"
-              onClick={() => resetDialog.current?.close()}
+              onClick={() => runPanelAction(() => resetDialog.current?.close())}
             >
               {t("optionsResetCancel")}
             </Button>
             <Button
               variant="destructive"
-              onClick={resetSettings}
+              onClick={() => runPanelAction(resetSettings)}
               disabled={!resetAllSites && resetSite === null}
             >
               {t("optionsResetAction")}
@@ -828,6 +870,9 @@ function ReactionThresholdSuggestions({
   return (
     <div data-threshold-suggestions="">
       <Select
+        onOpenChange={(open) => {
+          if (open) void checkPanelBuild();
+        }}
         value={
           !minimumEnabled
             ? "none"
@@ -993,6 +1038,9 @@ function MediaSetting({
         <ItemLabel icon={Image}>{t("optionsMedia")}</ItemLabel>
       </h2>
       <Select
+        onOpenChange={(open) => {
+          if (open) void checkPanelBuild();
+        }}
         value={enabled ? mode : "none"}
         onValueChange={(nextMode) =>
           onChange(

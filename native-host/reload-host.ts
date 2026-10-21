@@ -1,12 +1,12 @@
-// ローカル配備専用の Native Messaging Host。配備スタンプを監視し、新しい
-// build ID を接続中の sift へ伝える。ストア提出物には含めない。
+// ローカル配備専用の Native Messaging Host。操作時の問い合わせへ配備済み
+// build ID を一度だけ返し、終了する。ストア提出物には含めない。
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 export interface BuildAvailableMessage {
   type: "build-available";
-  build: string;
+  build: string | null;
 }
 
 export function encodeNativeMessage(message: unknown): Buffer {
@@ -27,33 +27,32 @@ export function readBuildId(file: string): string | null {
   }
 }
 
-function run(): void {
+async function run(): Promise<void> {
   const stamp = process.env.SIFT_RELOAD_STAMP;
   if (!stamp || !path.isAbsolute(stamp)) process.exit(1);
 
-  let lastSent: string | null = null;
-  const sendCurrent = () => {
-    const build = readBuildId(stamp);
-    if (!build || build === lastSent) return;
-    lastSent = build;
-    process.stdout.write(
-      encodeNativeMessage({ type: "build-available", build }),
-    );
-  };
-
   process.stdout.on("error", () => process.exit(0));
-  process.stdin.on("end", () => {
-    fs.unwatchFile(stamp, sendCurrent);
-  });
-  process.stdin.resume();
-
-  sendCurrent();
-  fs.watchFile(stamp, { interval: 250 }, sendCurrent);
+  // Chrome が要求を書き終える前に終了しないよう、最初のフレームを読み切る。
+  // 要求内容には依存せず、固定のスタンプだけを読み取る。
+  let input = Buffer.alloc(0);
+  for await (const chunk of process.stdin) {
+    input = Buffer.concat([input, chunk]);
+    if (input.length < 4) continue;
+    const length = input.readUInt32LE(0);
+    if (length > 64 * 1024 * 1024) process.exit(1);
+    if (input.length < length + 4) continue;
+    const message: BuildAvailableMessage = {
+      type: "build-available",
+      build: readBuildId(stamp),
+    };
+    process.stdout.end(encodeNativeMessage(message));
+    return;
+  }
 }
 
 if (
   process.argv[1] &&
   path.resolve(process.argv[1]) === path.resolve(fileURLToPath(import.meta.url))
 ) {
-  run();
+  void run();
 }

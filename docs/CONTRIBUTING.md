@@ -81,7 +81,9 @@ pnpm run deploy:local
 
 候補の読み込みだけを確認する場合は、`pnpm run browser:candidate` を実行できます。全検証の前にこのコマンドを実行する必要はありません。
 
-配備時に再読み込み専用の[ネイティブメッセージングホスト](https://developer.chrome.com/docs/extensions/develop/concepts/native-messaging)を現在の Windows ユーザーへ登録します。サイドパネルが開いていれば、配備後に拡張機能を再読み込みします。閉じている場合は、次に開いたときに新しいビルドを読み込みます。
+配備時に再読み込み専用の[ネイティブメッセージングホスト](https://developer.chrome.com/docs/extensions/develop/concepts/native-messaging)を現在の Windows ユーザーへ登録します。パネルを開くときと、パネル内の操作を実行する直前に、一度だけ配備済みビルドを問い合わせます。常時接続や定期監視は行いません。パネルを閉じるときの確認も省きます。
+
+新しいビルドがあれば、その操作は実行せず、拡張機能を再読み込みしてパネルを閉じます。拡張アイコンを押して開き直すと、新しいビルドを使えます。パネルを開いたまま配備した場合、次の操作までは自動フィルタリングも旧ビルドで動作します。
 
 登録先が `HKCU` のため、Chrome と同じ Windows ユーザーで実行する必要があります。
 

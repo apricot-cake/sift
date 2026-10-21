@@ -2,6 +2,7 @@ import { browser } from "wxt/browser";
 
 export const RELOAD_HOST_NAME = "io.github.apricot_cake.sift.reload";
 export const RELOAD_ATTEMPT_KEY = "sift.localBuildReload.attempted";
+export const CHECK_LOCAL_BUILD = "sift:check-local-build";
 
 export function buildToReload(
   message: unknown,
@@ -24,51 +25,50 @@ export function buildToReload(
   return message.build;
 }
 
-export function startLocalBuildReload(ownBuild: string): () => void {
-  let stopped = false;
-  let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
-  let currentPort: ReturnType<typeof browser.runtime.connectNative> | null =
-    null;
-  let queue = Promise.resolve();
+let pendingCheck: Promise<boolean> | null = null;
+let reloadStarted = false;
 
-  const connect = () => {
-    if (stopped) return;
-    const port = browser.runtime.connectNative(RELOAD_HOST_NAME);
-    currentPort = port;
+export function checkLocalBuild(ownBuild: string): Promise<boolean> {
+  if (reloadStarted) return Promise.resolve(false);
+  if (pendingCheck) return pendingCheck;
+  pendingCheck = queryLocalBuild(ownBuild).finally(() => {
+    pendingCheck = null;
+  });
+  return pendingCheck;
+}
 
-    port.onMessage.addListener((message: unknown) => {
-      queue = queue
-        .then(async () => {
-          const stored = await browser.storage.local.get(RELOAD_ATTEMPT_KEY);
-          const build = buildToReload(
-            message,
-            ownBuild,
-            stored[RELOAD_ATTEMPT_KEY],
-          );
-          if (!build) return;
+async function queryLocalBuild(ownBuild: string): Promise<boolean> {
+  try {
+    const message: unknown = await browser.runtime.sendNativeMessage(
+      RELOAD_HOST_NAME,
+      { type: "get-build" },
+    );
+    const stored = await browser.storage.local.get(RELOAD_ATTEMPT_KEY);
+    const build = buildToReload(message, ownBuild, stored[RELOAD_ATTEMPT_KEY]);
+    if (!build) return true;
 
-          // storage.local は runtime.reload() をまたぐ。同じスタンプでの試行は
-          // 一度だけにし、出力先を取り違えた場合もリロードを繰り返さない。
-          await browser.storage.local.set({ [RELOAD_ATTEMPT_KEY]: build });
-          browser.runtime.reload();
-        })
-        .catch(() => {});
-    });
+    // 同じスタンプでの試行は一度だけにし、出力先を取り違えた場合も
+    // リロードを繰り返さない。操作の再開より先に記録・リロードする。
+    await browser.storage.local.set({ [RELOAD_ATTEMPT_KEY]: build });
+    // reload は即座に旧 context を破棄するとは限らない。その間の操作も止める。
+    reloadStarted = true;
+    browser.runtime.reload();
+    return false;
+  } catch {
+    reloadStarted = false;
+    // Host の未登録などで、フィルター自体を利用できなくしない。
+    return true;
+  }
+}
 
-    port.onDisconnect.addListener(() => {
-      // lastError を読むと、接続できなかった試行もChromeの未処理エラーに
-      // ならない。Host登録中などの一時的な失敗は次の再接続で回復する。
-      void browser.runtime.lastError;
-      if (currentPort === port) currentPort = null;
-      if (!stopped) reconnectTimer = setTimeout(connect, 1000);
-    });
-  };
-
-  connect();
-  return () => {
-    stopped = true;
-    if (reconnectTimer !== null) clearTimeout(reconnectTimer);
-    currentPort?.disconnect();
-    currentPort = null;
-  };
+export async function checkPanelBuild(): Promise<boolean> {
+  if (!__SIFT_LOCAL_DEPLOY__) return true;
+  try {
+    return (
+      (await browser.runtime.sendMessage({ type: CHECK_LOCAL_BUILD })) === true
+    );
+  } catch {
+    // リロードで worker が終了した場合は、古いパネルの操作を進めない。
+    return false;
+  }
 }
