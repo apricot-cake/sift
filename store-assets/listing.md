@@ -8,21 +8,23 @@ sift
 
 ### 概要
 
-X・Blueskyでイラストを探すためのSNSイラストフィルター。いいね数や画像の有無、返信・引用・リポストの除外で投稿を絞り込めます。
+X・Blueskyでイラストを探すための拡張機能です。投稿をいいね数や画像の有無で絞り込めます。
 
 ### 詳細説明
 
-sift は、X・Blueskyでイラストを探すためのSNSイラストフィルターです。タイムラインやリストに表示された投稿を、いいね数や画像の有無で絞り込む Chrome 拡張機能です。拡張機能のボタンからサイドパネルを開き、現在のサイトに適用する条件を設定します。
+対応するタイムラインやリストで、拡張機能のボタンを押して条件を設定します。
 
-- X と Bluesky: 最低いいね数、画像・動画の有無、返信・引用・リポストの除外
+- 最低いいね数、画像・動画の有無、返信・引用・リポストの除外
 - 新しく読み込まれた投稿にも同じ条件を適用
 - サイトごとに条件を保存
 
-画像の内容からイラストかどうかを自動判定する機能はありません。対応する一覧ページで、読み込まれた投稿を絞り込みます。サイトの並び順は変更しません。
+読み込み済みの投稿が対象です。画像の内容は判定せず、投稿の並び順も変更しません。
 
-判定はブラウザー内で行います。開発者へのデータ送信、解析、広告、トラッキングは行いません。
+絞り込みはブラウザー内で行い、開発者へのデータ送信は行いません。
 
-掲載画像には架空の投稿を使った操作デモを使用しています。
+掲載画像は架空の投稿による操作デモです。
+
+使い方・操作デモ: <https://apricot-cake.github.io/sift/>
 
 ### カテゴリ
 
@@ -36,21 +38,23 @@ sift
 
 ### Summary
 
-An illustration filter for X and Bluesky. Filter posts by likes, images, and exclusions for replies, quotes, and reposts.
+Find illustrations on X and Bluesky by filtering posts by like count and the presence of images.
 
 ### Detailed description
 
-sift is a social media illustration filter for finding illustrations on X and Bluesky. It filters posts in timelines and lists by like count and the presence of images or videos. Open the side panel from the extension button and choose the conditions for the current website.
+On a supported timeline or list, open the side panel from the extension button and choose your filtering conditions.
 
-- X and Bluesky: minimum likes, image or video content, and exclusions for replies, quote posts, and reposts
+- Minimum likes, image or video content, and exclusions for replies, quote posts, and reposts
 - Applies the same conditions to newly loaded posts
 - Saves separate preferences for each website
 
-sift does not analyze images to determine whether they are illustrations. It filters loaded posts on supported list pages without changing the website's sort order.
+Only loaded posts are filtered. sift does not analyze image content or change the order of posts.
 
-All filtering happens within the browser. sift does not send data to the developer or use analytics, advertising, or tracking.
+Filtering happens within the browser. No data is sent to the developer.
 
 The screenshots show an operation demo with fictional posts.
+
+Usage and demo: <https://apricot-cake.github.io/sift/>
 
 ### Category
 
