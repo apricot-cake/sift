@@ -12,17 +12,11 @@ X・Blueskyでイラストを探すための拡張機能です。投稿をいい
 
 ### 詳細説明
 
-対応するタイムラインやリストで、拡張機能のボタンを押して条件を設定します。
+いつものタイムラインで、イラスト探しに集中してみませんか。
 
-- 最低いいね数、画像・動画の有無、返信・引用・リポストの除外
-- 新しく読み込まれた投稿にも同じ条件を適用
-- サイトごとに条件を保存
+画像のある投稿や、いいねの多い投稿に絞って表示できます。
 
-読み込み済みの投稿が対象です。画像の内容は判定せず、投稿の並び順も変更しません。
-
-絞り込みはブラウザー内で行い、開発者へのデータ送信は行いません。
-
-掲載画像は架空の投稿による操作デモです。
+X・Blueskyの対応するタイムラインやリストを開き、sift のボタンを押して条件を選ぶだけです。
 
 使い方・操作デモ: <https://apricot-cake.github.io/sift/>
 
@@ -42,23 +36,26 @@ Find illustrations on X and Bluesky by filtering posts by like count and the pre
 
 ### Detailed description
 
-On a supported timeline or list, open the side panel from the extension button and choose your filtering conditions.
+Make room for illustrations in your usual timeline.
 
-- Minimum likes, image or video content, and exclusions for replies, quote posts, and reposts
-- Applies the same conditions to newly loaded posts
-- Saves separate preferences for each website
+Show only posts with images, or narrow the list to posts with more likes.
 
-Only loaded posts are filtered. sift does not analyze image content or change the order of posts.
-
-Filtering happens within the browser. No data is sent to the developer.
-
-The screenshots show an operation demo with fictional posts.
+Open a supported timeline or list on X or Bluesky, click the sift button, and choose your filters.
 
 Usage and demo: <https://apricot-cake.github.io/sift/>
 
 ### Category
 
 Productivity
+
+## 対応範囲・掲載画像の確認事項
+
+以下は掲載文とは別に、提出前に照合する。
+
+- 対象は読み込み済みの投稿。画像の内容は判定せず、投稿の並び順も変更しない。
+- 絞り込みはブラウザー内で行い、開発者へのデータ送信は行わない。Chrome の同期ストレージによる設定の同期とは区別する。
+- 掲載画像は架空の投稿による操作デモ。画像内でもデモであることを明示する。
+- 対応する画面は [対応サービス](../docs/対応サービス.md) と照合する。
 
 ## プライバシー欄
 
