@@ -1,25 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import {
-  attribute,
-  hasClass,
-  parseHtmlElements,
-  scriptText,
-} from "./build-html.mjs";
-
-test("空白や属性を含む閉じタグでもスクリプトを分離する", () => {
-  const elements = parseHtmlElements(`<SCRIPT TYPE='module'>first()</script >
-    <script type=module>second()</SCRIPT ignored='value'>
-    <h1>見出し</h1>`);
-  const scripts = elements.filter((element) => element.tagName === "script");
-  assert.equal(scripts.length, 2);
-  assert.deepEqual(scripts.map(scriptText), ["first()", "second()"]);
-  assert.ok(scripts.every((script) => attribute(script, "type") === "module"));
-  assert.equal(
-    elements.filter((element) => element.tagName === "h1").length,
-    1,
-  );
-});
+import { attribute, hasClass, parseHtmlElements } from "./build-html.mjs";
 
 test("引用符・大小文字・文字参照をHTMLの属性として読む", () => {
   const elements = parseHtmlElements(

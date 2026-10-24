@@ -110,14 +110,12 @@
   width: 36px;
   height: 36px;
 }
-.product-demo {
+.product-recording {
+  text-align: center;
   width: 100%;
   margin-inline: auto;
 }
-.product-demo + .product-demo {
-  margin-top: var(--product-section-gap);
-}
-.product-demo h2 {
+.product-recording h2 {
   margin: 0 0 24px;
   text-align: center;
   color: var(--foreground);
@@ -125,7 +123,7 @@
   font-weight: 600;
   letter-spacing: -0.025em;
 }
-.product-demo-description {
+.product-recording-description {
   margin: 0 auto 44px;
   max-width: 720px;
   text-align: center;
@@ -212,7 +210,7 @@
   .product-description {
     font-size: 17px;
   }
-  .product-demo-description {
+  .product-recording-description {
     margin-bottom: 36px;
   }
   .product-local {

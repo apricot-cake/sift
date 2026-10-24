@@ -2,9 +2,9 @@
 import { Lock } from "@lucide/astro";
 import Layout from "../layouts/Layout.astro";
 import InstallLinks from "./InstallLinks.astro";
-import ReplayDemo from "./ReplayDemo.astro";
 
 const base = `${import.meta.env.BASE_URL.replace(/\/$/, "")}/`;
+const recordingUrl = "https://github.com/user-attachments/assets/39ebdc8f-0d12-428b-bc7c-c298c7a564ca";
 ---
 
 <Layout>
@@ -23,10 +23,10 @@ const base = `${import.meta.env.BASE_URL.replace(/\/$/, "")}/`;
       </div>
     </section>
 
-    <section id="demo" class="product-demo" data-reveal aria-labelledby="product-social-heading">
-      <h2 id="product-social-heading">使い方</h2>
-      <p class="product-demo-description">対応するタイムラインやリストで、読み込まれた投稿をいいね数や画像の有無で絞り込みます。</p>
-      <ReplayDemo />
+    <section id="recording" class="product-recording" data-reveal aria-labelledby="product-recording-heading">
+      <h2 id="product-recording-heading">操作録画</h2>
+      <p class="product-recording-description">実際の拡張機能のパネルで、最低いいね数やコンテンツタイプを変更する様子を録画しています。</p>
+      <a class="button" href={recordingUrl} data-recording-link>操作録画を見る</a>
     </section>
 
     <section class="product-local" data-reveal aria-labelledby="product-local-heading">

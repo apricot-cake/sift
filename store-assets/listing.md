@@ -18,7 +18,7 @@ X・Blueskyでイラストを探すための拡張機能です。投稿をいい
 
 X・Blueskyの対応するタイムラインやリストを開き、sift のボタンを押して条件を選ぶだけです。
 
-使い方・操作デモ: <https://apricot-cake.github.io/sift/>
+紹介ページ: <https://apricot-cake.github.io/sift/>
 
 ### カテゴリ
 
