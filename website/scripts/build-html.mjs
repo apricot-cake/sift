@@ -17,3 +17,10 @@ export function attribute(element, name) {
 export function hasClass(element, name) {
   return (attribute(element, "class") ?? "").split(/\s+/).includes(name);
 }
+
+export function scriptText(element) {
+  return element.childNodes
+    .filter((node) => node.nodeName === "#text")
+    .map((node) => node.value)
+    .join("");
+}

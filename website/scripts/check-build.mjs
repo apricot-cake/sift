@@ -1,7 +1,13 @@
 import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { attribute, hasClass, parseHtmlElements } from "./build-html.mjs";
+import { demoPosts } from "../src/data/demo-posts.ts";
+import {
+  attribute,
+  hasClass,
+  parseHtmlElements,
+  scriptText,
+} from "./build-html.mjs";
 
 const dist = new URL("../dist/", import.meta.url);
 const home = readFileSync(new URL("index.html", dist), "utf8");
@@ -66,15 +72,74 @@ for (const { elements } of pages) {
 assert.ok(
   pages[0].elements.some((element) => hasClass(element, "product-github")),
 );
-for (const { elements } of pages) {
-  const recording = elements.find(
-    (element) => attribute(element, "data-recording-link") !== undefined,
+assert.ok(existsSync(new URL("demo/", dist)), "デモ画像がありません");
+assert.ok(demoPosts.length > 0, "投稿データがありません");
+assert.equal(demoPosts.filter((post) => post.likes >= 100).length, 2);
+for (const { html, elements } of pages) {
+  assert.ok(
+    !elements.some((element) =>
+      attribute(element, "src")?.startsWith("/sift/screenshots/"),
+    ),
+    "置き換え前の画面画像が残っています",
   );
-  assert.ok(recording, "操作録画へのリンクがありません");
-  assert.match(
-    attribute(recording, "href") ?? "",
-    /^https:\/\/github\.com\/user-attachments\/assets\/[0-9a-f-]+$/i,
-    "操作録画にはGitHubの添付ファイルURLを指定してください",
+  assert.ok(
+    elements.some(
+      (element) => attribute(element, "data-replay-demo") !== undefined,
+    ),
+    "操作デモの初期画面がありません",
   );
+  assert.equal(
+    elements.filter((element) =>
+      /^[0-3]$/.test(attribute(element, "data-step") ?? ""),
+    ).length,
+    4,
+    "各デモの再生位置は4区間にしてください",
+  );
+  assert.equal(
+    elements.filter((element) => hasClass(element, "replay-post")).length,
+    demoPosts.length,
+    "投稿が静的HTMLに出力されていません",
+  );
+  assert.ok(
+    !elements.some(
+      (element) => attribute(element, "data-pause") !== undefined,
+    ) && !html.includes("一時停止"),
+    "不要な一時停止の操作が残っています",
+  );
+  for (const post of demoPosts) {
+    assert.ok(
+      elements.some(
+        (element) => attribute(element, "data-likes") === String(post.likes),
+      ),
+      `投稿の反応数がありません: ${post.handle}`,
+    );
+  }
+  const scripts = elements.filter((element) => element.tagName === "script");
+  assert.ok(scripts.length > 0, "操作デモのスクリプトが登録されていません");
+  let replayRegistered = false;
+  for (const script of scripts) {
+    assert.equal(
+      attribute(script, "type"),
+      "module",
+      "デモのスクリプトはESモジュールで登録してください",
+    );
+    const source = attribute(script, "src");
+    let body = scriptText(script);
+    if (source) {
+      assert.ok(
+        source.startsWith("/sift/_astro/"),
+        `スクリプトの公開パスが不正です: ${source}`,
+      );
+      body = readFileSync(new URL(source.slice(6), dist), "utf8");
+    }
+    assert.ok(body.trim().length > 0, "空のスクリプトが登録されています");
+    replayRegistered ||=
+      body.includes("[data-replay-demo]") &&
+      body.includes("querySelectorAll") &&
+      body.includes("forEach");
+  }
+  assert.ok(replayRegistered, "操作デモを初期化する処理がありません");
 }
-console.log("公開用HTMLの素材・リンクと、操作録画への導線を確認しました。");
+console.log(
+  "公開用HTMLの画像・リンクと、操作デモのスクリプト登録を確認しました。",
+);

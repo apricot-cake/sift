@@ -1,10 +1,8 @@
 # sift
 
-このREADMEは開発者向けです。利用者向けの説明は[紹介ページ](https://apricot-cake.github.io/sift/)をご覧ください。
-
 X・Blueskyでイラストを探すための Chrome 拡張機能です。いつものタイムラインやリストで、投稿をいいね数や画像の有無で絞り込めます。
 
-[Chrome ウェブストア](https://chromewebstore.google.com/detail/sift/jglehalaegleehefcefnfmmbblgkomeh) · [操作録画](https://github.com/user-attachments/assets/39ebdc8f-0d12-428b-bc7c-c298c7a564ca)
+[Chrome ウェブストア](https://chromewebstore.google.com/detail/sift/jglehalaegleehefcefnfmmbblgkomeh) · [紹介ページ](https://apricot-cake.github.io/sift/) · [HTMLデモ](https://apricot-cake.github.io/sift/#demo)
 
 ## 主な機能
 
@@ -38,7 +36,7 @@ X・Blueskyの対応する一覧ページで動作します。検索は「最新
 - [対応サービス](docs/対応サービス.md): 対応する画面と判定上の制約
 - [開発ガイド](docs/CONTRIBUTING.md): 環境構築、テスト、Chrome・Storybook での確認
 - [ストア提出](docs/ストア提出.md): 提出前の確認、提出フロー、初期設定、提出記録
-- [紹介ページの開発](website/README.md): 静的サイトの開発・公開
+- [紹介ページの開発](website/README.md): 操作デモと静的サイトの開発・公開
 - [プライバシーポリシー](PRIVACY.md): データの利用と保存
 
 ## 開発・貢献・問い合わせ
