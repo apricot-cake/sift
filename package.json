@@ -55,7 +55,7 @@
     "@types/react-dom": "19.3.0",
     "@webext-core/fake-browser": "2.0.1",
     "@wxt-dev/module-react": "1.2.2",
-    "happy-dom": "20.14.6",
+    "happy-dom": "21.0.4",
     "markdownlint-cli2": "0.23.3",
     "puppeteer-core": "25.14.0",
     "storybook": "10.6.3",
