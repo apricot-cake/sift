@@ -1,8 +1,8 @@
 # 画像素材の記録
 
-更新日：2026-10-18。
+更新日: 2026年10月18日
 
-投稿者・本文・指標は架空データ。使用するイラストはユーザー本人の作品であり、架空の投稿者による制作を示すものではない。
+デモの投稿者、本文、いいね数などは架空のデータです。イラストはサイト作者本人の作品です。架空の投稿者が制作した作品という意味ではありません。
 
 ## 操作デモの画像
 
@@ -11,13 +11,13 @@
 | public/demo/original-character.webp | サイト作者 | オリジナルキャラクター | SNSデモ |
 | public/demo/la-pluma.webp | サイト作者 | ラ・プルマ（『アークナイツ』の二次創作） | SNSデモ |
 
-提供画像は縦横比を保って軽量化している。元の絵は変更していない。画像の新規生成は行っていない。実在投稿の画面やゲームの公式画像は使用していない。
+提供された画像は、縦横比を保ってファイルサイズを小さくしています。元の絵は変更していません。画像の新規生成は行っておらず、実在する投稿の画面やゲームの公式画像も使用していません。
 
 ## リンク用の公式ブランド素材
 
 | アセット | 配布元 | 記録 |
 | --- | --- | --- |
-| `public/brand/cws-badge.png` | [Chrome Web Store Branding Guidelines](https://developer.chrome.com/docs/webstore/branding) | border付きmedium PNG、340×96px。サイズ変更以外は無加工。公開中のsiftのストアページにリンクする。 |
-| `public/brand/github-mark.svg` | [GitHub Brand Toolkit](https://brand.github.com/foundations/logo) | 公式ロゴZIP内の `GitHub_Invertocat_Black.svg`、無加工。 |
+| `public/brand/cws-badge.png` | [Chrome Web Store Branding Guidelines](https://developer.chrome.com/docs/webstore/branding) | 枠付きの medium PNG（340×96px）です。サイズ以外は変更していません。公開中の sift のストアページへのリンクに使います。 |
+| `public/brand/github-mark.svg` | [GitHub Brand Toolkit](https://brand.github.com/foundations/logo) | 公式ロゴZIP内の `GitHub_Invertocat_Black.svg` を、そのまま使用しています。 |
 
-GitHubのロゴはsiftのプロジェクトへのリンクに使用する。siftのロゴより控えめに配置し、提携・推薦を示す見せ方や色・形の変更は行わない。
+GitHub のロゴは sift のプロジェクトへのリンクに使います。sift のロゴより控えめに配置し、GitHub との提携や推薦を示す見せ方は避けます。色や形は変更しません。
