@@ -200,10 +200,10 @@ export function createUnsupportedCases(): LiveCase[] {
                 )
                 .toBe("true");
           }
-          if (target.id === "unsupported-site")
-            await expect
-              .poll(() => visible(page, "#product-introduction-sentence"))
-              .toBe(true);
+          if (target.id === "unsupported-site") {
+            await expect.poll(() => page.url()).toBe(target.url);
+            await expect.poll(() => page.title()).toBe("Example Domain");
+          }
           if (target.id === "unsupported-fanbox") {
             await expect
               .poll(() => visible(page, 'a[href^="/posts/"]'))

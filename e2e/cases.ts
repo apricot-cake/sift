@@ -136,7 +136,7 @@ export const cases: CompatibilityCase[] = [
     site: "x",
     start: "https://x.com/home",
     destination: "/home",
-    tab: "t",
+    tab: "絵",
   },
   {
     id: "x-search",
@@ -157,7 +157,7 @@ export const cases: CompatibilityCase[] = [
     site: "x",
     start: "https://x.com/mewmwemowmow/lists",
     destination: "/i/lists/2082750019069948060",
-    linkLabel: "e",
+    linkLabel: "絵",
     list: true,
   },
   {
