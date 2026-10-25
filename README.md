@@ -6,6 +6,11 @@ X・Blueskyでイラストを探すための Chrome 拡張機能です。いつ�
 
 操作デモは [sift の紹介サイト](https://apricot-cake.github.io/sift/)で確認できます。
 
+<!-- markdownlint-disable-next-line MD034 -->
+https://github.com/user-attachments/assets/c12b00ac-9275-48e3-a901-e110381fcf31
+
+権利上の理由から、実際のサービス画面ではなく、架空の投稿を使った再現画面です。
+
 ## 主な機能
 
 - 最低いいね数と、画像・動画の有無で投稿を絞り込めます。
