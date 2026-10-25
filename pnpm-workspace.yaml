@@ -1,6 +1,3 @@
-packages:
-  - website
-
 # 依存を追加するときも完全なバージョンを記録する。
 saveExact: true
 

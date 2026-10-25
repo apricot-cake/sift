@@ -34,11 +34,10 @@ afterEach(() => {
 });
 
 describe("日常版成果物と配備の整合性", () => {
-  test("別ビルドのサイト編集は除き、拡張機能の実装・テスト・未追跡ファイルの変更は検出する", () => {
+  test("生成物は除き、拡張機能の実装・テスト・未追跡ファイルの変更は検出する", () => {
     const { root } = fixture();
     execFileSync("git", ["init", "--quiet"], { cwd: root });
-    fs.mkdirSync(path.join(root, "website"));
-    fs.writeFileSync(path.join(root, "website", "page.html"), "website");
+    fs.writeFileSync(path.join(root, ".gitignore"), ".output/\n");
     fs.writeFileSync(path.join(root, "runtime.ts"), "runtime");
     fs.writeFileSync(path.join(root, "runtime.test.ts"), "test");
     execFileSync("git", ["add", "runtime.ts", "runtime.test.ts"], {
@@ -46,10 +45,9 @@ describe("日常版成果物と配備の整合性", () => {
     });
     const initial = sourceHash(root);
     fs.writeFileSync(
-      path.join(root, "website", "page.html"),
-      "changed website",
+      path.join(root, ".output", "chrome-mv3", "background.js"),
+      "changed build",
     );
-    fs.writeFileSync(path.join(root, "website", "new.ts"), "new website");
     expect(sourceHash(root)).toBe(initial);
     fs.writeFileSync(path.join(root, "runtime.ts"), "changed runtime");
     expect(sourceHash(root)).not.toBe(initial);

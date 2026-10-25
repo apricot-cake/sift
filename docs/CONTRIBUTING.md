@@ -6,7 +6,7 @@
 
 Node.js 24.12 以降が必要です。使用するバージョンは `.node-version` と `package.json` に記載しています。
 
-パッケージ管理には pnpm 12.11.2 を使います。未導入の場合は、[公式のインストール手順](https://pnpm.io/installation)に従って `npx get-pnpm` を実行してください。バージョンはルートの `package.json` の `packageManager` で固定しています。リポジトリのルートで次のコマンドを実行し、拡張機能と `website/` の依存パッケージをまとめてインストールしてください。
+パッケージ管理には pnpm 12.11.2 を使います。未導入の場合は、[公式のインストール手順](https://pnpm.io/installation)に従って `npx get-pnpm` を実行してください。バージョンはルートの `package.json` の `packageManager` で固定しています。リポジトリのルートで次のコマンドを実行し、依存パッケージをインストールしてください。
 
 ```powershell
 pnpm install --frozen-lockfile

@@ -11,7 +11,7 @@ export interface CandidateBuild {
   sourceHash: string;
 }
 
-/** 拡張機能の未追跡の実装・テストも含めて変更を検出する。独立ビルドのWebサイトは除く。 */
+/** 拡張機能の未追跡の実装・テストも含めて変更を検出する。 */
 export function sourceHash(root: string): string {
   const names = execFileSync(
     "git",
@@ -20,7 +20,6 @@ export function sourceHash(root: string): string {
   )
     .split("\0")
     .filter(Boolean)
-    .filter((name) => !name.startsWith("website/"))
     .sort();
   const hash = createHash("sha256");
   hash.update("sift-extension-source-v2");
