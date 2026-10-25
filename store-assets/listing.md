@@ -18,7 +18,7 @@ X・Blueskyでイラストを探すための拡張機能です。投稿をいい
 
 X・Blueskyの対応するタイムラインやリストを開き、sift のボタンを押して条件を選ぶだけです。
 
-使い方・操作デモ: <https://apricot-cake.github.io/sift/>
+使い方・操作デモ: <https://github.com/apricot-cake/sift#操作デモ>
 
 ### カテゴリ
 
@@ -42,7 +42,7 @@ Show only posts with images, or narrow the list to posts with more likes.
 
 Open a supported timeline or list on X or Bluesky, click the sift button, and choose your filters.
 
-Usage and demo: <https://apricot-cake.github.io/sift/>
+Usage and demo: <https://github.com/apricot-cake/sift#操作デモ>
 
 ### Category
 
@@ -83,7 +83,7 @@ X・Blueskyでイラストを探すために、表示された投稿をいいね
 
 ### URL
 
-- ホームページ: <https://apricot-cake.github.io/sift/>
+- ホームページ: <https://github.com/apricot-cake/sift>
 - サポート: <https://github.com/apricot-cake/sift/issues>
 - プライバシーポリシー: <https://raw.githubusercontent.com/apricot-cake/sift/main/PRIVACY.md>
 

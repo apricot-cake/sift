@@ -2,9 +2,7 @@
 
 X・Blueskyでイラストを探すための Chrome 拡張機能です。いつものタイムラインやリストで、投稿をいいね数や画像の有無で絞り込めます。
 
-## 紹介ページ
-
-操作デモは [sift の紹介サイト](https://apricot-cake.github.io/sift/)で確認できます。
+## 操作デモ
 
 <!-- markdownlint-disable-next-line MD034 -->
 https://github.com/user-attachments/assets/2ac922db-83f5-4410-9c4c-a248d79ce8b8

@@ -1,10 +1,10 @@
-# sift 紹介ページ
+# sift 操作デモ
 
-AstroとCSSで構築した静的サイトです。操作デモの再生には小さなJavaScriptを使用します。配色と共通部品の見た目はshadcn/uiの標準スタイルに揃えています。
+ローカルでの閲覧と動画作成に使う、AstroとCSSで構築した操作デモです。デモの再生には小さなJavaScriptを使用します。配色と共通部品の見た目はshadcn/uiの標準スタイルに揃えています。
 
 ## 開発
 
-Node.js 24.12 以降と pnpm 12.11.2 を使います。依存パッケージは拡張機能とまとめて管理し、公開用ファイルは別々に生成します。次のコマンドをリポジトリのルートから実行してください。
+Node.js 24.12 以降と pnpm 12.11.2 を使います。依存パッケージは拡張機能とまとめて管理し、ビルド成果物は別々に生成します。次のコマンドをリポジトリのルートから実行してください。
 
 ```sh
 pnpm install --frozen-lockfile
@@ -20,13 +20,7 @@ pnpm run check
 pnpm run build
 ```
 
-`check` は Astro と TypeScript でコードを検査します。`build` は公開用ファイルを `dist/` に生成し、画像などの参照先、ページ内リンク、GitHub ボタンのスタイルを検査します。
-
-## 公開
-
-公開先は <https://apricot-cake.github.io/sift/> です。初めて公開する場合は、リポジトリの Settings → Pages → Source で GitHub Actions を選んでください。
-
-`.github/workflows/website.yml` がサイトを検査・ビルドします。サイトの変更を `main` へ push するか、ワークフローを手動で実行すると、GitHub Pages に公開します。プルリクエストでは検査とビルドだけを行います。
+`check` は Astro と TypeScript でコードを検査します。`build` は静的ファイルを `dist/` に生成し、画像などの参照先、ページ内リンク、GitHub ボタンのスタイルを検査します。
 
 ## 操作デモとクレジット
 
