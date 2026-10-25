@@ -34,7 +34,7 @@ https://github.com/user-attachments/assets/3dea7dd6-4ba6-45ad-9158-cc266b037bcb
 
 ## 開発者向け
 
-開発には Node.js 24.12 以降と、パッケージ管理ツールの pnpm 12.11.2 を使います。[開発ガイド](docs/CONTRIBUTING.md)に沿って依存関係を準備し、変更後に `pnpm run check` を実行してください。
+開発環境の準備、テスト、画面の確認方法は[開発ガイド](docs/CONTRIBUTING.md)を参照してください。
 
 不具合の報告、機能の提案、質問は [GitHub Issues](https://github.com/apricot-cake/sift/issues) で受け付けます。修正はプルリクエストで送れます。
 
