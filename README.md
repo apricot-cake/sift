@@ -7,7 +7,7 @@ X・Blueskyでイラストを探すための Chrome 拡張機能です。いつ�
 操作デモは [sift の紹介サイト](https://apricot-cake.github.io/sift/)で確認できます。
 
 <!-- markdownlint-disable-next-line MD034 -->
-https://github.com/user-attachments/assets/c12b00ac-9275-48e3-a901-e110381fcf31
+https://github.com/user-attachments/assets/2ac922db-83f5-4410-9c4c-a248d79ce8b8
 
 権利上の理由から、実際のサービス画面ではなく、架空の投稿を使った再現画面です。
 
