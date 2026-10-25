@@ -3,6 +3,7 @@ import type { FilterContextResponse } from "./filter-context.ts";
 export interface PanelPage {
   id: string;
   url: string | null;
+  windowId?: number;
   context?: Pick<
     FilterContextResponse,
     "pageKey" | "timelineKey" | "timelineAvailable"

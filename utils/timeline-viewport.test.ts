@@ -326,6 +326,149 @@ describe("X の一覧の位置復元", () => {
   });
 });
 
+describe("パネルを開くときの未抽出ページの位置復元", () => {
+  beforeEach(() => {
+    vi.spyOn(document, "elementFromPoint").mockImplementation((x, y) => {
+      for (const cell of document.querySelectorAll(
+        '[data-testid="cellInnerDiv"]',
+      )) {
+        const rect = cell.getBoundingClientRect();
+        if (
+          x >= rect.left &&
+          x <= rect.right &&
+          y >= rect.top &&
+          y <= rect.bottom
+        )
+          return cell.querySelector("article");
+      }
+      return null;
+    });
+  });
+
+  function renderHome(state?: string): void {
+    renderPost(state ?? "");
+    if (state === undefined)
+      document.body.firstElementChild?.removeAttribute(
+        "data-sift-filter-state",
+      );
+    const tabs = document.createElement("div");
+    tabs.dataset.testid = "ScrollSnap-List";
+    tabs.setAttribute("role", "tablist");
+    tabs.innerHTML =
+      '<button role="tab" aria-selected="true">おすすめ</button><button role="tab" aria-selected="false">フォロー中</button>';
+    document.body.prepend(tabs);
+  }
+
+  function prepare(unfiltered = true): void {
+    viewport.reset();
+    history.replaceState({}, "", "/home");
+    renderHome();
+    viewport = new TimelineViewport(xAdapter, { unfiltered });
+    viewport.update();
+  }
+
+  it("おすすめの投稿が幅変更で作り直されても実投稿IDで同じ位置へ戻す", () => {
+    prepare();
+    expect(window.scrollBy).not.toHaveBeenCalled();
+    expect(xAdapter.isTimelineAvailable(document, location)).toBe(false);
+    vi.spyOn(window, "innerWidth", "get").mockReturnValue(558);
+    top = 154;
+    renderHome();
+    viewport.resize();
+    vi.advanceTimersByTime(32);
+    expect(top).toBe(-30);
+    expect(window.scrollBy).toHaveBeenCalledWith({
+      top: 184,
+      behavior: "instant",
+    });
+    expect(document.querySelector("[data-sift-filter-state]")).toBeNull();
+  });
+
+  it("既定の抽出用設定では対象外ページを復元しない", () => {
+    prepare(false);
+    viewport.resize();
+    top = 154;
+    vi.advanceTimersByTime(32);
+    expect(window.scrollBy).not.toHaveBeenCalled();
+    expect(top).toBe(154);
+  });
+
+  it("ヘッダーに隠れた前の投稿を除き、実際に見える投稿の位置を戻す", () => {
+    prepare();
+    viewport.reset();
+    top = 19;
+    let previousTop = -140;
+    const previous = document.createElement("div");
+    previous.dataset.testid = "cellInnerDiv";
+    previous.innerHTML =
+      '<article data-testid="tweet"><a href="/example/status/456"><time datetime="2026-09-05T00:00:00Z"></time></a></article>';
+    document.body.prepend(previous);
+    vi.spyOn(previous, "getBoundingClientRect").mockImplementation(
+      () => new DOMRect(0, previousTop, 500, 160),
+    );
+    const visibleCard = document
+      .querySelector('a[href="/example/status/123"]')
+      ?.closest("article");
+    const header = document.createElement("header");
+    document.body.prepend(header);
+    vi.mocked(document.elementFromPoint).mockImplementation((_x, y) =>
+      y < 130 ? header : (visibleCard ?? null),
+    );
+    vi.mocked(window.scrollBy).mockImplementation((...args: unknown[]) => {
+      const offset = (args[0] as ScrollToOptions).top ?? 0;
+      top -= offset;
+      previousTop -= offset;
+    });
+    viewport.update();
+    // 幅変更で二つの投稿の高さが異なる量だけ変わる。
+    previousTop = -38;
+    top = 203;
+    viewport.resize();
+    vi.advanceTimersByTime(32);
+    expect(top).toBe(19);
+    expect(window.scrollBy).toHaveBeenCalledWith({
+      top: 184,
+      behavior: "instant",
+    });
+  });
+
+  it("同じ投稿IDがない場合や非表示の投稿は位置の根拠にしない", () => {
+    prepare();
+    viewport.resize();
+    top = 154;
+    document.querySelector("a")?.setAttribute("href", "/example/status/456");
+    vi.advanceTimersByTime(32);
+    expect(window.scrollBy).not.toHaveBeenCalled();
+    renderHome("hidden");
+    vi.advanceTimersByTime(32);
+    expect(window.scrollBy).not.toHaveBeenCalled();
+    renderHome();
+    vi.advanceTimersByTime(32);
+    expect(top).toBe(-30);
+  });
+
+  it("別の対象外ページへ移動したら以前の投稿位置へ戻さない", () => {
+    prepare();
+    viewport.resize();
+    history.replaceState({}, "", "/example/status/123");
+    top = 154;
+    vi.advanceTimersByTime(2_100);
+    expect(window.scrollBy).not.toHaveBeenCalled();
+    expect(top).toBe(154);
+  });
+
+  it("閲覧操作で中断した後は元の位置へ戻さない", () => {
+    prepare();
+    viewport.resize();
+    top = 154;
+    viewport.cancelForUserNavigation();
+    viewport.update();
+    vi.advanceTimersByTime(2_100);
+    expect(window.scrollBy).not.toHaveBeenCalled();
+    expect(top).toBe(154);
+  });
+});
+
 it("Bluesky のホーム内で切り替えたリストを区別する", () => {
   document.body.innerHTML =
     '<button data-testid="homeScreenFeedTabs-selector-1">リスト1<span style="background-color: blue"></span></button><button data-testid="homeScreenFeedTabs-selector-2">リスト2</button>';

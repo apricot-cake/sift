@@ -11,30 +11,27 @@ const api = vi.hoisted(() => ({
   storage: {
     session: {
       set: vi.fn(async (_values?: Record<string, unknown>) => undefined),
-      get: vi.fn(
-        async (): Promise<Record<string, unknown>> => ({
-          "sift:sidepanel-tab-id": 7,
-          "sift:sidepanel-origin:7": "https://x.com",
-        }),
-      ),
-      remove: vi.fn(async (_key?: string) => undefined),
+      get: vi.fn(async (): Promise<Record<string, unknown>> => ({})),
+      remove: vi.fn(async (_key?: string | string[]) => undefined),
     },
   },
   sidePanel: {
     setPanelBehavior: vi.fn(async () => undefined),
     setOptions: vi.fn(async () => undefined),
     open: vi.fn(async () => undefined),
+    close: vi.fn(async () => undefined),
     onOpened: { addListener: vi.fn() },
     onClosed: { addListener: vi.fn() },
   },
   tabs: {
+    onCreated: { addListener: vi.fn() },
     onUpdated: { addListener: vi.fn() },
     onRemoved: { addListener: vi.fn() },
     sendMessage: vi.fn(async () => ({
       site: "x",
       timelineAvailable: false,
     })),
-    query: vi.fn(async () => []),
+    query: vi.fn(async (): Promise<{ id?: number }[]> => []),
     get: vi.fn(async () => ({
       id: 7,
       active: false,
@@ -43,7 +40,10 @@ const api = vi.hoisted(() => ({
   },
   scripting: {
     insertCSS: vi.fn(async () => undefined),
-    executeScript: vi.fn(async () => undefined),
+    executeScript: vi.fn(
+      async (_injection?: { target: { tabId: number }; files: string[] }) =>
+        undefined,
+    ),
   },
 }));
 const checkLocalBuild = vi.hoisted(() =>
@@ -62,13 +62,17 @@ vi.mock("../utils/local-build-reload.ts", () => ({
 
 beforeEach(async () => {
   Reflect.deleteProperty(globalThis, "__SIFT_RUNNING_BUILD_ID__");
-  vi.clearAllMocks();
+  vi.resetAllMocks();
   vi.resetModules();
   checkLocalBuild.mockResolvedValue(true);
-  api.storage.session.get.mockResolvedValue({
-    "sift:sidepanel-tab-id": 7,
-    "sift:sidepanel-origin:7": "https://x.com",
-  });
+  api.runtime.sendMessage.mockResolvedValue(undefined);
+  api.sidePanel.setOptions.mockResolvedValue(undefined);
+  api.sidePanel.open.mockResolvedValue(undefined);
+  api.sidePanel.close.mockResolvedValue(undefined);
+  api.tabs.query.mockResolvedValue([]);
+  api.scripting.insertCSS.mockResolvedValue(undefined);
+  api.scripting.executeScript.mockResolvedValue(undefined);
+  api.storage.session.get.mockResolvedValue({});
   api.storage.session.set.mockImplementation(async () => undefined);
   api.storage.session.remove.mockImplementation(async () => undefined);
   api.tabs.get.mockResolvedValue({
@@ -84,10 +88,12 @@ beforeEach(async () => {
   vi.stubGlobal("__SIFT_LOCAL_BUILD__", false);
   const background = await import("../entrypoints/background.ts");
   background.default.main();
+  await new Promise((resolve) => setTimeout(resolve, 0));
   api.sidePanel.setOptions.mockClear();
+  api.storage.session.remove.mockClear();
 });
 
-it("旧版の自動開閉と共通パネルをworker起動時に無効化する", async () => {
+it("自動起動設定と共通パネルをworker起動時に無効化する", async () => {
   const background = await import("../entrypoints/background.ts");
   background.default.main();
   expect(api.sidePanel.setPanelBehavior).toHaveBeenCalledWith({
@@ -97,7 +103,140 @@ it("旧版の自動開閉と共通パネルをworker起動時に無効化する"
   expect(api.sidePanel.setOptions).toHaveBeenCalledExactlyOnceWith({
     enabled: false,
   });
+  expect(api.action.onClicked.addListener).toHaveBeenCalled();
+  expect(api.sidePanel.open).not.toHaveBeenCalled();
 });
+
+it("権限を得るアクションの同期区間で開き、接続は開いた通知まで待つ", async () => {
+  const configured = Promise.withResolvers<undefined>();
+  const viewport = Promise.withResolvers<undefined>();
+  api.sidePanel.setOptions.mockReturnValueOnce(configured.promise);
+  api.scripting.executeScript.mockReturnValueOnce(viewport.promise);
+  api.tabs.get.mockResolvedValue({
+    id: 7,
+    active: true,
+    url: "https://x.com/NASA",
+  });
+  api.action.onClicked.addListener.mock.calls[0]?.[0]({
+    id: 7,
+    url: "https://x.com/NASA",
+  });
+  expect(api.sidePanel.open).toHaveBeenCalledExactlyOnceWith({ tabId: 7 });
+  expect(scriptRequests("/panel-viewport.js")).toEqual([
+    { target: { tabId: 7 }, files: ["/panel-viewport.js"] },
+  ]);
+  expect(
+    api.scripting.executeScript.mock.invocationCallOrder[0] ?? Infinity,
+  ).toBeLessThan(api.sidePanel.open.mock.invocationCallOrder[0] ?? 0);
+  expect(scriptRequests("/sift.js")).toHaveLength(0);
+  expect(api.storage.session.set).not.toHaveBeenCalled();
+  configured.resolve(undefined);
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  expect(scriptRequests("/sift.js")).toHaveLength(0);
+  viewport.resolve(undefined);
+  api.sidePanel.onOpened.addListener.mock.calls[0]?.[0]({
+    path: "/sidepanel.html",
+    tabId: 7,
+    windowId: 1,
+  });
+  await vi.waitFor(() =>
+    expect(scriptRequests("/sift.js")).toEqual([
+      { target: { tabId: 7 }, files: ["/sift.js"] },
+    ]),
+  );
+});
+
+it.each(["https://example.com/", "chrome://newtab/", undefined])(
+  "対象外URL %s のアクションではviewport準備も注入しない",
+  async (url) => {
+    api.action.onClicked.addListener.mock.calls[0]?.[0]({
+      id: 7,
+      windowId: 1,
+      url,
+    });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(api.sidePanel.open).toHaveBeenCalledExactlyOnceWith({ tabId: 7 });
+    expect(api.scripting.executeScript).not.toHaveBeenCalled();
+  },
+);
+
+it("タブIDのないアクションではパネルを開かない", () => {
+  api.action.onClicked.addListener.mock.calls[0]?.[0]({
+    url: "https://x.com/NASA",
+  });
+  expect(api.sidePanel.open).not.toHaveBeenCalled();
+  expect(api.sidePanel.setOptions).not.toHaveBeenCalled();
+});
+
+it("worker起動時に既存タブを準備し、権限取得や自動起動はしない", async () => {
+  api.tabs.query.mockResolvedValue([{ id: 7 }, { id: 8 }, {}]);
+  const background = await import("../entrypoints/background.ts");
+  background.default.main();
+  await vi.waitFor(() =>
+    expect(api.sidePanel.setOptions).toHaveBeenCalledWith({
+      tabId: 8,
+      path: "sidepanel.html?tabId=8",
+      enabled: true,
+    }),
+  );
+  expect(api.sidePanel.setOptions).toHaveBeenCalledWith({
+    tabId: 7,
+    path: "sidepanel.html?tabId=7",
+    enabled: true,
+  });
+  expect(api.sidePanel.open).not.toHaveBeenCalled();
+  expect(api.scripting.executeScript).not.toHaveBeenCalled();
+});
+
+it("新規タブにも固有パネルを準備し、IDのない通知は無視する", () => {
+  const created = api.tabs.onCreated.addListener.mock.calls[0]?.[0];
+  created({ id: 8 });
+  created({});
+  expect(api.sidePanel.setOptions).toHaveBeenCalledExactlyOnceWith({
+    tabId: 8,
+    path: "sidepanel.html?tabId=8",
+    enabled: true,
+  });
+  expect(api.sidePanel.open).not.toHaveBeenCalled();
+});
+
+it("移行時には旧所有キーだけを削除しタブ別のページ記録を保つ", async () => {
+  const { stored } = trackedPage();
+  stored["sift:sidepanel-tab-id"] = 7;
+  stored["sift:sidepanel-origin:7"] = "https://x.com";
+  stored["sift:sidepanel-origin:8"] = "https://bsky.app";
+  const background = await import("../entrypoints/background.ts");
+  background.default.main();
+  await vi.waitFor(() =>
+    expect(api.storage.session.remove).toHaveBeenCalledWith([
+      "sift:sidepanel-tab-id",
+      "sift:sidepanel-origin:7",
+      "sift:sidepanel-origin:8",
+    ]),
+  );
+  expect(stored["sift:sidepanel-page:7"]).toBeDefined();
+  expect(stored["sift:sidepanel-tab-id"]).toBeUndefined();
+});
+
+function openTab(tab: { id: number; url?: string }): void {
+  api.tabs.get.mockResolvedValue({
+    id: tab.id,
+    active: true,
+    url: tab.url ?? "",
+  });
+  api.tabs.onCreated.addListener.mock.calls[0]?.[0](tab);
+  api.sidePanel.onOpened.addListener.mock.calls[0]?.[0]({
+    path: "/sidepanel.html",
+    tabId: tab.id,
+    windowId: 1,
+  });
+}
+
+function scriptRequests(file: string) {
+  return api.scripting.executeScript.mock.calls
+    .map(([request]) => request)
+    .filter((request) => request?.files.includes(file));
+}
 
 function trackedPage(url = "https://x.com/NASA") {
   const context = {
@@ -108,8 +247,12 @@ function trackedPage(url = "https://x.com/NASA") {
     filteringEnabled: true,
   };
   const stored: Record<string, unknown> = {
-    "sift:sidepanel-origin:7": "https://x.com",
-    "sift:sidepanel-page:7": { id: "opening-a", url, context: { ...context } },
+    "sift:sidepanel-page:7": {
+      id: "opening-a",
+      url,
+      windowId: 1,
+      context: { ...context },
+    },
   };
   api.storage.session.get.mockImplementation(async () => stored);
   api.storage.session.set.mockImplementation(
@@ -118,8 +261,9 @@ function trackedPage(url = "https://x.com/NASA") {
       return undefined;
     },
   );
-  api.storage.session.remove.mockImplementation(async (key = "") => {
-    delete stored[key];
+  api.storage.session.remove.mockImplementation(async (keys = []) => {
+    for (const key of typeof keys === "string" ? [keys] : keys)
+      delete stored[key];
     return undefined;
   });
   api.tabs.get.mockResolvedValue({ id: 7, active: true, url });
@@ -132,6 +276,150 @@ function trackedPage(url = "https://x.com/NASA") {
   return { context, stored, check };
 }
 
+it("開いているパネルで開いた通知が再発しなくてもアクションで再接続する", async () => {
+  const { stored } = trackedPage();
+  openTab({ id: 7, url: "https://x.com/NASA" });
+  await vi.waitFor(() =>
+    expect(api.runtime.sendMessage).toHaveBeenCalledWith({
+      type: "sift:sidepanel-set-panel-tab",
+      tabId: 7,
+    }),
+  );
+  api.scripting.executeScript.mockClear();
+  api.runtime.sendMessage.mockClear();
+  api.action.onClicked.addListener.mock.calls[0]?.[0]({
+    id: 7,
+    windowId: 1,
+    url: "https://x.com/NASA",
+  });
+  await vi.waitFor(() =>
+    expect(scriptRequests("/sift.js")).toEqual([
+      { target: { tabId: 7 }, files: ["/sift.js"] },
+    ]),
+  );
+  expect(api.runtime.sendMessage).toHaveBeenCalledWith({
+    type: "sift:sidepanel-set-panel-tab",
+    tabId: 7,
+    resetMinimum: false,
+  });
+  expect(api.runtime.sendMessage).not.toHaveBeenCalledWith({
+    type: "sift:sidepanel-set-panel-tab",
+    tabId: 7,
+    resetMinimum: true,
+  });
+  expect(stored["sift:sidepanel-page:7"]).toMatchObject({
+    url: "https://x.com/NASA",
+    context: { timelineKey: "https://x.com/NASA" },
+  });
+});
+
+it("アクション中に開いた通知が先行したら二重に接続しない", async () => {
+  trackedPage();
+  api.sidePanel.open.mockImplementationOnce(async () => {
+    api.sidePanel.onOpened.addListener.mock.calls[0]?.[0]({
+      path: "/sidepanel.html",
+      tabId: 7,
+      windowId: 1,
+    });
+  });
+  api.action.onClicked.addListener.mock.calls[0]?.[0]({
+    id: 7,
+    windowId: 1,
+    url: "https://x.com/NASA",
+  });
+  await vi.waitFor(() =>
+    expect(api.runtime.sendMessage).toHaveBeenCalledWith({
+      type: "sift:sidepanel-set-panel-tab",
+      tabId: 7,
+    }),
+  );
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  expect(scriptRequests("/sift.js")).toEqual([
+    { target: { tabId: 7 }, files: ["/sift.js"] },
+  ]);
+});
+
+it("アクションの保存記録照会中に閉じて開き直したら古い照会を捨てる", async () => {
+  const { stored } = trackedPage();
+  openTab({ id: 7, url: "https://x.com/NASA" });
+  await vi.waitFor(() =>
+    expect(api.runtime.sendMessage).toHaveBeenCalledWith({
+      type: "sift:sidepanel-set-panel-tab",
+      tabId: 7,
+    }),
+  );
+  api.storage.session.get.mockClear();
+  const oldRecord = { ...stored };
+  const pending = Promise.withResolvers<Record<string, unknown>>();
+  api.storage.session.get.mockReturnValueOnce(pending.promise);
+  api.action.onClicked.addListener.mock.calls[0]?.[0]({
+    id: 7,
+    windowId: 1,
+    url: "https://x.com/NASA",
+  });
+  await vi.waitFor(() => expect(api.storage.session.get).toHaveBeenCalled());
+  api.sidePanel.onClosed.addListener.mock.calls[0]?.[0]({
+    tabId: 7,
+    windowId: 1,
+  });
+  api.runtime.sendMessage.mockClear();
+  openTab({ id: 7, url: "https://x.com/NASA" });
+  await vi.waitFor(() =>
+    expect(api.runtime.sendMessage).toHaveBeenCalledWith({
+      type: "sift:sidepanel-set-panel-tab",
+      tabId: 7,
+    }),
+  );
+  const reopened = stored["sift:sidepanel-page:7"];
+  api.scripting.executeScript.mockClear();
+  api.runtime.sendMessage.mockClear();
+  pending.resolve(oldRecord);
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  expect(api.scripting.executeScript).not.toHaveBeenCalled();
+  expect(api.runtime.sendMessage).not.toHaveBeenCalled();
+  expect(stored["sift:sidepanel-page:7"]).toBe(reopened);
+});
+
+it("worker再起動でメモリが空でも保存した所有記録からアクションで復旧する", async () => {
+  const { stored } = trackedPage();
+  api.action.onClicked.addListener.mock.calls[0]?.[0]({
+    id: 7,
+    windowId: 1,
+    url: "https://x.com/NASA",
+  });
+  await vi.waitFor(() =>
+    expect(api.runtime.sendMessage).toHaveBeenCalledWith({
+      type: "sift:sidepanel-set-panel-tab",
+      tabId: 7,
+    }),
+  );
+  expect(scriptRequests("/sift.js")).toEqual([
+    { target: { tabId: 7 }, files: ["/sift.js"] },
+  ]);
+  expect(api.runtime.sendMessage).toHaveBeenCalledWith({
+    type: "sift:sidepanel-set-panel-tab",
+    tabId: 7,
+    resetMinimum: false,
+  });
+  expect(stored["sift:sidepanel-page:7"]).toMatchObject({
+    windowId: 1,
+    url: "https://x.com/NASA",
+  });
+});
+
+it("初回のアクションでは所有記録を捏造せず開いた通知へ接続を任せる", async () => {
+  api.action.onClicked.addListener.mock.calls[0]?.[0]({
+    id: 7,
+    windowId: 1,
+    url: "https://x.com/NASA",
+  });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  expect(api.sidePanel.open).toHaveBeenCalledExactlyOnceWith({ tabId: 7 });
+  expect(api.storage.session.set).not.toHaveBeenCalled();
+  expect(scriptRequests("/sift.js")).toHaveLength(0);
+  expect(api.runtime.sendMessage).not.toHaveBeenCalled();
+});
+
 it("元の一覧を離れると同じサイトでも閉じて絞り込みを解除する", async () => {
   const { context, check } = trackedPage();
   api.tabs.get.mockResolvedValue({
@@ -141,10 +429,16 @@ it("元の一覧を離れると同じサイトでも閉じて絞り込みを解�
   });
   context.pageKey = "https://x.com/home";
   await expect(check()).resolves.toBe(true);
-  expect(api.sidePanel.setOptions).toHaveBeenCalledWith({
+  expect(api.sidePanel.close).toHaveBeenCalledWith({ tabId: 7 });
+  api.sidePanel.onClosed.addListener.mock.calls[0]?.[0]({
     tabId: 7,
-    enabled: false,
+    windowId: 1,
   });
+  await vi.waitFor(() =>
+    expect(api.storage.session.remove).toHaveBeenCalledWith(
+      "sift:sidepanel-page:7",
+    ),
+  );
   expect(api.tabs.sendMessage).toHaveBeenCalledWith(7, {
     type: "sift:timeline-set-filtering",
     enabled: false,
@@ -166,7 +460,7 @@ it("ライトボックスを開いて閉じても背景一覧が同じなら維�
     url: "https://x.com/NASA",
   });
   await expect(check()).resolves.toBe(false);
-  expect(api.sidePanel.setOptions).not.toHaveBeenCalled();
+  expect(api.sidePanel.close).not.toHaveBeenCalled();
 });
 
 it("一時的な一覧キーの欠損後でも同じURLの別リストを検知する", async () => {
@@ -224,7 +518,7 @@ it("古い遷移判定の応答で開き直したパネルを閉じない", asyn
   };
   finish({ ...context, pageKey: "https://x.com/NASA" });
   await expect(pending).resolves.toBe(false);
-  expect(api.sidePanel.setOptions).not.toHaveBeenCalled();
+  expect(api.sidePanel.close).not.toHaveBeenCalled();
 });
 
 it("ローカルビルドIDはサイドパネルからの診断にだけ返す", async () => {
@@ -261,18 +555,25 @@ it.each([
   "/sidepanel.html?tabId=7",
 ])(
   "開いた通知のパス %s で対象タブを保存し復帰時の最低値は初期化しない",
-  (path) => {
+  async (path) => {
+    trackedPage();
     api.sidePanel.onOpened.addListener.mock.calls[0]?.[0]({
       path,
       tabId: 7,
       windowId: 1,
     });
+    await vi.waitFor(() =>
+      expect(api.runtime.sendMessage).toHaveBeenCalledWith({
+        type: "sift:sidepanel-set-panel-tab",
+        tabId: 7,
+        resetMinimum: false,
+      }),
+    );
     expect(api.storage.session.set).toHaveBeenCalledWith({
-      "sift:sidepanel-tab-id": 7,
-    });
-    expect(api.runtime.sendMessage).toHaveBeenCalledWith({
-      type: "sift:sidepanel-set-panel-tab",
-      tabId: 7,
+      "sift:sidepanel-page:7": expect.objectContaining({
+        url: "https://x.com/NASA",
+        windowId: 1,
+      }),
     });
   },
 );
@@ -290,9 +591,8 @@ it.each([
 it.each(["https://example.com/", "chrome://newtab/", undefined])(
   "%s でもクリック直後に開き、サイトへ処理を注入しない",
   async (url) => {
-    const click = api.action.onClicked.addListener.mock.calls[0]?.[0];
-    click({ id: 7, url });
-    expect(api.sidePanel.open).toHaveBeenCalledWith({ tabId: 7 });
+    openTab({ id: 7, url });
+    expect(api.sidePanel.open).not.toHaveBeenCalled();
     await vi.waitFor(() => expect(api.runtime.sendMessage).toHaveBeenCalled());
     expect(api.scripting.insertCSS).not.toHaveBeenCalled();
     expect(api.scripting.executeScript).not.toHaveBeenCalled();
@@ -301,11 +601,11 @@ it.each(["https://example.com/", "chrome://newtab/", undefined])(
 );
 
 it("対応サイトは開いてから注入する", async () => {
-  api.action.onClicked.addListener.mock.calls[0]?.[0]({
+  openTab({
     id: 7,
     url: "https://x.com/Google",
   });
-  expect(api.sidePanel.open).toHaveBeenCalledWith({ tabId: 7 });
+  expect(api.sidePanel.open).not.toHaveBeenCalled();
   expect(api.sidePanel.setOptions).toHaveBeenCalledWith({
     tabId: 7,
     path: "sidepanel.html?tabId=7",
@@ -318,21 +618,103 @@ it("対応サイトは開いてから注入する", async () => {
   expect(api.runtime.sendMessage).toHaveBeenCalledWith({
     type: "sift:sidepanel-set-panel-tab",
     tabId: 7,
-    resetMinimum: true,
+    resetMinimum: false,
   });
 });
 
-it("別サイトへ移動すると注入せずパネルを無効化する", async () => {
+it("注入直後に受信側が準備できていなければ短く待って接続する", async () => {
+  api.tabs.sendMessage.mockRejectedValueOnce(new Error("No receiver"));
+  api.tabs.sendMessage.mockRejectedValueOnce(new Error("No receiver"));
+  openTab({ id: 7, url: "https://x.com/NASA" });
+  await vi.waitFor(() => expect(api.tabs.sendMessage).toHaveBeenCalledTimes(3));
+  expect(api.scripting.executeScript).toHaveBeenCalledOnce();
+});
+
+it("記録がないタブは閉鎖判定でも照会しない", async () => {
+  const listener = api.runtime.onMessage.addListener.mock.calls[0]?.[0];
+  await expect(
+    listener(
+      { type: "sift:sidepanel-check-page", tabId: 7 },
+      { url: "chrome-extension://test/sidepanel.html?tabId=7" },
+    ),
+  ).resolves.toBeNull();
+  expect(api.tabs.get).not.toHaveBeenCalled();
+  expect(api.sidePanel.close).not.toHaveBeenCalled();
+});
+
+it("タブIDのない閉鎖通知では他のパネルを停止しない", async () => {
+  trackedPage();
+  api.sidePanel.onClosed.addListener.mock.calls[0]?.[0]({ windowId: 1 });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  expect(api.storage.session.remove).not.toHaveBeenCalled();
+  expect(api.tabs.sendMessage).not.toHaveBeenCalled();
+});
+
+it("別ウィンドウの閉鎖通知で接続中のパネルをキャンセルしない", async () => {
+  vi.stubGlobal("__SIFT_LOCAL_DEPLOY__", true);
+  const pending = Promise.withResolvers<boolean>();
+  checkLocalBuild.mockReturnValueOnce(pending.promise);
+  openTab({ id: 7, url: "https://x.com/NASA" });
+  api.sidePanel.onClosed.addListener.mock.calls[0]?.[0]({
+    tabId: 7,
+    windowId: 2,
+  });
+  pending.resolve(true);
+  await vi.waitFor(() =>
+    expect(api.scripting.executeScript).toHaveBeenCalled(),
+  );
+  expect(api.storage.session.remove).not.toHaveBeenCalled();
+});
+
+it("閉じた記録の削除完了を待ってから新しい所有記録を保存する", async () => {
+  const { stored } = trackedPage();
+  const pending = Promise.withResolvers<void>();
+  api.storage.session.remove.mockImplementationOnce(async () => {
+    await pending.promise;
+    delete stored["sift:sidepanel-page:7"];
+  });
+  api.sidePanel.onClosed.addListener.mock.calls[0]?.[0]({
+    tabId: 7,
+    windowId: 1,
+  });
+  await vi.waitFor(() => expect(api.storage.session.remove).toHaveBeenCalled());
+  openTab({ id: 7, url: "https://x.com/home" });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  expect(api.storage.session.set).not.toHaveBeenCalled();
+  pending.resolve();
+  await vi.waitFor(() =>
+    expect(stored["sift:sidepanel-page:7"]).toMatchObject({
+      url: "https://x.com/home",
+    }),
+  );
+  expect(api.runtime.sendMessage).toHaveBeenCalledWith({
+    type: "sift:sidepanel-set-panel-tab",
+    tabId: 7,
+    resetMinimum: true,
+  });
+  expect(api.tabs.sendMessage).not.toHaveBeenCalledWith(7, {
+    type: "sift:timeline-set-filtering",
+    enabled: false,
+  });
+  expect(
+    api.runtime.sendMessage.mock.invocationCallOrder[0] ?? Infinity,
+  ).toBeLessThan(api.scripting.insertCSS.mock.invocationCallOrder[0] ?? 0);
+});
+
+it("別サイトへ移動すると注入せずパネルを閉じる", async () => {
+  trackedPage();
+  api.tabs.get.mockResolvedValue({
+    id: 7,
+    active: true,
+    url: "https://example.com/",
+  });
   api.tabs.onUpdated.addListener.mock.calls[0]?.[0](
     7,
     { url: "https://example.com/" },
     { id: 7, url: "https://example.com/" },
   );
   await vi.waitFor(() =>
-    expect(api.sidePanel.setOptions).toHaveBeenCalledWith({
-      tabId: 7,
-      enabled: false,
-    }),
+    expect(api.sidePanel.close).toHaveBeenCalledWith({ tabId: 7 }),
   );
   expect(api.runtime.sendMessage).not.toHaveBeenCalled();
   expect(api.scripting.executeScript).not.toHaveBeenCalled();
@@ -340,32 +722,18 @@ it("別サイトへ移動すると注入せずパネルを無効化する", asyn
 });
 
 it("アクセス権を失いURLが読めないときも読み込み完了で閉じる", async () => {
-  api.tabs.get.mockResolvedValueOnce({ id: 7, active: true, url: "" });
+  trackedPage();
+  api.tabs.get.mockResolvedValue({ id: 7, active: true, url: "" });
   api.tabs.onUpdated.addListener.mock.calls[0]?.[0](7, { status: "complete" });
   await vi.waitFor(() =>
-    expect(api.sidePanel.setOptions).toHaveBeenCalledWith({
-      tabId: 7,
-      enabled: false,
-    }),
+    expect(api.sidePanel.close).toHaveBeenCalledWith({ tabId: 7 }),
   );
 });
-
-it.each(["https://x.com/home", "https://x.com/NASA?test=1"])(
-  "一覧記録のない旧パネルでは同じサイトへの再接続を維持する: %s",
-  async (url) => {
-    api.tabs.get.mockResolvedValueOnce({ id: 7, active: true, url });
-    api.tabs.onUpdated.addListener.mock.calls[0]?.[0](7, {
-      status: "complete",
-    });
-    await vi.waitFor(() => expect(api.runtime.sendMessage).toHaveBeenCalled());
-    expect(api.sidePanel.setOptions).not.toHaveBeenCalled();
-  },
-);
 
 it("読み込み開始だけでは閉じない", async () => {
   api.tabs.onUpdated.addListener.mock.calls[0]?.[0](7, { status: "loading" });
   await Promise.resolve();
-  expect(api.sidePanel.setOptions).not.toHaveBeenCalled();
+  expect(api.sidePanel.close).not.toHaveBeenCalled();
   expect(api.tabs.get).not.toHaveBeenCalled();
 });
 
@@ -377,33 +745,42 @@ it("パネルを開いた記録がないタブには触れない", async () => {
 });
 
 it("別タブのパネルが選択中でも元のタブの別サイト遷移を閉じる", async () => {
-  api.storage.session.get.mockResolvedValueOnce({
-    "sift:sidepanel-tab-id": 8,
-    "sift:sidepanel-origin:7": "https://x.com",
+  const { stored } = trackedPage();
+  stored["sift:sidepanel-page:8"] = {
+    id: "other",
+    url: "https://bsky.app/",
+    windowId: 2,
+  };
+  api.tabs.get.mockResolvedValue({
+    id: 7,
+    active: false,
+    url: "https://example.com/",
   });
   api.tabs.onUpdated.addListener.mock.calls[0]?.[0](7, { status: "complete" });
   await vi.waitFor(() =>
-    expect(api.sidePanel.setOptions).toHaveBeenCalledWith({
-      tabId: 7,
-      enabled: false,
-    }),
+    expect(api.sidePanel.close).toHaveBeenCalledWith({ tabId: 7 }),
   );
 });
 
 it("閉じたタブのサイト記録を削除する", () => {
   api.tabs.onRemoved.addListener.mock.calls[0]?.[0](7);
   expect(api.storage.session.remove).toHaveBeenCalledWith(
-    "sift:sidepanel-origin:7",
+    "sift:sidepanel-page:7",
   );
 });
 
 it("別タブのパネル閉鎖で現在の接続先を消さない", async () => {
+  const { stored } = trackedPage();
   api.sidePanel.onClosed.addListener.mock.calls[0]?.[0]({ tabId: 8 });
-  await Promise.resolve();
-  expect(api.storage.session.remove).not.toHaveBeenCalled();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  expect(api.storage.session.remove).not.toHaveBeenCalledWith(
+    "sift:sidepanel-page:7",
+  );
+  expect(stored["sift:sidepanel-page:7"]).toBeDefined();
 });
 
 it("可視パネルから現在の許可済みタブへ再接続する", async () => {
+  trackedPage();
   api.tabs.get.mockResolvedValueOnce({
     id: 7,
     active: true,
@@ -426,6 +803,7 @@ it("可視パネルから現在の許可済みタブへ再接続する", async (
 });
 
 it("権限による注入失敗を再接続失敗として返す", async () => {
+  trackedPage();
   api.tabs.get.mockResolvedValueOnce({
     id: 7,
     active: true,
@@ -484,8 +862,9 @@ it("検証候補はビルドIDを返し、初回起動とパネル通知でも�
   vi.stubGlobal("__SIFT_LOCAL_DEPLOY__", false);
   vi.stubGlobal("__SIFT_BUILD_ID__", "candidate-build");
   checkLocalBuild.mockResolvedValue(false);
-  api.action.onClicked.addListener.mock.calls[0]?.[0]({
+  api.tabs.get.mockResolvedValue({
     id: 7,
+    active: true,
     url: "https://x.com/NASA",
   });
   api.sidePanel.onOpened.addListener.mock.calls[0]?.[0]({
@@ -522,11 +901,11 @@ it("更新確認を待つ間もユーザー操作内でパネルを開き、注�
   vi.stubGlobal("__SIFT_BUILD_ID__", "running-build");
   const pending = Promise.withResolvers<boolean>();
   checkLocalBuild.mockReturnValueOnce(pending.promise);
-  api.action.onClicked.addListener.mock.calls[0]?.[0]({
+  openTab({
     id: 7,
     url: "https://x.com/NASA",
   });
-  expect(api.sidePanel.open).toHaveBeenCalledWith({ tabId: 7 });
+  expect(api.sidePanel.open).not.toHaveBeenCalled();
   await vi.waitFor(() =>
     expect(checkLocalBuild).toHaveBeenCalledWith("running-build"),
   );
@@ -546,7 +925,7 @@ it("パネル起動時に更新を検知したら旧ビルドの注入と初期�
   vi.stubGlobal("__SIFT_LOCAL_DEPLOY__", true);
   vi.stubGlobal("__SIFT_BUILD_ID__", "running-build");
   checkLocalBuild.mockResolvedValue(false);
-  api.action.onClicked.addListener.mock.calls[0]?.[0]({
+  openTab({
     id: 7,
     url: "https://x.com/NASA",
   });
@@ -558,7 +937,7 @@ it("パネル起動時に更新を検知したら旧ビルドの注入と初期�
   expect(api.runtime.sendMessage).not.toHaveBeenCalled();
 });
 
-it.each([{ tabId: 7 }, {}])(
+it.each([{ tabId: 7, windowId: 1 }])(
   "開いた通知の更新確認中に閉じたパネルの接続先を復活させない: %j",
   async (closedPanel) => {
     vi.stubGlobal("__SIFT_LOCAL_DEPLOY__", true);
@@ -600,14 +979,14 @@ it("開いた通知の更新確認中にタブが閉じた場合も通知を破�
   expect(api.runtime.sendMessage).not.toHaveBeenCalled();
 });
 
-it.each([{ tabId: 7 }, {}])(
+it.each([{ tabId: 7, windowId: 1 }])(
   "アクションの更新確認中に閉じたら注入と初期化通知を再開しない: %j",
   async (closedPanel) => {
     vi.stubGlobal("__SIFT_LOCAL_DEPLOY__", true);
     vi.stubGlobal("__SIFT_BUILD_ID__", "running-build");
     const pending = Promise.withResolvers<boolean>();
     checkLocalBuild.mockReturnValueOnce(pending.promise);
-    api.action.onClicked.addListener.mock.calls[0]?.[0]({
+    openTab({
       id: 7,
       url: "https://x.com/NASA",
     });
@@ -631,10 +1010,10 @@ it("開き直したパネルを、先に閉じた通知の遅れた処理で切�
     tabId: 7,
     windowId: 1,
   });
-  pending.resolve({ "sift:sidepanel-tab-id": 7 });
+  pending.resolve({ "sift:sidepanel-page:7": { id: "old" } });
   await new Promise((resolve) => setTimeout(resolve, 0));
   expect(api.storage.session.remove).not.toHaveBeenCalledWith(
-    "sift:sidepanel-tab-id",
+    "sift:sidepanel-page:7",
   );
 });
 
@@ -675,7 +1054,7 @@ it("ストア版ではパネル操作を許可してNative Hostへ問い合わ�
       { url: "chrome-extension://test/sidepanel.html?tabId=7" },
     ),
   ).resolves.toBe(true);
-  api.action.onClicked.addListener.mock.calls[0]?.[0]({
+  openTab({
     id: 7,
     url: "https://x.com/NASA",
   });
@@ -699,7 +1078,11 @@ it("遅れた別サイト遷移の判定で、再接続して開いたパネル�
     .mockImplementationOnce(() => pending.promise);
   api.tabs.onUpdated.addListener.mock.calls[0]?.[0](7, { status: "complete" });
   await vi.waitFor(() => expect(api.tabs.get).toHaveBeenCalledOnce());
-  api.action.onClicked.addListener.mock.calls[0]?.[0](nextTab);
+  api.sidePanel.onClosed.addListener.mock.calls[0]?.[0]({
+    tabId: 7,
+    windowId: 1,
+  });
+  openTab(nextTab);
   await vi.waitFor(() =>
     expect(api.runtime.sendMessage).toHaveBeenCalledWith({
       type: "sift:sidepanel-set-panel-tab",
@@ -718,5 +1101,5 @@ it("遅れた別サイト遷移の判定で、再接続して開いたパネル�
     tabId: 7,
     enabled: false,
   });
-  expect(stored["sift:sidepanel-origin:7"]).toBe("https://bsky.app");
+  expect(stored["sift:sidepanel-page:7"]).toMatchObject({ url: nextTab.url });
 });

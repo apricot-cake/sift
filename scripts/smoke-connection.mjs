@@ -61,16 +61,15 @@ async function panelDiagnostics() {
 async function connectionDiagnostics(page) {
   try {
     const state = await api.evaluate(async (tabId) => {
-      const stored = await chrome.storage.session.get([
-        `sift:sidepanel-origin:${tabId}`,
+      const stored = await chrome.storage.session.get(
         `sift:sidepanel-page:${tabId}`,
-      ]);
+      );
       const opening = stored[`sift:sidepanel-page:${tabId}`];
       return {
         options: await chrome.sidePanel.getOptions({ tabId }),
-        savedOrigin: stored[`sift:sidepanel-origin:${tabId}`] ?? null,
         openingId: opening?.id ?? null,
         openingOrigin: opening?.url ? new URL(opening.url).origin : null,
+        openingWindowId: opening?.windowId ?? null,
       };
     }, page.tabId);
     diagnose("connection-state", { tabId: page.tabId, ...state });
@@ -282,6 +281,35 @@ try {
   const closedWidth = await evaluate(first.client, "innerWidth");
   await action(first);
   await check("Xプロフィールに接続", first, x);
+  const readOpeningId = (tabId) =>
+    api.evaluate(async (id) => {
+      const key = `sift:sidepanel-page:${id}`;
+      return (await chrome.storage.session.get(key))[key]?.id ?? null;
+    }, tabId);
+  const openedCount = () =>
+    report.diagnostics.filter(
+      (item) =>
+        item.kind === "panel-event" &&
+        item.event === "opened" &&
+        item.tabId === first.tabId,
+    ).length;
+  const openingBefore = await readOpeningId(first.tabId);
+  const openedBefore = openedCount();
+  await action(first);
+  await check("表示中のXパネルをアクションで再接続", first, x);
+  report.reconnectWhileOpen = {
+    openingBefore,
+    openingAfter: await readOpeningId(first.tabId),
+    openedEvents: openedCount() - openedBefore,
+  };
+  if (
+    !report.reconnectWhileOpen.openingBefore ||
+    !report.reconnectWhileOpen.openingAfter ||
+    report.reconnectWhileOpen.openingBefore ===
+      report.reconnectWhileOpen.openingAfter ||
+    report.reconnectWhileOpen.openedEvents !== 0
+  )
+    throw Error("開いた通知なしで表示中パネルへ再接続した証拠を確認できません");
   await first.page.reload({ waitUntil: "domcontentloaded" });
   await check("同じX一覧の再読込後に復旧", first, x);
   first.url = "https://bsky.app/profile/bsky.app";

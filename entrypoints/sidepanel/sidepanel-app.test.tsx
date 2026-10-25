@@ -296,6 +296,39 @@ describe("接続先と非同期応答", () => {
       defaults.siteSettings.bluesky,
     );
   });
+  it("非表示になる前の応答を破棄し、復帰時は所有タブへ接続する", async () => {
+    const old = deferred<FilterContextResponse>();
+    const read = vi
+      .fn()
+      .mockImplementationOnce(() => old.promise)
+      .mockResolvedValue(context("x"));
+    request = read;
+    await mount();
+    const visibility = vi.spyOn(document, "visibilityState", "get");
+    visibility.mockReturnValue("hidden");
+    await act(async () => {
+      document.dispatchEvent(new Event("visibilitychange"));
+      await vi.advanceTimersByTimeAsync(1500);
+    });
+    expect(read).toHaveBeenCalledTimes(1);
+    visibility.mockReturnValue("visible");
+    await act(async () => {
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+    await flush();
+    old.resolve(context("bluesky"));
+    await flush();
+    expect(read).toHaveBeenCalledTimes(2);
+    expect(writes).toHaveLength(1);
+    expect(writes[0]?.siteSettings.bluesky).toEqual(
+      defaults.siteSettings.bluesky,
+    );
+    expect(
+      container
+        .querySelector("[data-sift-site]")
+        ?.getAttribute("data-sift-site"),
+    ).toBe("x");
+  });
   it("非表示中のタブ変更でも保存待ちの初期化を無効にする", async () => {
     const write = deferred<void>();
     vi.mocked(settingsItem.setValue).mockImplementationOnce(

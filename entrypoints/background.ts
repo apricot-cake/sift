@@ -20,9 +20,7 @@ import {
 import {
   isSidePanelTabId,
   SIDE_PANEL_CONTROL,
-  SIDE_PANEL_TAB_STORAGE_KEY,
   sidePanelOrigin,
-  sidePanelOriginKey,
   sidePanelPath,
   sidePanelTabIdFromUrl,
 } from "../utils/sidepanel-controls.ts";
@@ -69,93 +67,156 @@ export default defineBackground(() => {
 
   const sidePanel = (browser as { sidePanel?: typeof browser.sidePanel })
     .sidePanel;
-  const panelActions = new Map<number, symbol>();
-  const panelNotifications = new Map<number, symbol>();
+  const panelActions = new Map<
+    number,
+    { generation: symbol; windowId: number } | null
+  >();
+  const panelCleanups = new Map<number, Promise<void>>();
 
-  // 旧版の自動開閉設定は Chrome のプロファイルに残る。有効なままだと
-  // ツールバーのクリックが onClicked に届かず、activeTab の接続処理も
-  // 実行されない。更新・再読み込みのいずれでも現在の起動方式に揃える。
-  void sidePanel?.setPanelBehavior({ openPanelOnActionClick: false });
-
-  // default_path は WXT が manifest に生成する。共通パネルの設定が残ると、
-  // 所有タブへの復帰後に未開封の別タブでも表示されるため、worker 起動時に無効化する。
-  // tabId を省略した設定は既定値だけを変え、開封済みのタブ固有パネルは維持する。
-  void sidePanel?.setOptions({ enabled: false });
-
-  async function openPanelForActiveTab(tab: Browser.tabs.Tab): Promise<void> {
-    if (tab.id === undefined) {
-      return;
-    }
-    const generation = Symbol();
-    panelActions.set(tab.id, generation);
-    const isCurrent = () => panelActions.get(tab.id as number) === generation;
-
-    // 非同期のページ判定を待つと action のユーザー操作が失われるため、
-    // 全サイトで最初の await より前に開く。
-    const opening: PanelPage = {
-      id: crypto.randomUUID(),
-      url: panelPageUrl(tab.url),
-    };
-    const savedTab = browser.storage.session.set({
-      [SIDE_PANEL_TAB_STORAGE_KEY]: tab.id,
-      [sidePanelOriginKey(tab.id)]: sidePanelOrigin(tab.url),
-      [panelPageKey(tab.id)]: opening,
-    });
-    const configured = sidePanel?.setOptions({
-      tabId: tab.id,
-      path: sidePanelPath(tab.id),
+  function prepareTab(tabId: number): Promise<void> | undefined {
+    return sidePanel?.setOptions({
+      tabId,
+      path: sidePanelPath(tabId),
       enabled: true,
     });
-    const panelOpening = sidePanel?.open({ tabId: tab.id });
-    // open はユーザー操作が有効な同期区間で呼ぶ。更新確認を待ってから
-    // 呼ぶと Chrome に拒まれるため、先に開き、新版ならリロードで閉じる。
-    const currentBuild = __SIFT_LOCAL_DEPLOY__
-      ? checkLocalBuild(__SIFT_BUILD_ID__)
-      : Promise.resolve(true);
-    await Promise.all([savedTab, configured, panelOpening]);
-    if (!(await currentBuild) || !isCurrent()) return;
+  }
+
+  // 自動開閉では activeTab が付与されないため、action から明示的に開く。
+  // タブ切替時の非表示・復元は Chrome が管理し、接続は onOpened にまとめる。
+  void sidePanel?.setPanelBehavior({ openPanelOnActionClick: false });
+  void (async () => {
+    await sidePanel?.setOptions({ enabled: false });
+    const stored = await browser.storage.session.get(null);
+    const legacyKeys = Object.keys(stored).filter(
+      (key) =>
+        key === "sift:sidepanel-tab-id" ||
+        key.startsWith("sift:sidepanel-origin:"),
+    );
+    if (legacyKeys.length) await browser.storage.session.remove(legacyKeys);
+    const tabs = await browser.tabs.query({});
+    await Promise.all(
+      tabs.map((tab) =>
+        tab.id === undefined ? undefined : prepareTab(tab.id),
+      ),
+    );
+  })().catch(console.error);
+  browser.tabs.onCreated.addListener((tab) => {
+    if (tab.id !== undefined) void prepareTab(tab.id)?.catch(console.error);
+  });
+  browser.action.onClicked.addListener((tab) => {
+    if (tab.id === undefined) return;
+    const tabId = tab.id;
+    const previousAction = panelActions.get(tabId);
+    // パネルの幅変更より前に、対象外の一覧で読んでいた実投稿の位置を記録する。
+    const viewport = isSupportedSiteUrl(tab.url)
+      ? browser.scripting.executeScript({
+          target: { tabId },
+          files: ["/panel-viewport.js"],
+        })
+      : undefined;
+    // open はユーザー操作が有効な同期区間で呼ぶ。
+    const configured = prepareTab(tabId);
+    const opened = sidePanel?.open({ tabId });
+    void Promise.all([viewport, configured, opened])
+      .then(async () => {
+        // 表示中のパネルには onOpened が来ない。許可を取り直したクリックでは
+        // 既存の所有タブへ再接続する。初回起動・閉鎖・再開の通知とは競合させない。
+        if (
+          previousAction === null ||
+          panelActions.get(tabId) !== previousAction
+        )
+          return;
+        const key = panelPageKey(tabId);
+        const stored = await browser.storage.session.get(key);
+        if (!stored[key] || panelActions.get(tabId) !== previousAction) return;
+        const generation = Symbol();
+        panelActions.set(tabId, { generation, windowId: tab.windowId });
+        await connectOpenedPanel(tabId, tab.windowId, generation, true);
+      })
+      .catch(console.error);
+  });
+
+  async function connectOpenedPanel(
+    tabId: number,
+    windowId: number,
+    generation: symbol,
+    restore: boolean,
+  ): Promise<void> {
+    const isCurrent = () => panelActions.get(tabId)?.generation === generation;
+    if (__SIFT_LOCAL_DEPLOY__ && !(await checkLocalBuild(__SIFT_BUILD_ID__)))
+      return;
+    // 先に閉じたパネルの削除が、新しい所有記録を消さないようにする。
+    await panelCleanups.get(tabId);
+    if (!isCurrent()) return;
+    const [tab, stored] = await Promise.all([
+      browser.tabs.get(tabId),
+      browser.storage.session.get(panelPageKey(tabId)),
+    ]);
+    if (!isCurrent()) return;
+
+    // 復帰時には元の一覧と条件を保つ。閉じた後の再起動だけを初期化する。
+    const previous = restore
+      ? (stored[panelPageKey(tabId)] as PanelPage | undefined)
+      : undefined;
+    const opening: PanelPage = {
+      ...previous,
+      id: crypto.randomUUID(),
+      url: previous?.url ?? panelPageUrl(tab.url),
+      windowId,
+    };
+    await browser.storage.session.set({
+      [panelPageKey(tabId)]: opening,
+    });
+    if (!isCurrent()) return;
+    // 新しいパネル自身が初期値を設定する。既存ビューを閉じて再開した場合だけ、
+    // 注入や応答待ちより先に初期化を通知する。復帰や遅い応答で選択値を戻さない。
+    await browser.runtime
+      .sendMessage({
+        type: SIDE_PANEL_CONTROL.setPanelTab,
+        tabId,
+        resetMinimum: !restore,
+      })
+      .catch(() => {});
+    if (!isCurrent()) return;
     if (isSupportedSiteUrl(tab.url)) {
-      const target = { tabId: tab.id };
+      const target = { tabId };
       await browser.scripting.insertCSS({ target, css: contentStyle });
       if (!isCurrent()) return;
       await browser.scripting.executeScript({ target, files: ["/sift.js"] });
       if (!isCurrent()) return;
       // カードが未描画でも閉じない。対応状況はパネルが継続して取得する。
-      const context = await readFilterContext(tab.id);
-      const current = await browser.storage.session.get(panelPageKey(tab.id));
-      const latestTab = await browser.tabs.get(tab.id).catch(() => null);
+      const context = await readFilterContext(tabId);
+      const current = await browser.storage.session.get(panelPageKey(tabId));
+      const latestTab = await browser.tabs.get(tabId).catch(() => null);
       if (
         isCurrent() &&
         context &&
-        (current[panelPageKey(tab.id)] as PanelPage | undefined)?.id ===
+        (current[panelPageKey(tabId)] as PanelPage | undefined)?.id ===
           opening.id &&
         panelPageUrl(latestTab?.url) === opening.url
       ) {
         await browser.storage.session.set({
-          [panelPageKey(tab.id)]: {
+          [panelPageKey(tabId)]: {
             ...opening,
             context: panelPageContext(context),
           },
         });
       }
     }
-    // 既存のパネルを開き直す場合は onOpened が発火しないことがある。
-    // 注入後にも所有タブを通知し、開き直したパネルの接続を更新する。
     if (!isCurrent()) return;
     void browser.runtime
       .sendMessage({
         type: SIDE_PANEL_CONTROL.setPanelTab,
-        tabId: tab.id,
-        resetMinimum: true,
+        tabId,
       })
       .catch(() => {});
   }
 
-  async function checkOpenPage(tabId: number): Promise<boolean> {
+  async function checkOpenPage(tabId: number): Promise<boolean | null> {
     const key = panelPageKey(tabId);
     const record = await browser.storage.session.get(key);
     const opening = record[key] as PanelPage | undefined;
-    if (!opening) return false;
+    if (!opening) return null;
     const tab = await browser.tabs.get(tabId).catch(() => null);
     if (!tab) return false;
     const url = panelPageUrl(tab.url);
@@ -198,16 +259,8 @@ export default defineBackground(() => {
     )
       return false;
     if (close) {
-      await sidePanel?.setOptions({ tabId, enabled: false });
-      const after = await browser.storage.session.get(key);
-      if ((after[key] as PanelPage | undefined)?.id === opening.id)
-        await browser.storage.session.remove(key);
-      await browser.tabs
-        .sendMessage(tabId, {
-          type: TIMELINE_CONTROL.setFiltering,
-          enabled: false,
-        })
-        .catch(() => {});
+      // enabled は起動可否。閉鎖は close に任せ、次のクリックで再開できる状態にする。
+      await sidePanel?.close({ tabId });
       return true;
     }
     const { pendingMedia: _pending, ...confirmed } = opening;
@@ -229,23 +282,20 @@ export default defineBackground(() => {
     tabId: number,
     tab: Browser.tabs.Tab,
   ): Promise<void> {
-    let panelTabId: unknown;
-    try {
-      const stored = await browser.storage.session.get(
-        SIDE_PANEL_TAB_STORAGE_KEY,
-      );
-      panelTabId = stored[SIDE_PANEL_TAB_STORAGE_KEY];
-    } catch {
-      return;
-    }
-    if (panelTabId !== tabId) {
-      return;
-    }
+    const key = panelPageKey(tabId);
+    const stored = await browser.storage.session.get(key);
+    const opening = stored[key] as PanelPage | undefined;
+    if (!opening) return;
+    const isCurrent = async () => {
+      const latest = await browser.storage.session.get(key);
+      return (latest[key] as PanelPage | undefined)?.id === opening.id;
+    };
 
     // onUpdated の tab は、tabs 権限がない activeTab 拡張では URL を含まない
     // ことがある。ユーザーが action を実行した同じタブだけを再取得する。
     const url =
       tab.url ?? (await browser.tabs.get(tabId).catch(() => null))?.url;
+    if (!(await isCurrent())) return;
     if (!isSupportedSiteUrl(url)) {
       void browser.runtime
         .sendMessage({ type: SIDE_PANEL_CONTROL.setPanelTab, tabId })
@@ -256,49 +306,24 @@ export default defineBackground(() => {
     // 同じ document の SPA 遷移なら既存の runtime が応答する。ページ遷移で
     // content script が失われたときだけ再注入するので、監視処理を重ねない。
     if ((await readFilterContext(tabId)) === null) {
+      if (!(await isCurrent())) return;
       const target = { tabId };
       await browser.scripting.insertCSS({ target, css: contentStyle });
+      if (!(await isCurrent())) return;
       await browser.scripting.executeScript({ target, files: ["/sift.js"] });
     }
 
+    if (!(await isCurrent())) return;
     void browser.runtime
       .sendMessage({ type: SIDE_PANEL_CONTROL.setPanelTab, tabId })
       .catch(() => {});
   }
 
   async function handleNavigation(tabId: number): Promise<void> {
-    // 非アクティブなタブの遷移も検査する。タブ単位の記録は worker の休止を
-    // またいで保持し、別タブのパネルには影響させない。
-    const key = sidePanelOriginKey(tabId);
-    const pageKey = panelPageKey(tabId);
-    const stored = await browser.storage.session.get([key, pageKey]);
-    const opening = stored[pageKey] as PanelPage | undefined;
-    if (!Object.hasOwn(stored, key)) return;
+    if ((await checkOpenPage(tabId)) !== false) return;
     const tab = await browser.tabs.get(tabId).catch(() => null);
-    if (!tab) return;
-    const origin = sidePanelOrigin(tab.url);
-    // 別 origin への遷移で activeTab が失効すると URL 自体が取得できない。
-    // 読み込み完了時にも URL がない場合は、接続を維持できないので閉じる。
-    if (origin !== stored[key] || origin === null) {
-      // tabs.getを待つ間にactionで再接続した場合、古い遷移で新しいパネルを閉じない。
-      const latest = await browser.storage.session.get([key, pageKey]);
-      if (
-        latest[key] !== stored[key] ||
-        (latest[pageKey] as PanelPage | undefined)?.id !== opening?.id
-      )
-        return;
-      await sidePanel?.setOptions({ tabId, enabled: false });
-      return;
-    }
-    if (await checkOpenPage(tabId)) return;
-    await refreshOpenPanelForNavigation(tabId, tab);
+    if (tab) await refreshOpenPanelForNavigation(tabId, tab);
   }
-
-  browser.action.onClicked.addListener((tab) => {
-    void openPanelForActiveTab(tab).catch((error: unknown) => {
-      console.error("sift のサイドパネルを開けなかった。", error);
-    });
-  });
 
   // パネルの復元やタブ切替は action を伴わない。既に許可された現在のタブなら
   // 接続を復旧する。新しいサイト権限は要求せず、拒否された場合はパネルで案内する。
@@ -337,9 +362,6 @@ export default defineBackground(() => {
     return (async () => {
       const tab = await browser.tabs.get(message.tabId);
       if (!tab.active) return false;
-      await browser.storage.session.set({
-        [SIDE_PANEL_TAB_STORAGE_KEY]: tab.id,
-      });
       await refreshOpenPanelForNavigation(message.tabId, tab);
       return true;
     })().catch(() => false);
@@ -353,8 +375,6 @@ export default defineBackground(() => {
 
   browser.tabs.onRemoved.addListener((tabId) => {
     panelActions.delete(tabId);
-    panelNotifications.delete(tabId);
-    void browser.storage.session.remove(sidePanelOriginKey(tabId));
     void browser.storage.session.remove(panelPageKey(tabId));
   });
 
@@ -367,63 +387,40 @@ export default defineBackground(() => {
     ) {
       const tabId = panel.tabId;
       const generation = Symbol();
-      panelNotifications.set(tabId, generation);
-      const notifyPanel = () => {
-        if (panelNotifications.get(tabId) !== generation) return;
-        void browser.storage.session.set({
-          [SIDE_PANEL_TAB_STORAGE_KEY]: tabId,
-        });
-        void browser.runtime
-          .sendMessage({
-            type: SIDE_PANEL_CONTROL.setPanelTab,
-            tabId,
-          })
-          .catch(() => {});
-      };
-      if (__SIFT_LOCAL_DEPLOY__)
-        void checkLocalBuild(__SIFT_BUILD_ID__).then((current) => {
-          if (current) notifyPanel();
-        });
-      else notifyPanel();
+      const restore = panelActions.get(tabId) !== null;
+      panelActions.set(tabId, { generation, windowId: panel.windowId });
+      void connectOpenedPanel(tabId, panel.windowId, generation, restore).catch(
+        console.error,
+      );
     }
   });
   sidePanel?.onClosed?.addListener((panel) => {
-    if (panel.tabId === undefined) {
-      panelActions.clear();
-      panelNotifications.clear();
-    } else {
-      panelActions.delete(panel.tabId);
-      panelNotifications.delete(panel.tabId);
-    }
-    const remainsClosed = (tabId: number) =>
-      !panelActions.has(tabId) && !panelNotifications.has(tabId);
-    void browser.storage.session
-      .get(SIDE_PANEL_TAB_STORAGE_KEY)
-      .then((stored) => {
-        if (
-          (panel.tabId === undefined ||
-            stored[SIDE_PANEL_TAB_STORAGE_KEY] === panel.tabId) &&
-          (typeof stored[SIDE_PANEL_TAB_STORAGE_KEY] !== "number" ||
-            remainsClosed(stored[SIDE_PANEL_TAB_STORAGE_KEY] as number))
-        ) {
-          void browser.storage.session.remove(SIDE_PANEL_TAB_STORAGE_KEY);
-        }
+    const tabId = panel.tabId;
+    if (tabId === undefined) return;
+    const current = panelActions.get(tabId);
+    if (current && current.windowId !== panel.windowId) return;
+    panelActions.set(tabId, null);
+    const cleanup = (async () => {
+      const key = panelPageKey(tabId);
+      const stored = await browser.storage.session.get(key);
+      const opening = stored[key] as PanelPage | undefined;
+      if (panelActions.get(tabId) !== null) return;
+      if (
+        opening?.windowId !== undefined &&
+        opening.windowId !== panel.windowId
+      )
+        return;
+      await browser.storage.session.remove(key);
+      if (panelActions.get(tabId) !== null) return;
+      await browser.tabs.sendMessage(tabId, {
+        type: TIMELINE_CONTROL.setFiltering,
+        enabled: false,
       });
-    void browser.tabs.query({}).then((tabs) => {
-      for (const tab of tabs) {
-        if (
-          tab.id !== undefined &&
-          (panel.tabId === undefined || panel.tabId === tab.id) &&
-          remainsClosed(tab.id)
-        ) {
-          void browser.tabs
-            .sendMessage(tab.id, {
-              type: TIMELINE_CONTROL.setFiltering,
-              enabled: false,
-            })
-            .catch(() => {});
-        }
-      }
-    });
+    })()
+      .catch(() => {})
+      .finally(() => {
+        if (panelCleanups.get(tabId) === cleanup) panelCleanups.delete(tabId);
+      });
+    panelCleanups.set(tabId, cleanup);
   });
 });

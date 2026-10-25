@@ -2,13 +2,21 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
+function readPanelSource(): string {
+  return (
+    readEntrypoint("entrypoints/sidepanel/sidepanel-app.tsx") +
+    "\n" +
+    readEntrypoint("entrypoints/sidepanel/use-panel-connection.ts")
+  );
+}
+
 function readEntrypoint(path: string): string {
   return readFileSync(resolve(process.cwd(), path), "utf8");
 }
 
 describe("抽出の操作入口", () => {
   it("最低値の候補は数値だけにし、件数と数値入力の単位は残す", () => {
-    const panel = readEntrypoint("entrypoints/sidepanel/sidepanel-app.tsx");
+    const panel = readPanelSource();
     for (const [locale, likes] of [
       ["ja", "いいね"],
       ["en", " likes"],
@@ -31,7 +39,7 @@ describe("抽出の操作入口", () => {
     expect(options).toContain("sidepanelLikeSuggestionCountSuffix");
   });
   it("SNSの除外スイッチに表示ラベルと同じ名前を付ける", () => {
-    const panel = readEntrypoint("entrypoints/sidepanel/sidepanel-app.tsx");
+    const panel = readPanelSource();
     for (const [label, setting] of [
       ["optionsHideReplies", "hideReplies"],
       ["optionsHideQuotes", "hideQuotes"],
@@ -43,15 +51,17 @@ describe("抽出の操作入口", () => {
     }
   });
   it("アクションで開き直した場合は最低値の選択を初期化する", () => {
-    const panel = readEntrypoint("entrypoints/sidepanel/sidepanel-app.tsx");
+    const panel = readPanelSource();
     const background = readEntrypoint("entrypoints/background.ts");
-    expect(background).toContain("resetMinimum: true");
+    expect(background).toContain("resetMinimum: !restore");
     expect(panel).toMatch(
-      /if \(message.resetMinimum === true\) \{\s*initializedMinimums.current.clear\(\);\s*setManualSites\(\{\}\)/,
+      /if \(message.resetMinimum === true\) \{\s*initializedMinimums.current.clear\(\);\s*onMinimumReset\(\)/,
     );
   });
   it("未接続や対象外では初期化を完了せず、有効化の意図も消さない", () => {
-    const sidepanel = readEntrypoint("entrypoints/sidepanel/sidepanel-app.tsx");
+    const sidepanel = readEntrypoint(
+      "entrypoints/sidepanel/use-panel-connection.ts",
+    );
     expect(sidepanel).toMatch(
       /if \(nextPage !== null\) \{\s*panelInitialized.current = true/,
     );
@@ -65,7 +75,7 @@ describe("抽出の操作入口", () => {
     expect(unavailable).not.toContain("pageFilteringExpected.current = false");
   });
   it("候補の選択は値と最低値トグルを同時に更新する", () => {
-    const sidepanel = readEntrypoint("entrypoints/sidepanel/sidepanel-app.tsx");
+    const sidepanel = readPanelSource();
     expect(sidepanel).toMatch(
       /minReactions: minimum,\s*minReactionsEnabled: true/,
     );
@@ -74,51 +84,9 @@ describe("抽出の操作入口", () => {
       "!manualActive && selectedSettings.minReactionsEnabled",
     );
   });
-  it("どのタブでもパネルを開き、対応サイトだけに処理を注入する", () => {
-    const background = readEntrypoint("entrypoints/background.ts");
-    const content = readEntrypoint("entrypoints/sift.ts");
-
-    expect(background).toContain("browser.action.onClicked.addListener");
-    expect(background).not.toContain("opensPanelDirectlyFromActionUrl");
-    expect(background).toContain("const panelOpening = sidePanel?.open");
-    expect(
-      background.indexOf("const panelOpening = sidePanel?.open"),
-    ).toBeLessThan(background.indexOf("await browser.scripting.insertCSS"));
-    const actionHandler = background.slice(
-      background.indexOf("async function openPanelForActiveTab"),
-      background.indexOf("async function checkOpenPage"),
-    );
-    expect(actionHandler.indexOf("const panelOpening")).toBeLessThan(
-      actionHandler.search(/^\s*await /m),
-    );
-    expect(actionHandler.match(/sidePanel\?\.open\(/g)).toHaveLength(1);
-    expect(
-      actionHandler.indexOf("isSupportedSiteUrl(tab.url)"),
-    ).toBeGreaterThan(actionHandler.indexOf("await Promise.all"));
-    expect(actionHandler).toMatch(
-      /if \(isSupportedSiteUrl\(tab.url\)\) \{\s*const target/,
-    );
-    expect(actionHandler).not.toContain("enabled: false");
-    expect(
-      actionHandler.indexOf("SIDE_PANEL_CONTROL.setPanelTab"),
-    ).toBeGreaterThan(actionHandler.indexOf("await readFilterContext(tab.id)"));
-    expect(background).toContain("sidePanel?.setOptions({ enabled: false })");
-    expect(background).not.toContain("browser.runtime.onInstalled.addListener");
-    expect(background).toContain("isSupportedSiteUrl(tab.url)");
-    expect(background).toContain("browser.scripting.executeScript");
-    expect(background).toContain("FILTER_CONTEXT_REQUEST");
-    expect(background).toContain("readFilterContext(tab.id)");
-    expect(background).toContain("FILTER_CONTEXT_RETRY_COUNT");
-    expect(background).toContain("sidePanel?.onOpened.addListener");
-    expect(background).toContain("SIDE_PANEL_CONTROL.setPanelTab");
-    expect(background).toContain("path: sidePanelPath(tab.id)");
-    expect(content).toContain("defineUnlistedScript");
-    expect(background).not.toContain("openOptionsPage");
-  });
-
   it("ページ上に操作UIを追加しない", () => {
     const content = readEntrypoint("utils/content-runtime.ts");
-    const sidepanel = readEntrypoint("entrypoints/sidepanel/sidepanel-app.tsx");
+    const sidepanel = readPanelSource();
 
     expect(content).not.toContain("siftEmptyState");
     expect(content).not.toContain('createElement("button")');
@@ -128,7 +96,7 @@ describe("抽出の操作入口", () => {
 
   it("連続読み込みは停止せずサイドパネルから解除できる", () => {
     const content = readEntrypoint("utils/content-runtime.ts");
-    const sidepanel = readEntrypoint("entrypoints/sidepanel/sidepanel-app.tsx");
+    const sidepanel = readPanelSource();
 
     expect(content).toContain("continuousLoadingWarning");
     expect(content).not.toContain('adapter.id === "x"');
@@ -141,7 +109,7 @@ describe("抽出の操作入口", () => {
   });
 
   it("しきい値は全消ししてから直接打ち替えられる", () => {
-    const sidepanel = readEntrypoint("entrypoints/sidepanel/sidepanel-app.tsx");
+    const sidepanel = readPanelSource();
 
     expect(sidepanel).toContain('inputMode="numeric"');
     expect(sidepanel).toContain("event.currentTarget.select()");
@@ -152,7 +120,7 @@ describe("抽出の操作入口", () => {
   });
 
   it("最低値の数値入力はトグルを使わず選択する", () => {
-    const sidepanel = readEntrypoint("entrypoints/sidepanel/sidepanel-app.tsx");
+    const sidepanel = readPanelSource();
     const start = sidepanel.indexOf("function ThresholdSetting");
     const end = sidepanel.indexOf("function EditableNumberInput", start);
     const thresholdSetting = sidepanel.slice(start, end);
@@ -167,7 +135,7 @@ describe("抽出の操作入口", () => {
   });
 
   it("コンテンツタイプはすべてと各種類を一つのプルダウンで選ぶ", () => {
-    const sidepanel = readEntrypoint("entrypoints/sidepanel/sidepanel-app.tsx");
+    const sidepanel = readPanelSource();
     const start = sidepanel.indexOf("function MediaSetting");
     const mediaSetting = sidepanel.slice(start);
 
@@ -178,27 +146,17 @@ describe("抽出の操作入口", () => {
   });
 
   it("サイドパネルは所有タブに固定し、設定の操作入口を集約する", () => {
-    const background = readEntrypoint("entrypoints/background.ts");
-    const sidepanel = readEntrypoint("entrypoints/sidepanel/sidepanel-app.tsx");
+    const sidepanel = readPanelSource();
 
     expect(sidepanel).toContain("TIMELINE_CONTROL.setFiltering");
     expect(sidepanel).toContain("withSiteSettings");
-    expect(sidepanel).toContain("setActiveSite(site)");
+    expect(sidepanel).toContain("setSelectedSite(site)");
     expect(sidepanel).toContain("disabled={!filteringIsAvailable}");
     expect(sidepanel).toContain('data-sift-sidepanel=""');
     expect(sidepanel).toContain("browser.tabs.onActivated.addListener");
     expect(sidepanel).toContain("shouldEnableFiltering");
     expect(sidepanel).toContain("isSidePanelTabRequest(message)");
     expect(sidepanel).toContain("sidePanelTabIdFromUrl");
-    expect(background).toContain(
-      "const savedTab = browser.storage.session.set",
-    );
-    expect(
-      background.indexOf("const savedTab = browser.storage.session.set"),
-    ).toBeLessThan(background.indexOf("const panelOpening"));
-    expect(background).toContain(
-      "await Promise.all([savedTab, configured, panelOpening])",
-    );
     expect(sidepanel).toContain("message.tabId !== panelTabId.current");
     expect(sidepanel).toContain("pageFilteringExpected.current");
     expect(sidepanel).not.toContain("browser.runtime.openOptionsPage");
@@ -210,7 +168,7 @@ describe("抽出の操作入口", () => {
   });
 
   it("投稿形式の除外条件は折りたたまず常に表示する", () => {
-    const sidepanel = readEntrypoint("entrypoints/sidepanel/sidepanel-app.tsx");
+    const sidepanel = readPanelSource();
 
     expect(sidepanel).toContain('t("optionsHideReplies")');
     expect(sidepanel).toContain('t("optionsHideQuotes")');
@@ -224,7 +182,7 @@ describe("抽出の操作入口", () => {
   });
 
   it("指定なし・候補・数値入力の順に並べ集計説明を末尾に置く", () => {
-    const sidepanel = readEntrypoint("entrypoints/sidepanel/sidepanel-app.tsx");
+    const sidepanel = readPanelSource();
     expect(sidepanel.match(/<section data-minimum-group="">/g)).toHaveLength(1);
     expect(sidepanel.match(/<\/ReactionThresholdSuggestions>/g)).toHaveLength(
       1,
@@ -251,7 +209,7 @@ describe("抽出の操作入口", () => {
   });
 
   it("サイドパネルの絞り込み項目を一列に並べる", () => {
-    const sidepanel = readEntrypoint("entrypoints/sidepanel/sidepanel-app.tsx");
+    const sidepanel = readPanelSource();
     const marker = sidepanel.indexOf('data-filter-controls=""');
     const end = sidepanel.indexOf(
       "activeContext?.continuousLoadingWarning",
@@ -272,7 +230,7 @@ describe("抽出の操作入口", () => {
   });
 
   it("パネルから全サイト設定を確認付きで既定値へ戻せる", () => {
-    const sidepanel = readEntrypoint("entrypoints/sidepanel/sidepanel-app.tsx");
+    const sidepanel = readPanelSource();
 
     expect(sidepanel).not.toContain("window.confirm");
     expect(sidepanel).toContain("resetDialog.current?.showModal()");
@@ -290,7 +248,7 @@ describe("抽出の操作入口", () => {
 
   it("ページ内の検出結果からサイトを選ぶ", () => {
     const config = readEntrypoint("wxt.config.ts");
-    const sidepanel = readEntrypoint("entrypoints/sidepanel/sidepanel-app.tsx");
+    const sidepanel = readPanelSource();
 
     expect(config).toContain('"activeTab"');
     expect(sidepanel).toContain("context?.site ?? null");

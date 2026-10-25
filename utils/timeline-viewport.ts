@@ -18,13 +18,19 @@ export class TimelineViewport {
   private frame: number | null = null;
 
   private readonly adapter: ServiceAdapter;
+  private readonly unfiltered: boolean;
 
-  constructor(adapter: ServiceAdapter) {
+  constructor(adapter: ServiceAdapter, options: { unfiltered?: boolean } = {}) {
     this.adapter = adapter;
+    this.unfiltered = options.unfiltered ?? false;
   }
 
   private currentKey(): string | null {
-    return this.adapter.readTimelineKey?.(document, location) ?? null;
+    return (
+      this.adapter.readTimelineKey?.(document, location) ??
+      // パネルを開く操作の幅変更では、抽出対象外の画面も元の投稿へ合わせる。
+      (this.unfiltered ? this.currentRoute() : null)
+    );
   }
 
   private currentRoute(): string {
@@ -62,9 +68,20 @@ export class TimelineViewport {
     for (const card of this.adapter.getPostCards(document)) {
       const cell = this.adapter.findPostCell(card) as HTMLElement;
       if (cell.dataset.siftFilterState === "hidden") continue;
-      const { top, bottom, height } = cell.getBoundingClientRect();
+      const { top, bottom, left, right, height } = cell.getBoundingClientRect();
       const id = this.adapter.readPostId?.(card);
       if (id && height > 0 && bottom > 0 && top < window.innerHeight) {
+        if (this.unfiltered) {
+          const visibleLeft = Math.max(0, left);
+          const visibleRight = Math.min(window.innerWidth, right);
+          if (visibleRight <= visibleLeft) continue;
+          // 固定ヘッダーなどに覆われた投稿を、読んでいた投稿として選ばない。
+          const hit = document.elementFromPoint(
+            (visibleLeft + visibleRight) / 2,
+            (Math.max(0, top) + Math.min(window.innerHeight, bottom)) / 2,
+          );
+          if (!hit || !cell.contains(hit)) continue;
+        }
         anchors.push({ id, top });
       }
     }
@@ -109,7 +126,7 @@ export class TimelineViewport {
         const cell = this.adapter.findPostCell(card) as HTMLElement;
         // フィルター適用前の位置へ移動すると X が別の範囲を描画してしまう。
         if (
-          !cell.dataset.siftFilterState ||
+          (!this.unfiltered && !cell.dataset.siftFilterState) ||
           cell.dataset.siftFilterState === "hidden"
         )
           continue;

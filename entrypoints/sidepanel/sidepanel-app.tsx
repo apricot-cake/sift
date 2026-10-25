@@ -7,21 +7,9 @@ import {
   Quote,
   Repeat2,
 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
-import { browser } from "wxt/browser";
-import {
-  shouldDisablePreviousFiltering,
-  shouldEnableFiltering,
-} from "../../utils/filter-activation.ts";
-import {
-  FILTER_CONTEXT_REQUEST,
-  type FilterContextResponse,
-  isFilterContextResponse,
-} from "../../utils/filter-context.ts";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { t } from "../../utils/i18n.ts";
-import { checkPanelBuild } from "../../utils/local-build-reload.ts";
 import { metricThresholdSuggestions } from "../../utils/metric-threshold-suggestions.ts";
-import { isKnownUnsupportedSite } from "../../utils/panel-connection.ts";
 import {
   defaults,
   normalizeSettings,
@@ -32,12 +20,6 @@ import {
   withSiteSettings,
 } from "../../utils/settings.ts";
 import { settingsItem } from "../../utils/settings-storage.ts";
-import {
-  isSidePanelTabRequest,
-  SIDE_PANEL_CONTROL,
-  sidePanelTabIdFromUrl,
-} from "../../utils/sidepanel-controls.ts";
-import { TIMELINE_CONTROL } from "../../utils/timeline-controls.ts";
 import { Button } from "./components/ui/button.tsx";
 import { Card, CardContent } from "./components/ui/card.tsx";
 import { Input } from "./components/ui/input.tsx";
@@ -49,6 +31,7 @@ import {
   SelectValue,
 } from "./components/ui/select.tsx";
 import { Switch } from "./components/ui/switch.tsx";
+import { usePanelConnection } from "./use-panel-connection.ts";
 
 export function SidepanelApp(): React.JSX.Element {
   const resetDialog = useRef<HTMLDialogElement>(null);
@@ -59,41 +42,10 @@ export function SidepanelApp(): React.JSX.Element {
     normalizeSettings(defaults),
   );
   const [status, setStatus] = useState(t("optionsStatusLoading"));
-  const [activeContext, setActiveContext] =
-    useState<FilterContextResponse | null>(null);
-  const [activeSite, setActiveSite] = useState<SiteSettingsKey | null>(null);
-  const [knownUnsupportedSite, setKnownUnsupportedSite] = useState(false);
-  const [selectedSite, setSelectedSite] = useState<SiteSettingsKey>("x");
-  const followActiveContext = useRef(true);
   const settingsRef = useRef(settings);
-  const activePageRef = useRef<{
-    tabId: number;
-    pageKey: string;
-    url?: string;
-  } | null>(null);
-  const connectionEpoch = useRef(0);
-  const panelMounted = useRef(true);
-  const panelTabId = useRef(sidePanelTabIdFromUrl(location.href));
-  const panelInitialized = useRef(false);
-  const initializedMinimums = useRef(new Set<SiteSettingsKey>());
   const [manualSites, setManualSites] = useState<
     Partial<Record<SiteSettingsKey, boolean>>
   >({});
-  const [pageFilteringEnabled, setPageFilteringEnabled] = useState(false);
-  const pageFilteringExpected = useRef(false);
-
-  const runPanelAction = (action: () => void): void => {
-    const epoch = connectionEpoch.current;
-    void checkPanelBuild().then((current) => {
-      if (
-        current &&
-        panelMounted.current &&
-        epoch === connectionEpoch.current &&
-        document.visibilityState !== "hidden"
-      )
-        action();
-    });
-  };
 
   useEffect(() => {
     settingsRef.current = settings;
@@ -113,56 +65,30 @@ export function SidepanelApp(): React.JSX.Element {
     return settingsItem.watch(updateSettings);
   }, []);
 
-  useEffect(() => {
-    panelMounted.current = true;
-    return () => {
-      panelMounted.current = false;
-      connectionEpoch.current += 1;
-      const activePage = activePageRef.current;
-      if (activePage !== null) {
-        void browser.tabs
-          .sendMessage(activePage.tabId, {
-            type: TIMELINE_CONTROL.setFiltering,
-            enabled: false,
-          })
-          .catch(() => {});
-      }
-    };
-  }, []);
+  const clearManualMinimums = useCallback(() => setManualSites({}), []);
+  const {
+    activeContext,
+    activeSite,
+    knownUnsupportedSite,
+    selectedSite,
+    pageFilteringEnabled,
+    runPanelAction,
+    updateFiltering,
+    captureConnection,
+    restoreFiltering,
+  } = usePanelConnection({
+    onSettingsInitialized: setSettings,
+    onMinimumReset: clearManualMinimums,
+  });
 
   const saveSettings = (next: Settings): void => {
-    const epoch = connectionEpoch.current;
-    const page = activePageRef.current;
+    const connection = captureConnection();
     const normalized = normalizeSettings(next);
     settingsRef.current = normalized;
     setSettings(normalized);
     void settingsItem
       .setValue(normalized)
-      .then(async () => {
-        if (
-          !panelMounted.current ||
-          epoch !== connectionEpoch.current ||
-          document.visibilityState === "hidden" ||
-          page === null
-        )
-          return;
-        const [tab] = await browser.tabs.query({
-          active: true,
-          currentWindow: true,
-        });
-        const activePage = activePageRef.current;
-        if (
-          panelMounted.current &&
-          epoch === connectionEpoch.current &&
-          document.visibilityState === "visible" &&
-          tab?.id === page.tabId &&
-          tab.url === page.url &&
-          activePage?.tabId === page.tabId &&
-          activePage.pageKey === page.pageKey
-        ) {
-          updateFiltering(true);
-        }
-      })
+      .then(() => restoreFiltering(connection))
       .catch(() => setStatus(t("optionsErrorSaveFailed")));
   };
 
@@ -185,277 +111,11 @@ export function SidepanelApp(): React.JSX.Element {
     }
   };
 
-  useEffect(() => {
-    // 初回の設定初期化やフィルター有効化も、更新確認が終わるまで待つ。
-    // 定期的なページ情報取得では Native Host へ問い合わせない。
-    const openingBuild = checkPanelBuild();
-    let refreshGeneration = 0;
-    let activeRefresh: number | null = null;
-    let disposed = false;
-    let connectionAttempt: string | null = null;
-    const refreshActiveHost = async (forceSelection = false): Promise<void> => {
-      if (disposed) return;
-      if (forceSelection) connectionEpoch.current += 1;
-      if (document.visibilityState === "hidden") {
-        if (forceSelection) {
-          refreshGeneration += 1;
-          activeRefresh = null;
-        }
-        return;
-      }
-      // 定期取得は進行中の応答を待つ。接続先の変更だけが古い取得を無効にする。
-      if (!forceSelection && activeRefresh !== null) return;
-      const generation = ++refreshGeneration;
-      activeRefresh = generation;
-      const isCurrent = () =>
-        !disposed &&
-        generation === refreshGeneration &&
-        document.visibilityState !== "hidden";
-      try {
-        if (!(await openingBuild) || !isCurrent()) return;
-        const [tab] = await browser.tabs.query({
-          active: true,
-          currentWindow: true,
-        });
-        if (!isCurrent()) return;
-        if (panelTabId.current !== tab?.id) {
-          return;
-        }
-        setKnownUnsupportedSite(isKnownUnsupportedSite(tab?.url));
-        const panelTabMatches = panelTabId.current === tab?.id;
-        let context: FilterContextResponse | null = null;
-        if (tab?.id !== undefined) {
-          context = await browser.tabs
-            .sendMessage(tab.id, { type: FILTER_CONTEXT_REQUEST })
-            .then((response) =>
-              isFilterContextResponse(response) ? response : null,
-            )
-            .catch(() => null);
-          if (!isCurrent()) return;
-          const attemptKey = `${tab.id}:${tab.url ?? ""}`;
-          if (
-            context === null &&
-            connectionAttempt !== attemptKey &&
-            !isKnownUnsupportedSite(tab.url)
-          ) {
-            connectionAttempt = attemptKey;
-            await browser.runtime
-              .sendMessage({
-                type: SIDE_PANEL_CONTROL.connectTab,
-                tabId: tab.id,
-              })
-              .catch(() => {});
-            if (!isCurrent()) return;
-            context = await browser.tabs
-              .sendMessage(tab.id, { type: FILTER_CONTEXT_REQUEST })
-              .then((response) =>
-                isFilterContextResponse(response) ? response : null,
-              )
-              .catch(() => null);
-          }
-          if (!isCurrent()) return;
-          if (context !== null) connectionAttempt = null;
-        }
-        const [currentTab] = await browser.tabs.query({
-          active: true,
-          currentWindow: true,
-        });
-        if (
-          !isCurrent() ||
-          currentTab?.id !== tab?.id ||
-          currentTab?.url !== tab?.url
-        ) {
-          return;
-        }
-        if (tab?.id !== undefined) {
-          const closed = await browser.runtime
-            .sendMessage({
-              type: SIDE_PANEL_CONTROL.checkPage,
-              tabId: tab.id,
-            })
-            .catch(() => false);
-          if (!isCurrent() || closed === true) return;
-        }
-        const nextPage =
-          tab?.id !== undefined && context?.timelineAvailable
-            ? { tabId: tab.id, pageKey: context.pageKey, url: tab.url }
-            : null;
-        const previousPage = activePageRef.current;
-        const pageChanged =
-          previousPage !== null &&
-          (nextPage === null ||
-            previousPage.tabId !== nextPage.tabId ||
-            previousPage.pageKey !== nextPage.pageKey);
-        if (
-          previousPage !== null &&
-          shouldDisablePreviousFiltering({
-            pageChanged,
-            previousTabId: previousPage.tabId,
-            nextTabId: nextPage?.tabId ?? null,
-          })
-        ) {
-          void browser.tabs
-            .sendMessage(previousPage.tabId, {
-              type: TIMELINE_CONTROL.setFiltering,
-              enabled: false,
-            })
-            .catch(() => {});
-        }
-        if (
-          context !== null &&
-          !initializedMinimums.current.has(context.site)
-        ) {
-          try {
-            const stored = normalizeSettings(await settingsItem.getValue());
-            const [activeTab] = await browser.tabs.query({
-              active: true,
-              currentWindow: true,
-            });
-            if (
-              !isCurrent() ||
-              activeTab?.id !== tab?.id ||
-              activeTab?.url !== tab?.url
-            ) {
-              return;
-            }
-            const siteSettings = settingsFor(stored, context.site);
-            const next = withSiteSettings(stored, context.site, {
-              ...siteSettings,
-              minReactionsEnabled: false,
-            });
-            initializedMinimums.current.add(context.site);
-            await settingsItem.setValue(next);
-            const [savedTab] = await browser.tabs.query({
-              active: true,
-              currentWindow: true,
-            });
-            if (
-              !isCurrent() ||
-              savedTab?.id !== tab?.id ||
-              savedTab?.url !== tab?.url
-            )
-              return;
-            setSettings(next);
-          } catch (error) {
-            if (isCurrent()) initializedMinimums.current.delete(context.site);
-            throw error;
-          }
-        }
-        const enableFiltering = shouldEnableFiltering({
-          contentFilteringEnabled: context?.filteringEnabled ?? false,
-          hasNextPage: nextPage !== null,
-          panelTabMatches,
-          panelExpectedFiltering: pageFilteringExpected.current,
-          panelInitialized: panelInitialized.current,
-        });
-        if (enableFiltering && nextPage !== null) {
-          void browser.tabs
-            .sendMessage(nextPage.tabId, {
-              type: TIMELINE_CONTROL.setFiltering,
-              enabled: true,
-            })
-            .catch(() => {});
-          pageFilteringExpected.current = true;
-          setPageFilteringEnabled(true);
-        } else if (nextPage === null) {
-          // 未接続や対象外ページへの一時的な遷移では、ユーザーの設定を変えない。
-          setPageFilteringEnabled(false);
-        } else {
-          pageFilteringExpected.current = context?.filteringEnabled ?? false;
-          setPageFilteringEnabled(context?.filteringEnabled ?? false);
-        }
-        if (nextPage !== null) {
-          panelInitialized.current = true;
-        }
-        activePageRef.current = nextPage;
-        setActiveContext(context);
-        const site = context?.site ?? null;
-        setActiveSite(site);
-        if (site !== null && (forceSelection || followActiveContext.current)) {
-          followActiveContext.current = true;
-          setSelectedSite(site);
-        }
-      } catch {
-      } finally {
-        if (activeRefresh === generation) activeRefresh = null;
-      }
-    };
-
-    const handleTabActivated = () => void refreshActiveHost(true);
-    const handleTabUpdated = (
-      tabId: number,
-      changeInfo: Browser.tabs.OnUpdatedInfo,
-    ): void => {
-      if (
-        tabId === panelTabId.current &&
-        (changeInfo.url !== undefined || changeInfo.status === "loading")
-      ) {
-        void refreshActiveHost(true);
-      }
-    };
-    const handlePanelTab = (message: unknown): void => {
-      if (
-        !isSidePanelTabRequest(message) ||
-        message.tabId !== panelTabId.current
-      ) {
-        return;
-      }
-      if (message.resetMinimum === true) {
-        initializedMinimums.current.clear();
-        setManualSites({});
-      }
-      void refreshActiveHost(true);
-    };
-    void refreshActiveHost(true);
-    const handleVisibility = () => void refreshActiveHost(true);
-    document.addEventListener("visibilitychange", handleVisibility);
-    const contextTimer = window.setInterval(() => {
-      void refreshActiveHost();
-    }, 750);
-    browser.tabs.onActivated.addListener(handleTabActivated);
-    browser.tabs.onUpdated.addListener(handleTabUpdated);
-    browser.runtime.onMessage.addListener(handlePanelTab);
-    return () => {
-      disposed = true;
-      refreshGeneration += 1;
-      browser.tabs.onActivated.removeListener(handleTabActivated);
-      browser.tabs.onUpdated.removeListener(handleTabUpdated);
-      browser.runtime.onMessage.removeListener(handlePanelTab);
-      document.removeEventListener("visibilitychange", handleVisibility);
-      window.clearInterval(contextTimer);
-    };
-  }, []);
-
   const selectedSettings = settingsFor(settings, selectedSite);
   const manualActive = manualSites[selectedSite] === true;
   const manualMinimum =
     selectedSettings.manualMinimum ?? selectedSettings.minReactions;
   const filteringEnabled = pageFilteringEnabled;
-
-  const updateFiltering = (enabled: boolean): void => {
-    const epoch = connectionEpoch.current;
-    const activePage = activePageRef.current;
-    if (activePage === null) {
-      return;
-    }
-    pageFilteringExpected.current = enabled;
-    setPageFilteringEnabled(enabled);
-    void browser.tabs
-      .sendMessage(activePage.tabId, {
-        type: TIMELINE_CONTROL.setFiltering,
-        enabled,
-      })
-      .catch(() => {
-        if (
-          !panelMounted.current ||
-          epoch !== connectionEpoch.current ||
-          activePageRef.current?.pageKey !== activePage.pageKey
-        )
-          return;
-        pageFilteringExpected.current = false;
-        setPageFilteringEnabled(false);
-      });
-  };
 
   const saveSiteSettings = (
     site: SiteSettingsKey,

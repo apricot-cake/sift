@@ -1,29 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
-  isSidePanelConfigureRequest,
   isSidePanelTabId,
   isSidePanelTabRequest,
   SIDE_PANEL_CONTROL,
   sidePanelTabIdFromUrl,
 } from "./sidepanel-controls.ts";
-
-describe("サイドパネルの初期化要求", () => {
-  it("対応ページが送る要求だけを受け入れる", () => {
-    expect(
-      isSidePanelConfigureRequest({
-        type: SIDE_PANEL_CONTROL.configureForTab,
-        available: true,
-      }),
-    ).toBe(true);
-    expect(isSidePanelConfigureRequest({ type: "unknown" })).toBe(false);
-    expect(
-      isSidePanelConfigureRequest({
-        type: SIDE_PANEL_CONTROL.configureForTab,
-      }),
-    ).toBe(false);
-    expect(isSidePanelConfigureRequest(null)).toBe(false);
-  });
-});
 
 describe("サイドパネルを開くタブの通知", () => {
   it("所有タブは正確なパネルURLの単一tabIdから取得する", () => {
@@ -40,7 +21,7 @@ describe("サイドパネルを開くタブの通知", () => {
     ])
       expect(sidePanelTabIdFromUrl(url)).toBeNull();
   });
-  it("session storage から読むタブ IDも検証する", () => {
+  it("通知に含むタブ IDも検証する", () => {
     expect(isSidePanelTabId(0)).toBe(true);
     expect(isSidePanelTabId(123)).toBe(true);
     expect(isSidePanelTabId(-1)).toBe(false);

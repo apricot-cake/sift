@@ -1,12 +1,8 @@
 export const SIDE_PANEL_CONTROL = {
   connectTab: "sift:sidepanel-connect-tab",
-  configureForTab: "sift:sidepanel-configure-for-tab",
   setPanelTab: "sift:sidepanel-set-panel-tab",
   checkPage: "sift:sidepanel-check-page",
 } as const;
-
-// background が最後に開いたタブを記録する。各パネルの所有者はURLで確定する。
-export const SIDE_PANEL_TAB_STORAGE_KEY = "sift:sidepanel-tab-id";
 
 export const sidePanelPath = (tabId: number): string =>
   `sidepanel.html?tabId=${tabId}`;
@@ -25,9 +21,6 @@ export function sidePanelTabIdFromUrl(url: string): number | null {
   }
 }
 
-export const sidePanelOriginKey = (tabId: number): string =>
-  `sift:sidepanel-origin:${tabId}`;
-
 // activeTab の許可と同じ境界で判定する。パス・クエリの変更は同じサイト。
 export function sidePanelOrigin(url: string | undefined): string | null {
   if (!url) return null;
@@ -43,26 +36,10 @@ export function isSidePanelTabId(value: unknown): value is number {
   return Number.isInteger(value) && (value as number) >= 0;
 }
 
-export interface SidePanelConfigureRequest {
-  readonly type: typeof SIDE_PANEL_CONTROL.configureForTab;
-  readonly available: boolean;
-}
-
 export interface SidePanelTabRequest {
   readonly type: typeof SIDE_PANEL_CONTROL.setPanelTab;
   readonly tabId: number;
   readonly resetMinimum?: boolean;
-}
-
-export function isSidePanelConfigureRequest(
-  value: unknown,
-): value is SidePanelConfigureRequest {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    (value as { type?: unknown }).type === SIDE_PANEL_CONTROL.configureForTab &&
-    typeof (value as { available?: unknown }).available === "boolean"
-  );
 }
 
 export function isSidePanelTabRequest(

@@ -12,6 +12,12 @@ import {
   releaseCasePage,
 } from "./live.ts";
 import type { LiveCase } from "./live-case.ts";
+import {
+  assertPanelScrollAnchor,
+  narrowPanelWindow,
+  readPanelScrollAnchor,
+  scrollToPanelAnchor,
+} from "./panel-scroll.ts";
 import { changeXSearch } from "./x-navigation.ts";
 export function createUnsupportedCases(): LiveCase[] {
   const entries: LiveCase[] = [];
@@ -26,6 +32,8 @@ export function createUnsupportedCases(): LiveCase[] {
         page.setDefaultNavigationTimeout(30000);
         let healthy = false;
         let cleanupError: unknown;
+        let restoreWindow: (() => Promise<void>) | undefined;
+        let scrollAnchor: { id: string; top: number } | undefined;
         try {
           await page.bringToFront();
           const navigationUrl = new URL(target.url);
@@ -241,7 +249,49 @@ export function createUnsupportedCases(): LiveCase[] {
           }
           {
             await assertLivePage(session, page);
+            if (target.id === "unsupported-x-recommended") {
+              await expect
+                .poll(
+                  () =>
+                    page.$$eval(
+                      'article[data-testid="tweet"]',
+                      (nodes) => nodes.length,
+                    ),
+                  { timeout: 30000 },
+                )
+                .toBeGreaterThan(0);
+              // 初回権限取得に伴う準備開閉を、位置を記録する前に済ませる。
+              await openPanel(session, page);
+              await closePanel(session, page);
+              restoreWindow = await narrowPanelWindow(page);
+              scrollAnchor = await scrollToPanelAnchor(page);
+              await evidence(task, "panel-scroll-before", {
+                body: JSON.stringify({
+                  anchor: scrollAnchor,
+                  viewport: await page.evaluate(() => ({
+                    width: innerWidth,
+                    scrollY,
+                  })),
+                }),
+                contentType: "application/json",
+              });
+            }
             const panel = await openPanel(session, page);
+            if (scrollAnchor) {
+              await assertPanelScrollAnchor(page, scrollAnchor);
+              await evidence(task, "panel-scroll-after", {
+                body: JSON.stringify({
+                  before: scrollAnchor,
+                  after: await readPanelScrollAnchor(page, scrollAnchor.id),
+                  viewport: await page.evaluate(() => ({
+                    width: innerWidth,
+                    scrollY,
+                  })),
+                  tolerance: 2,
+                }),
+                contentType: "application/json",
+              });
+            }
             await expect
               .poll(() =>
                 visible(
@@ -308,6 +358,8 @@ export function createUnsupportedCases(): LiveCase[] {
                   url: location.href,
                   title: document.title,
                   readyState: document.readyState,
+                  scrollY,
+                  width: innerWidth,
                   activeHref: document.activeElement?.getAttribute("href"),
                   selectedTabs: [
                     ...document.querySelectorAll('a[role="tab"]'),
@@ -322,6 +374,17 @@ export function createUnsupportedCases(): LiveCase[] {
                     label: node.getAttribute("aria-label"),
                   })),
                 })),
+              ...(scrollAnchor
+                ? {
+                    "failure-panel-scroll": async () => ({
+                      before: scrollAnchor,
+                      after: await readPanelScrollAnchor(
+                        page,
+                        scrollAnchor?.id,
+                      ),
+                    }),
+                  }
+                : {}),
             },
             (name, data) =>
               evidence(task, name, {
@@ -336,7 +399,14 @@ export function createUnsupportedCases(): LiveCase[] {
             healthy = false;
             cleanupError = error;
           } finally {
-            await releaseCasePage(session, entry, healthy);
+            try {
+              await restoreWindow?.();
+            } catch (error) {
+              healthy = false;
+              cleanupError ??= error;
+            } finally {
+              await releaseCasePage(session, entry, healthy);
+            }
           }
         }
         if (cleanupError) throw cleanupError;
