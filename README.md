@@ -5,7 +5,7 @@ X・Blueskyでイラストを探すための Chrome 拡張機能です。いつ�
 ## 操作デモ
 
 <!-- markdownlint-disable-next-line MD034 -->
-https://github.com/user-attachments/assets/2ac922db-83f5-4410-9c4c-a248d79ce8b8
+https://github.com/user-attachments/assets/b9c5caee-4175-4827-8937-a3745a412ff2
 
 権利上の理由から、実際のサービス画面ではなく、架空の投稿を使った再現画面です。
 
