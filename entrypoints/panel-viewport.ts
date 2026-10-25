@@ -1,5 +1,5 @@
 import { selectAdapter } from "../utils/adapters/index.ts";
-import { TimelineViewport } from "../utils/timeline-viewport.ts";
+import { PanelViewport } from "../utils/panel-viewport.ts";
 
 const VIEWPORT_KEY = "__siftPanelViewport__";
 const NAVIGATION_KEYS = new Set([
@@ -19,11 +19,10 @@ export default defineUnlistedScript(() => {
   };
   scope[VIEWPORT_KEY]?.();
   const adapter = selectAdapter(location.hostname);
-  if (!adapter?.readPostId || adapter.isTimelineAvailable(document, location))
-    return;
+  if (!adapter?.readPostId) return;
 
-  const viewport = new TimelineViewport(adapter, { unfiltered: true });
-  viewport.update();
+  const viewport = new PanelViewport(adapter);
+  viewport.capture();
   const handleResize = () => viewport.resize();
   const handleNavigation = (event: Event) => {
     if (

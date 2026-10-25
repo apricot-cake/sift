@@ -2,6 +2,13 @@
 // 要素が投稿で、判定の入力がそれぞれどこに書かれているか。判定そのものは
 // filter-core.ts にあり、全サービスで共有している。
 import { parseMetric } from "../filter-core.ts";
+import {
+  type CollectedPost,
+  canonicalPostUrl,
+  postImages,
+  postMetric,
+  postText,
+} from "../panel-post.ts";
 import { collectMetricCards } from "./metric-cards.ts";
 import type { ServiceAdapter } from "./types.ts";
 
@@ -33,9 +40,8 @@ const BLUESKY_SELECTORS = Object.freeze({
 });
 
 const BLUESKY_POST_ID = /\/profile\/([^/]+)\/post\/([^/?#]+)/;
-const BLUESKY_FEED_END_TEXT = /^(?:End of feed|フィードの終わり)$/;
 
-// sift が隠したカード自身は読み直す。サイトが退避した画面・タブは読まない。
+// サイトが退避した画面・タブは読まない。
 function hasHiddenAncestor(element: Element): boolean {
   let parent = element.parentElement;
   while (parent) {
@@ -88,11 +94,72 @@ function readablePostCards(root: ParentNode): Element[] {
   );
 }
 
+function isOwnPostNode(postCard: Element, node: Element): boolean {
+  let parent = node.parentElement;
+  while (parent && parent !== postCard) {
+    if (
+      parent.matches(BLUESKY_SELECTORS.postCard) ||
+      (parent.matches('div[role="link"]') &&
+        (parent.querySelector(BLUESKY_SELECTORS.userAvatar) ||
+          parent.querySelector(BLUESKY_SELECTORS.postLink)))
+    )
+      return false;
+    parent = parent.parentElement;
+  }
+  return parent === postCard;
+}
+
 // `:` の注釈ではなく `satisfies`。理由は x.ts を参照。
 export const blueskyAdapter = Object.freeze({
   id: "bluesky",
   matches: Object.freeze(["https://bsky.app/*"]),
   settingsKey: "bluesky",
+  readPost(postCard: Element): CollectedPost | null {
+    const link = Array.from(
+      postCard.querySelectorAll(BLUESKY_SELECTORS.postLink),
+    ).find((node) => isOwnPostNode(postCard, node));
+    const href = link?.getAttribute("href");
+    const url = href ? canonicalPostUrl(href, "bluesky") : null;
+    if (!url) return null;
+    const match = BLUESKY_POST_ID.exec(url);
+    if (!match) return null;
+    const id = `${match[1]}:${match[2]}`;
+    if (id.length > 1_000) return null;
+    const actor = match[1] ?? "";
+    const names = Array.from(
+      postCard.querySelectorAll(BLUESKY_SELECTORS.profileLink),
+    )
+      .filter(
+        (node) =>
+          isOwnPostNode(postCard, node) &&
+          node.getAttribute("href")?.replace(/\/$/, "") === `/profile/${actor}`,
+      )
+      .map((node) => postText(node.textContent, 100))
+      .filter(Boolean);
+    const handle = names.find((name) => name.startsWith("@")) ?? `@${actor}`;
+    const text = Array.from(
+      postCard.querySelectorAll('[data-testid="postText"]'),
+    ).find((node) => isOwnPostNode(postCard, node));
+    const images = Array.from(
+      postCard.querySelectorAll<HTMLImageElement>(BLUESKY_SELECTORS.image),
+    ).filter((node) => isOwnPostNode(postCard, node));
+    return {
+      id,
+      url,
+      author: postText(
+        names.find((name) => !name.startsWith("@")) ?? handle,
+        100,
+      ),
+      handle: postText(handle, 100),
+      text: postText(text?.textContent, 500),
+      images: postImages(images),
+      metricCount: postMetric(this.readMetricCount(postCard)),
+      ...this.readMedia(postCard),
+      isReply: this.readIsReply(postCard),
+      isQuote: this.readIsQuote(postCard),
+      isRepost: this.readIsRepost(postCard),
+    };
+  },
   readPageSupport(
     root: ParentNode,
     page: Pick<Location, "pathname"> & Partial<Pick<Location, "search">>,
@@ -121,7 +188,7 @@ export const blueskyAdapter = Object.freeze({
   hasEmptyTimeline(root: ParentNode) {
     return [
       ...root.querySelectorAll(
-        '[data-testid="postsFeed-flatlist"] [dir="auto"], [data-testid="searchScreen"] [dir="auto"]',
+        `${BLUESKY_SELECTORS.postsFeed} [dir="auto"], [data-testid="searchScreen"] [dir="auto"]`,
       ),
     ].some((e) =>
       /^(まだ投稿がありません|投稿がありません|検索結果がありません|No posts yet|No posts found|No results found)[。.!]?$/.test(
@@ -129,7 +196,6 @@ export const blueskyAdapter = Object.freeze({
       ),
     );
   },
-  needsLayoutProbeForPagination: true,
 
   readTimelineKey(
     root: ParentNode,
@@ -143,19 +209,6 @@ export const blueskyAdapter = Object.freeze({
       page.pathname === "/" ? BLUESKY_SELECTORS.homeTab : '[role="tab"]',
     );
     return `${page.pathname}${page.search}:${tab?.getAttribute("data-testid") ?? ""}:${tab?.textContent ?? ""}`;
-  },
-
-  hasReachedTimelineEnd(root: ParentNode) {
-    const feed = Array.from(
-      root.querySelectorAll(BLUESKY_SELECTORS.postsFeed),
-    ).find((item) => !hasHiddenAncestor(item));
-    if (!feed) {
-      return false;
-    }
-
-    return Array.from(feed.querySelectorAll('div[dir="auto"]')).some((item) =>
-      BLUESKY_FEED_END_TEXT.test(item.textContent?.trim() ?? ""),
-    );
   },
 
   getMetricPostCards(root: ParentNode, limit?: number) {
@@ -216,8 +269,7 @@ export const blueskyAdapter = Object.freeze({
     );
   },
 
-  // 隠される単位。X と違い Bluesky は区切り線と余白をカードの内側に持つので、
-  // 外側のセルを探しに行く必要が無い。
+  // 幅変更前後の位置は、区切り線と余白を含むカード自体を基準にする。
   findPostCell(postCard: Element) {
     return postCard;
   },
@@ -279,7 +331,11 @@ export const blueskyAdapter = Object.freeze({
     // 引用カードはリンクの役割を持つ div で、引用元のアバターを内包する。
     // 外部リンクカードは a 要素なので、サムネイル付きリンクとは混同しない。
     return Array.from(content.querySelectorAll('div[role="link"]')).some(
-      (link) => Boolean(link.querySelector(BLUESKY_SELECTORS.userAvatar)),
+      (link) =>
+        Boolean(
+          link.querySelector(BLUESKY_SELECTORS.userAvatar) ||
+            link.querySelector(BLUESKY_SELECTORS.postLink),
+        ),
     );
   },
 

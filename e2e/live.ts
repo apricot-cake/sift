@@ -102,7 +102,7 @@ export async function connectLive(): Promise<LiveSession> {
 export async function finishLive(session: LiveSession) {
   try {
     for (const dispose of session.panelObservers ?? []) await dispose();
-    // 退避した強い条件を実サイトへ再適用して追加取得を起こさない。
+    // 設定を戻す前に、検証用のページと収集元を閉じる。
     if (session.casePage) {
       await session.casePage.page.close();
       session.casePage = undefined;

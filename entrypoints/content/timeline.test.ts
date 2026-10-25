@@ -1,981 +1,335 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { fakeBrowser } from "wxt/testing/fake-browser";
-import { ContentScriptContext } from "wxt/utils/content-script-context";
 import { blueskyAdapter } from "../../utils/adapters/bluesky.ts";
 import { xAdapter } from "../../utils/adapters/x.ts";
 import { startContentRuntime } from "../../utils/content-runtime.ts";
 import {
-  FILTER_CONTEXT_METRIC_LIMIT,
   FILTER_CONTEXT_REQUEST,
   type FilterContextResponse,
+  isFilterContextResponse,
 } from "../../utils/filter-context.ts";
-import { defaults } from "../../utils/settings.ts";
-import { TIMELINE_CONTROL } from "../../utils/timeline-controls.ts";
+import { POST_COLLECTION_LIMIT } from "../../utils/panel-post.ts";
+import { defaults, type SiteSettings } from "../../utils/settings.ts";
+import { settingsItem } from "../../utils/settings-storage.ts";
 
-const timelineMarkup = `
-  <div data-testid="cellInnerDiv">
-    <article data-testid="tweet">
-      <div data-testid="tweetPhoto"></div>
-      <button data-testid="like" aria-label="1,100 件のいいね"></button>
-      <time datetime="2026-08-01T12:00:00.000Z"></time>
-    </article>
-  </div>
-`;
-
-function xPostMarkup(
-  id: string,
-  likes = 0,
-  hasThreadConnector = false,
-): string {
-  return `
-    <div data-testid="cellInnerDiv">
-      <article data-testid="tweet">
-        ${hasThreadConnector ? '<div><div data-testid="Tweet-User-Avatar"></div><div data-thread-connector></div></div>' : ""}
-        <a href="/example/status/${id}">
-          <time datetime="2026-08-01T12:00:00.000Z"></time>
-        </a>
-        <button data-testid="like" aria-label="${likes} likes"></button>
-      </article>
-    </div>
-  `;
+let runtime: ReturnType<typeof startContentRuntime> | undefined;
+function post(id: string, likes: number | null = 100): string {
+  return `<div data-testid="cellInnerDiv"><article data-testid="tweet"><a href="/example/status/${id}"><time datetime="2026-10-25T00:00:00Z">時刻</time></a><div data-testid="tweetText">投稿${id}</div>${likes === null ? "" : `<button data-testid="like" aria-label="${likes} likes"></button>`}</article></div>`;
 }
-
-beforeEach(() => {
+async function settings(patch: Partial<SiteSettings> = {}) {
+  await settingsItem.setValue({
+    siteSettings: {
+      ...defaults.siteSettings,
+      x: {
+        ...defaults.siteSettings.x,
+        minReactionsEnabled: false,
+        hideReposts: false,
+        ...patch,
+      },
+    },
+  });
+}
+async function context(reset = false): Promise<FilterContextResponse> {
+  const [value] = await fakeBrowser.runtime.onMessage.trigger(
+    { type: FILTER_CONTEXT_REQUEST, ...(reset ? { reset: true } : {}) },
+    {},
+    () => {},
+  );
+  expect(isFilterContextResponse(value)).toBe(true);
+  return value as unknown as FilterContextResponse;
+}
+beforeEach(async () => {
   fakeBrowser.reset();
-  history.replaceState({}, "", "/example");
-  document.body.innerHTML = "";
+  history.replaceState({}, "", "/i/lists/42");
+  document.body.innerHTML = post("1");
+  await settings();
+});
+afterEach(() => {
+  runtime?.dispose();
+  runtime = undefined;
+  vi.restoreAllMocks();
 });
 
-async function setFiltering(enabled: boolean): Promise<void> {
-  await fakeBrowser.runtime.onMessage.trigger(
-    { type: TIMELINE_CONTROL.setFiltering, enabled },
-    {},
-    () => {},
-  );
-}
-
-async function getFilterContext(): Promise<FilterContextResponse> {
-  const [response] = await fakeBrowser.runtime.onMessage.trigger(
-    { type: FILTER_CONTEXT_REQUEST },
-    {},
-    () => {},
-  );
-  return response as unknown as FilterContextResponse;
-}
-
-function dispatchPageTransition(
-  type: "pagehide" | "pageshow",
-  persisted: boolean,
-): void {
-  const event = new Event(type) as PageTransitionEvent;
-  Object.defineProperty(event, "persisted", { value: persisted });
-  window.dispatchEvent(event);
-}
-
-function dispatchTrustedWheel(deltaY: number): void {
-  const event = new WheelEvent("wheel", { deltaY });
-  Object.defineProperty(event, "isTrusted", { value: true });
-  window.dispatchEvent(event);
-}
-
-describe("タイムラインのフィルター", () => {
-  it("X の画像ライトボックスでは背景のページキーを保ち、一覧キーを未確定として返す", async () => {
-    history.replaceState({}, "", "/example");
-    document.body.innerHTML = `<div data-testid="primaryColumn"><div role="tablist"><div role="tab" aria-selected="true">ポスト</div></div>${timelineMarkup}</div>`;
-    const runtime = startContentRuntime(
-      new ContentScriptContext("sift-test"),
-      xAdapter,
-    );
-    try {
-      const before = await getFilterContext();
-      expect(before).toMatchObject({
-        pageKey: `${location.origin}/example`,
-        timelineAvailable: true,
-      });
-      expect(before.timelineKey).toBeTypeOf("string");
-      document.body.insertAdjacentHTML(
-        "beforeend",
-        '<div role="dialog"></div>',
-      );
-      history.pushState(
-        { state: { fromApp: true, previousPath: "/example" } },
-        "",
-        "/example/status/100/photo/1",
-      );
-      expect(await getFilterContext()).toMatchObject({
-        pageKey: before.pageKey,
-        timelineKey: null,
-        timelineAvailable: true,
-      });
-      document.querySelector('[role="dialog"]')?.remove();
-      history.replaceState({}, "", "/example");
-      expect(await getFilterContext()).toMatchObject({
-        pageKey: before.pageKey,
-        timelineKey: before.timelineKey,
-        timelineAvailable: true,
-      });
-    } finally {
-      runtime.dispose();
-    }
+describe("元のページを変更しない投稿の収集", () => {
+  it("条件に合わない投稿も元のDOMには残し、パネルの応答だけを絞り込む", async () => {
+    document.body.innerHTML = post("1", 100) + post("2", 200);
+    const original = document.documentElement.outerHTML;
+    const scroll = vi.spyOn(window, "scrollBy");
+    runtime = startContentRuntime(undefined, xAdapter);
+    await settings({ minReactionsEnabled: true, minReactions: 150 });
+    expect((await context()).posts.map((p) => p.id)).toEqual(["2"]);
+    expect(document.documentElement.outerHTML).toBe(original);
+    expect(scroll).not.toHaveBeenCalled();
+    await settings({ minReactionsEnabled: false });
+    expect((await context()).posts.map((p) => p.id)).toEqual(["1", "2"]);
+    expect(document.documentElement.outerHTML).toBe(original);
   });
-  it("指標の取得失敗を0件と混同せず、実投稿の更新で復旧する", async () => {
-    document.body.innerHTML =
-      '<article data-testid="tweet"><button data-testid="renamed-like"></button></article>';
-    const clock = vi.spyOn(Date, "now").mockReturnValue(1000);
-    const runtime = startContentRuntime(
-      new ContentScriptContext("sift-test"),
-      xAdapter,
-    );
-    try {
-      expect((await getFilterContext()).health?.state).toBe("loading");
-      clock.mockReturnValue(10000);
-      expect((await getFilterContext()).health).toMatchObject({
-        state: "unreadable",
-        issue: "metrics",
-        sampledPosts: 1,
-      });
-      const button = document.querySelector("button");
-      if (!button) throw new Error("指標ボタンがありません");
-      button.setAttribute("data-testid", "like");
-      button.setAttribute("aria-label", "100 likes");
-      await vi.waitFor(async () =>
-        expect((await getFilterContext()).health?.state).toBe("ready"),
-      );
-    } finally {
-      runtime.dispose();
-      clock.mockRestore();
-    }
+  it("仮想リストから消えた投稿を保持し、同一IDの再描画は重複せず更新する", async () => {
+    runtime = startContentRuntime(undefined, xAdapter);
+    await context();
+    document.body.innerHTML = post("2", 200);
+    expect((await context()).posts.map((p) => p.id)).toEqual(["1", "2"]);
+    document.body.innerHTML = post("1", 300);
+    expect((await context()).posts.map((p) => [p.id, p.metricCount])).toEqual([
+      ["1", 300],
+      ["2", 200],
+    ]);
   });
-  it("静止中の再判定と問い合わせで投稿を読み直さず、指標の変更には追従する", async () => {
-    document.body.innerHTML = timelineMarkup;
-    const readMetricCount = vi.fn(xAdapter.readMetricCount);
-    const runtime = startContentRuntime(new ContentScriptContext("sift-test"), {
-      ...xAdapter,
-      readMetricCount,
+  it("蓄積済みでDOMから消えた投稿にも変更後の条件を適用する", async () => {
+    runtime = startContentRuntime(undefined, xAdapter);
+    await context();
+    document.body.innerHTML = post("2", 500);
+    await context();
+    await settings({ minReactionsEnabled: true, minReactions: 200 });
+    expect(await context()).toMatchObject({
+      collectedCount: 2,
+      metricSampleCount: 2,
+      metricCounts: [100, 500],
     });
-    try {
-      await setFiltering(true);
-      await vi.waitFor(() =>
-        expect(
-          document.querySelector("[data-sift-filter-state]"),
-        ).not.toBeNull(),
-      );
-      expect((await getFilterContext()).metricCounts).toEqual([1100]);
-      readMetricCount.mockClear();
-      await new Promise((resolve) => window.setTimeout(resolve, 900));
-      await getFilterContext();
-      await getFilterContext();
-      expect(readMetricCount).not.toHaveBeenCalled();
-
-      document
-        .querySelector("button")
-        ?.setAttribute("aria-label", "900 件のいいね");
-      await vi.waitFor(() => expect(readMetricCount).toHaveBeenCalled());
-      expect((await getFilterContext()).metricCounts).toEqual([900]);
-
-      document.body.insertAdjacentHTML("beforeend", xPostMarkup("new", 2000));
-      await vi.waitFor(async () =>
-        expect((await getFilterContext()).metricCounts).toEqual([900, 2000]),
-      );
-    } finally {
-      runtime.dispose();
-    }
+    expect((await context()).posts.map((p) => p.id)).toEqual(["2"]);
   });
-  it("パネル用の投稿走査と応答件数を上限内に収める", async () => {
-    const cards = Array.from(
-      { length: FILTER_CONTEXT_METRIC_LIMIT + 1 },
-      (_, index) => xPostMarkup(String(index), index),
-    ).join("");
-    document.body.innerHTML = cards;
-    const readMetricCount = vi.fn(xAdapter.readMetricCount);
-    const runtime = startContentRuntime(new ContentScriptContext("sift-test"), {
-      ...xAdapter,
-      readMetricCount,
-    });
-    try {
-      const context = await getFilterContext();
-      expect(context.metricSampleCount).toBe(FILTER_CONTEXT_METRIC_LIMIT);
-      expect(context.metricCounts).toHaveLength(FILTER_CONTEXT_METRIC_LIMIT);
-      expect(context.metricContextTruncated).toBe(true);
-      expect(readMetricCount).toHaveBeenCalledTimes(
-        FILTER_CONTEXT_METRIC_LIMIT + 32,
-      );
-    } finally {
-      runtime.dispose();
-    }
+  it("明示的に開き直した場合は現在のDOMから蓄積し直す", async () => {
+    runtime = startContentRuntime(undefined, xAdapter);
+    await context();
+    document.body.innerHTML = post("2");
+    expect((await context(true)).posts.map((p) => p.id)).toEqual(["2"]);
   });
-  it("指標を読めない投稿も、他条件に合う集計対象の投稿数に含める", async () => {
-    document.body.innerHTML = [
-      xPostMarkup("metric-known"),
-      xPostMarkup("metric-missing"),
-      xPostMarkup("another-metric-known"),
-      xPostMarkup("another-metric-missing"),
-      xPostMarkup("other-filter"),
-    ].join("");
-    const values = [
-      { metric: "100" },
-      { metric: "unknown" },
-      { metric: "200" },
-      { metric: "unknown" },
-      { metric: "300", excluded: "true" },
-    ];
-    [...document.querySelectorAll("article")].forEach((card, index) => {
-      Object.assign(card.dataset, values[index]);
-    });
-    const runtime = startContentRuntime(new ContentScriptContext("sift-test"), {
-      ...xAdapter,
-      readMetricCount: (card) => Number(card.getAttribute("data-metric")),
-      readIsRepost: (card) => card.hasAttribute("data-excluded"),
-    });
-    try {
-      expect(await getFilterContext()).toMatchObject({
-        metricSampleCount: 4,
-        metricCounts: [100, 200],
-        metricContextTruncated: false,
-      });
-    } finally {
-      runtime.dispose();
-    }
+  it("遅れた旧起動の初期化で、新しい起動後に収集した投稿を消さない", async () => {
+    const pending =
+      Promise.withResolvers<
+        Awaited<ReturnType<typeof settingsItem.getValue>>
+      >();
+    const get = settingsItem.getValue.bind(settingsItem);
+    vi.spyOn(settingsItem, "getValue").mockReturnValueOnce(pending.promise);
+    runtime = startContentRuntime(undefined, xAdapter);
+    const oldOpening = context(true);
+    await context(true);
+    document.body.innerHTML = post("2");
+    expect((await context()).posts.map((p) => p.id)).toEqual(["1", "2"]);
+    pending.resolve(await get());
+    await oldOpening;
+    expect((await context()).posts.map((p) => p.id)).toEqual(["1", "2"]);
   });
-  it("再評価で結果が変わらない投稿の属性を書き換えない", async () => {
-    document.body.innerHTML = timelineMarkup;
-    const runtime = startContentRuntime(
-      new ContentScriptContext("sift-test"),
-      xAdapter,
+  it("破棄済みの読み取りが遅れて完了しても収集を再開しない", async () => {
+    const pending =
+      Promise.withResolvers<
+        Awaited<ReturnType<typeof settingsItem.getValue>>
+      >();
+    vi.spyOn(settingsItem, "getValue").mockReturnValueOnce(pending.promise);
+    runtime = startContentRuntime(undefined, xAdapter);
+    const response = fakeBrowser.runtime.onMessage.trigger(
+      { type: FILTER_CONTEXT_REQUEST },
+      {},
+      () => {},
     );
-    const writes: MutationRecord[] = [];
-    const mutations = new MutationObserver((records) =>
-      writes.push(...records),
-    );
-    try {
-      await setFiltering(true);
-      await vi.waitFor(() =>
-        expect(
-          document.querySelector("[data-sift-filter-state]"),
-        ).not.toBeNull(),
-      );
-      mutations.observe(document.body, {
-        subtree: true,
-        attributes: true,
-        attributeFilter: ["data-sift-filter-state", "data-sift-filter-reason"],
-      });
-      document.querySelector("article")?.append(document.createElement("span"));
-      await new Promise((resolve) => window.setTimeout(resolve, 100));
-      expect(writes).toHaveLength(0);
-    } finally {
-      mutations.disconnect();
-      runtime.dispose();
-    }
-  });
-  it.each(["/i/lists/add_member", "/example/status/100/photo/1"])(
-    "%s への遷移でパネルが停止しても、戻った一覧の位置を復元する",
-    async (path) => {
-      history.replaceState({}, "", "/home");
-      document.body.innerHTML = `<div data-testid="ScrollSnap-List" role="tablist">
-        <div role="tab" aria-selected="false">おすすめ</div>
-        <div role="tab" aria-selected="false">フォロー中</div>
-        <div role="tab" aria-selected="true">リスト</div>
-      </div>${xPostMarkup("100", 1_100)}`;
-      let top = -30;
-      const cell = document.querySelector(
-        '[data-testid="cellInnerDiv"]',
-      ) as HTMLElement;
-      const rect = vi
-        .spyOn(cell, "getBoundingClientRect")
-        .mockImplementation(() => new DOMRect(0, top, 500, 300));
-      const scroll = vi
-        .spyOn(window, "scrollBy")
-        .mockImplementation((...args: unknown[]) => {
-          top -= (args[0] as ScrollToOptions).top ?? 0;
-        });
-      const runtime = startContentRuntime(
-        new ContentScriptContext("sift-test"),
-        xAdapter,
-      );
-      try {
-        await setFiltering(true);
-        await vi.waitFor(() =>
-          expect(cell.dataset.siftFilterState).toBe("matched"),
-        );
-        history.pushState({}, "", path);
-        await setFiltering(false);
-        top = 470;
-        history.pushState({}, "", "/home");
-        await setFiltering(true);
-        await vi.waitFor(() => expect(top).toBe(-30));
-      } finally {
-        runtime.dispose();
-        rect.mockRestore();
-        scroll.mockRestore();
-      }
-    },
-  );
-
-  it("拡張機能が無効になった後は監視を停止し、DOMを再変更しない", async () => {
-    document.body.innerHTML = timelineMarkup;
-    const runtime = startContentRuntime(
-      new ContentScriptContext("sift-test"),
-      xAdapter,
-    );
-    const descriptor = Object.getOwnPropertyDescriptor(
-      fakeBrowser.runtime,
-      "id",
-    );
-    try {
-      await setFiltering(true);
-      await vi.waitFor(() =>
-        expect(
-          document.querySelector("[data-sift-filter-state]"),
-        ).not.toBeNull(),
-      );
-      Object.defineProperty(fakeBrowser.runtime, "id", {
-        configurable: true,
-        value: undefined,
-      });
-      await vi.waitFor(() =>
-        expect(document.querySelector("[data-sift-filter-state]")).toBeNull(),
-      );
-      const cell = document.querySelector<HTMLElement>(
-        '[data-testid="cellInnerDiv"]',
-      );
-      if (!cell) throw new Error("投稿がない");
-      cell.dataset.siftFilterState = "hidden";
-      cell.append(document.createElement("span"));
-      await new Promise((resolve) => window.setTimeout(resolve, 850));
-      expect(cell.dataset.siftFilterState).toBe("hidden");
-    } finally {
-      if (descriptor)
-        Object.defineProperty(fakeBrowser.runtime, "id", descriptor);
-      runtime.dispose();
-    }
-  });
-  it("絞り込み中はセルフリプの接続線を隠す", async () => {
-    document.body.innerHTML = xPostMarkup("100", 1_100, true);
-    const runtime = startContentRuntime(
-      new ContentScriptContext("sift-test"),
-      xAdapter,
-    );
-    const connector = document.querySelector<HTMLElement>(
-      "[data-thread-connector]",
-    );
-    try {
-      await setFiltering(true);
-      await vi.waitFor(() => {
-        expect(
-          connector?.hasAttribute("data-sift-thread-connector-hidden"),
-        ).toBe(true);
-      });
-
-      await setFiltering(false);
-      await vi.waitFor(() => {
-        expect(
-          connector?.hasAttribute("data-sift-thread-connector-hidden"),
-        ).toBe(false);
-      });
-    } finally {
-      runtime.dispose();
-    }
-  });
-
-  it("ピン留めリストから開いた投稿は表示し、戻ると再び絞り込む", async () => {
-    history.replaceState({}, "", "/home");
-    document.body.innerHTML = `
-      <div data-testid="ScrollSnap-List" role="tablist">
-        <div role="tab" aria-selected="false">おすすめ</div>
-        <div role="tab" aria-selected="false">フォロー中</div>
-        <div role="tab" aria-selected="true">リスト</div>
-      </div>
-      ${xPostMarkup("100")}${xPostMarkup("200")}
-    `;
-    const runtime = startContentRuntime(
-      new ContentScriptContext("sift-test"),
-      xAdapter,
-    );
-    const cells = document.querySelectorAll<HTMLElement>(
-      '[data-testid="cellInnerDiv"]',
-    );
-    try {
-      await setFiltering(true);
-      await vi.waitFor(() => {
-        expect(cells[0]?.dataset.siftFilterState).toBe("hidden");
-        expect(cells[1]?.dataset.siftFilterState).toBe("hidden");
-      });
-
-      history.pushState({}, "", "/example/status/100");
-      await vi.waitFor(
-        () => {
-          expect(cells[0]?.dataset.siftFilterState).toBeUndefined();
-          expect(cells[1]?.dataset.siftFilterState).toBeUndefined();
-        },
-        { timeout: 2_000 },
-      );
-
-      history.pushState({}, "", "/quoted/status/200");
-      await vi.waitFor(
-        () => {
-          expect(cells[0]?.dataset.siftFilterState).toBeUndefined();
-          expect(cells[1]?.dataset.siftFilterState).toBeUndefined();
-        },
-        { timeout: 2_000 },
-      );
-
-      history.pushState({}, "", "/home");
-      await vi.waitFor(
-        () => {
-          expect(cells[0]?.dataset.siftFilterState).toBe("hidden");
-          expect(cells[1]?.dataset.siftFilterState).toBe("hidden");
-        },
-        { timeout: 2_000 },
-      );
-      expect((await getFilterContext()).filteringEnabled).toBe(true);
-    } finally {
-      runtime.dispose();
-    }
-  });
-
-  it("投稿を絞り込み、ページ上の操作UIは作らない", async () => {
-    document.body.innerHTML = timelineMarkup;
-    const runtime = startContentRuntime(
-      new ContentScriptContext("sift-test"),
-      xAdapter,
-    );
-    expect(document.querySelector("[data-sift-filter-state]")).toBeNull();
-    await setFiltering(true);
-
-    await vi.waitFor(() => {
-      expect(
-        document.querySelector<HTMLElement>("[data-sift-filter-state]"),
-      ).not.toBeNull();
-    });
-    expect(document.body.children).toHaveLength(1);
-
     runtime.dispose();
+    pending.resolve(defaults);
+    expect(await response).toEqual([undefined]);
   });
-
-  it("不一致投稿が続いてもフィルターを解除しない", async () => {
-    document.body.innerHTML = timelineMarkup;
-    const runtime = startContentRuntime(
-      new ContentScriptContext("sift-test"),
-      xAdapter,
-    );
-    await setFiltering(true);
+  it("別の一覧URLへ移ったら以前の投稿を混ぜない", async () => {
+    runtime = startContentRuntime(undefined, xAdapter);
+    await context();
+    history.replaceState({}, "", "/i/lists/43");
+    document.body.innerHTML = post("2");
+    expect((await context()).posts.map((p) => p.id)).toEqual(["2"]);
+  });
+  it("同じURLでも選択した一覧タブが変われば蓄積を初期化する", async () => {
+    history.replaceState({}, "", "/home");
+    const tabs =
+      '<div data-testid="ScrollSnap-List" role="tablist"><div role="tab" aria-selected="false">おすすめ</div><div role="tab" aria-selected="true">フォロー中</div><div role="tab" aria-selected="false">リスト</div></div>';
+    document.body.innerHTML = tabs + post("1");
+    runtime = startContentRuntime(undefined, xAdapter);
+    await context();
+    // 同じURLでタブバーの描き直しを挟んでも、直前に確定した一覧を忘れない。
+    document.body.innerHTML = post("1");
+    expect((await context()).timelineAvailable).toBe(false);
+    document.body.innerHTML = tabs + post("1");
+    const allTabs = document.querySelectorAll('[role="tab"]');
+    allTabs[1]?.setAttribute("aria-selected", "false");
+    allTabs[2]?.setAttribute("aria-selected", "true");
+    document.querySelector('[data-testid="cellInnerDiv"]')?.remove();
+    document.body.insertAdjacentHTML("beforeend", post("2"));
+    expect((await context()).posts.map((p) => p.id)).toEqual(["2"]);
+  });
+  it("画像モーダル内では背景の一覧キーと蓄積を保つ", async () => {
+    document.body.innerHTML = `<div data-testid="primaryColumn">${post("1")}</div>`;
+    runtime = startContentRuntime(undefined, xAdapter);
+    const first = await context();
     document.body.insertAdjacentHTML(
       "beforeend",
-      timelineMarkup.replace("1,100", "0").repeat(30),
+      `<div role="dialog">${post("99")}</div>`,
     );
-
-    await vi.waitFor(() => {
-      expect(
-        document.querySelectorAll('[data-sift-filter-state="hidden"]'),
-      ).toHaveLength(30);
+    history.pushState(
+      { state: { fromApp: true, previousPath: "/i/lists/42" } },
+      "",
+      "/example/status/1/photo/1",
+    );
+    const modal = await context();
+    expect(modal.pageKey).toBe(first.pageKey);
+    expect(modal.timelineKey).toBeNull();
+    expect(modal.posts.map((p) => p.id)).toEqual(["1"]);
+  });
+  it("対象外のおすすめでは投稿情報を収集しない", async () => {
+    history.replaceState({}, "", "/home");
+    document.body.insertAdjacentHTML(
+      "afterbegin",
+      '<div data-testid="ScrollSnap-List" role="tablist"><div role="tab" aria-selected="true">おすすめ</div><div role="tab" aria-selected="false">フォロー中</div></div>',
+    );
+    const read = vi.fn(xAdapter.readPost.bind(xAdapter));
+    runtime = startContentRuntime(undefined, { ...xAdapter, readPost: read });
+    expect(await context()).toMatchObject({
+      timelineAvailable: false,
+      posts: [],
+      collectedCount: 0,
     });
-    expect((await getFilterContext()).filteringEnabled).toBe(true);
-
-    runtime.dispose();
+    expect(read).not.toHaveBeenCalled();
   });
-
-  it("ユーザー操作なしの全件不一致取得が3回続いたら警告だけを出す", async () => {
-    document.body.innerHTML = xPostMarkup("baseline", 1_100);
-    const runtime = startContentRuntime(
-      new ContentScriptContext("sift-test"),
-      xAdapter,
-    );
-    await setFiltering(true);
-    await vi.waitFor(() => {
-      expect(
-        document.querySelector('[data-sift-filter-state="matched"]'),
-      ).not.toBeNull();
+  it("1,000件の上限を明示し、新規IDは追加せず既存の更新を反映する", async () => {
+    document.body.innerHTML = Array.from(
+      { length: POST_COLLECTION_LIMIT },
+      (_, i) => post(String(i + 1)),
+    ).join("");
+    runtime = startContentRuntime(undefined, xAdapter);
+    expect(await context()).toMatchObject({
+      collectedCount: POST_COLLECTION_LIMIT,
+      collectionTruncated: false,
     });
-
-    for (const id of ["1", "2", "3"]) {
-      document.body.insertAdjacentHTML("beforeend", xPostMarkup(id));
-      await new Promise((resolve) => window.setTimeout(resolve, 900));
-    }
-
-    const context = await getFilterContext();
-    expect(context.continuousLoadingWarning).toBe(true);
-    expect(context.filteringEnabled).toBe(true);
-    expect(
-      document.querySelectorAll('[data-sift-filter-state="hidden"]'),
-    ).toHaveLength(3);
-
-    runtime.dispose();
-  });
-
-  it("投稿のない画面には操作UIもフィルター状態も残さない", async () => {
-    document.body.innerHTML = '<div data-testid="primaryColumn">settings</div>';
-    const runtime = startContentRuntime(
-      new ContentScriptContext("sift-test"),
-      xAdapter,
-    );
-    await setFiltering(true);
-
-    await vi.waitFor(() => {
-      expect(document.querySelector("article")).toBeNull();
+    document.body.innerHTML = post("1", 500) + post("2000", 1000);
+    const limited = await context();
+    expect(limited.collectedCount).toBe(POST_COLLECTION_LIMIT);
+    expect(limited.collectionTruncated).toBe(true);
+    expect(limited.posts[0]?.metricCount).toBe(500);
+    expect(limited.posts.some((p) => p.id === "2000")).toBe(false);
+    expect(await context(true)).toMatchObject({
+      collectedCount: 2,
+      collectionTruncated: false,
     });
-    expect(document.body.children).toHaveLength(1);
-    expect(document.querySelector("[data-sift-filter-state]")).toBeNull();
-    expect(document.querySelector("[data-sift-empty-state]")).toBeNull();
-
-    runtime.dispose();
   });
-
-  it("Blueskyの空の専用リストでもページへUIを足さない", async () => {
-    history.replaceState({}, "", "/profile/alice.test/lists/abc");
-    document.body.innerHTML = '<div data-testid="homeScreen"></div>';
-    const runtime = startContentRuntime(
-      new ContentScriptContext("sift-test"),
-      blueskyAdapter,
-    );
-    await setFiltering(true);
-
-    await new Promise((resolve) => window.setTimeout(resolve, 50));
-    expect(
-      document.querySelector('[data-testid="homeScreen"]')?.children,
-    ).toHaveLength(0);
-
-    runtime.dispose();
-  });
-
-  it.each([
-    { label: "種別条件だけ", metric: "10 likes", minimumEnabled: false },
-    { label: "指標が取得不能", metric: null, minimumEnabled: true },
-  ])(
-    "Blueskyで$labelの表示投稿が画面下に残る間は条件変更後も追加取得しない",
-    async ({ metric, minimumEnabled }) => {
-      vi.useFakeTimers();
-      history.replaceState({}, "", "/profile/alice.test");
-      document.body.innerHTML = `
-        <div data-testid="feedItem-by-alice.test">
-          <a href="/profile/alice.test/post/retained"></a>
-          ${metric === null ? "" : `<button data-testid="likeBtn" aria-label="${metric}"></button>`}
-        </div>
-        <div data-testid="feedItem-by-bob.test">
-          <a href="/profile/bob.test/post/readable"></a>
-          <button data-testid="likeBtn" aria-label="0 likes"></button>
-        </div>
-      `;
-      const retained = document.querySelector<HTMLElement>(
-        '[data-testid="feedItem-by-alice.test"]',
-      );
-      if (!retained) throw new Error("表示対象の投稿がありません。");
-      vi.spyOn(retained, "getBoundingClientRect").mockReturnValue(
-        new DOMRect(0, window.innerHeight, 500, 100),
-      );
-      const scrollTo = vi
-        .spyOn(window, "scrollTo")
-        .mockImplementation(() => {});
-      const settings = {
-        ...defaults,
-        siteSettings: {
-          ...defaults.siteSettings,
-          bluesky: {
-            ...defaults.siteSettings.bluesky,
-            minReactionsEnabled: minimumEnabled,
-            hideReplies: true,
-            hideQuotes: false,
-            hideReposts: false,
-          },
-        },
-      };
-      await fakeBrowser.storage.sync.set({ settings });
-      const runtime = startContentRuntime(undefined, blueskyAdapter);
-      try {
-        await setFiltering(true);
-        // 条件変更のたびに上限が戻っても、自動取得を一度も開始しない。
-        for (const hideQuotes of [false, true, false, true]) {
-          await fakeBrowser.storage.sync.set({
-            settings: {
-              ...settings,
-              siteSettings: {
-                ...settings.siteSettings,
-                bluesky: { ...settings.siteSettings.bluesky, hideQuotes },
-              },
-            },
-          });
-          await vi.advanceTimersByTimeAsync(9_000);
-          expect(retained.dataset.siftFilterState).toBe("visible");
-          expect(retained.dataset.siftFilterReason).toBe(
-            minimumEnabled ? "indeterminate-metric" : "no-inclusion-filter",
-          );
-          expect((await getFilterContext()).filteringEnabled).toBe(true);
-          expect(scrollTo).not.toHaveBeenCalled();
-          expect(
-            document.documentElement.hasAttribute("data-sift-layout-probe"),
-          ).toBe(false);
-        }
-      } finally {
-        runtime.dispose();
-        vi.useRealTimers();
-        vi.restoreAllMocks();
-      }
-    },
-  );
-
-  it("Blueskyで初期投稿が全件不一致でも次ページ判定を進める", async () => {
-    history.replaceState({}, "", "/profile/alice.test");
-    document.body.innerHTML = `
-      <div data-testid="homeScreenFeedTabs-selector-Following">
-        <div style="background-color: blue"></div>
-      </div>
-      <div data-testid="feedItem-by-alice.test">
-        <a href="/profile/alice.test/post/abc"></a>
-        <button data-testid="likeBtn" aria-label="0 likes"></button>
-      </div>
-    `;
-    const scrollTo = vi.spyOn(window, "scrollTo").mockImplementation(() => {});
-    scrollTo.mockClear();
-    const runtime = startContentRuntime(
-      new ContentScriptContext("sift-test"),
-      blueskyAdapter,
-    );
-    await setFiltering(true);
-
-    await vi.waitFor(() => {
-      expect(
-        document.documentElement.hasAttribute("data-sift-layout-probe"),
-      ).toBe(true);
-      expect(scrollTo).toHaveBeenCalled();
-    });
-    expect(
-      document.querySelector('[data-sift-filter-state="hidden"]'),
-    ).not.toBeNull();
-
-    runtime.dispose();
-    expect(
-      document.documentElement.hasAttribute("data-sift-layout-probe"),
-    ).toBe(false);
-  });
-
-  it("Blueskyで一致が一件だけで表示範囲を満たさなくても次ページ判定を進める", async () => {
-    history.replaceState({}, "", "/profile/alice.test");
-    document.body.innerHTML = `
-      <div data-testid="homeScreenFeedTabs-selector-Following">
-        <div style="background-color: blue"></div>
-      </div>
-      <div data-testid="feedItem-by-alice.test">
-        <a href="/profile/alice.test/post/matched"></a>
-        <button data-testid="likeBtn" aria-label="1,100 likes"></button>
-      </div>
-      <div data-testid="feedItem-by-bob.test">
-        <a href="/profile/bob.test/post/hidden"></a>
-        <button data-testid="likeBtn" aria-label="0 likes"></button>
-      </div>
-    `;
-    const scrollTo = vi.spyOn(window, "scrollTo").mockImplementation(() => {});
-    const runtime = startContentRuntime(
-      new ContentScriptContext("sift-test"),
-      blueskyAdapter,
-    );
-    await setFiltering(true);
-
-    await vi.waitFor(() => {
-      expect(
-        document.documentElement.hasAttribute("data-sift-layout-probe"),
-      ).toBe(true);
-      expect(scrollTo).toHaveBeenCalled();
-    });
-    expect(
-      document.querySelectorAll('[data-sift-filter-state="matched"]'),
-    ).toHaveLength(1);
-
-    runtime.dispose();
-  });
-
-  it("連続するBlueskyの次ページ判定を3回で止める", async () => {
-    history.replaceState({}, "", "/profile/alice.test");
-    document.body.innerHTML = `
-      <div data-testid="homeScreenFeedTabs-selector-Following">
-        <div style="background-color: blue"></div>
-      </div>
-      <div data-testid="feedItem-by-baseline.test">
-        <a href="/profile/baseline.test/post/baseline"></a>
-        <button data-testid="likeBtn" aria-label="0 likes"></button>
-      </div>
-    `;
-    const scrollTo = vi.spyOn(window, "scrollTo").mockImplementation(() => {});
-    const runtime = startContentRuntime(
-      new ContentScriptContext("sift-test"),
-      blueskyAdapter,
-    );
-    try {
-      await setFiltering(true);
-
-      for (const id of ["1", "2", "3"]) {
-        document.body.insertAdjacentHTML(
-          "beforeend",
-          `<div data-testid="feedItem-by-${id}.test">
-            <a href="/profile/${id}.test/post/${id}"></a>
-            <button data-testid="likeBtn" aria-label="0 likes"></button>
-          </div>`,
+  it("最低値、媒体、返信・引用・リポストの条件を蓄積情報へ適用する", async () => {
+    document.body.innerHTML = [
+      post("1", 100),
+      post("2", 200),
+      post("3", 300),
+      post("4", 400),
+      post("5", 500),
+    ].join("");
+    const adapter = {
+      ...xAdapter,
+      readPost(card: Element) {
+        const p = xAdapter.readPost(card);
+        return (
+          p && {
+            ...p,
+            hasImage: p.id !== "2",
+            hasVideo: p.id === "2",
+            isReply: p.id === "3",
+            isQuote: p.id === "4",
+            isRepost: p.id === "5",
+          }
         );
-        await new Promise((resolve) => window.setTimeout(resolve, 900));
-      }
-
-      await vi.waitFor(() => expect(scrollTo).toHaveBeenCalledTimes(6), {
-        timeout: 8_000,
-      });
-      scrollTo.mockClear();
-      await new Promise((resolve) => window.setTimeout(resolve, 2_500));
-
-      expect(scrollTo).not.toHaveBeenCalled();
-      expect(
-        document.documentElement.hasAttribute("data-sift-layout-probe"),
-      ).toBe(false);
-    } finally {
-      runtime.dispose();
-    }
-  }, 12_000);
-
-  it.each(["wheel", "keyboard", "touch", "pointer", "matched"])(
-    "Blueskyの上限到達後に%sで再開し、再び3回で止まる",
-    async (action) => {
-      vi.useFakeTimers();
-      history.replaceState({}, "", "/profile/alice.test");
-      document.body.innerHTML = `
-        <div data-testid="feedItem-by-alice.test">
-          <a href="/profile/alice.test/post/abc"></a>
-          <button data-testid="likeBtn" aria-label="0 likes"></button>
-        </div>
-      `;
-      const scrollTo = vi
-        .spyOn(window, "scrollTo")
-        .mockImplementation(() => {});
-      scrollTo.mockClear();
-      const runtime = startContentRuntime(undefined, blueskyAdapter);
-      try {
-        await setFiltering(true);
-        await vi.advanceTimersByTimeAsync(9_000);
-        expect(scrollTo).toHaveBeenCalledTimes(6);
-        scrollTo.mockClear();
-
-        // 自動スクロールの通知やサイトが発火した入力では上限を解除しない。
-        window.dispatchEvent(new Event("scroll"));
-        window.dispatchEvent(new WheelEvent("wheel", { deltaY: 100 }));
-        await vi.advanceTimersByTimeAsync(3_000);
-        expect(scrollTo).not.toHaveBeenCalled();
-
-        if (action === "matched") {
-          const card = document.querySelector<HTMLElement>(
-            "[data-testid^='feedItem']",
-          );
-          const metric = card?.querySelector("button");
-          if (!card || !metric) throw new Error("投稿カードがありません。");
-          vi.spyOn(card, "getBoundingClientRect").mockReturnValue({
-            bottom: window.innerHeight + 100,
-          } as DOMRect);
-          metric.setAttribute("aria-label", "1,100 likes");
-          await vi.advanceTimersByTimeAsync(100);
-          expect(scrollTo).not.toHaveBeenCalled();
-          metric.setAttribute("aria-label", "0 likes");
-        } else {
-          const event =
-            action === "wheel"
-              ? new WheelEvent("wheel", { deltaY: 100 })
-              : action === "keyboard"
-                ? new KeyboardEvent("keydown", { key: "PageDown" })
-                : new Event(action === "touch" ? "touchstart" : "pointerdown");
-          Object.defineProperty(event, "isTrusted", { value: true });
-          window.dispatchEvent(event);
-        }
-        await vi.advanceTimersByTimeAsync(100);
-        expect(scrollTo).toHaveBeenCalledTimes(1);
-        await vi.advanceTimersByTimeAsync(9_000);
-        expect(scrollTo).toHaveBeenCalledTimes(6);
-        expect(
-          document.documentElement.hasAttribute("data-sift-layout-probe"),
-        ).toBe(false);
-      } finally {
-        runtime.dispose();
-        vi.useRealTimers();
-        vi.restoreAllMocks();
-      }
-    },
-  );
-
-  it("Blueskyがフィードの終端を示した後は読み込み判定を再開しない", async () => {
-    history.replaceState({}, "", "/profile/alice.test");
-    document.body.innerHTML = `
-      <div data-testid="homeScreenFeedTabs-selector-Following">
-        <div style="background-color: blue"></div>
-      </div>
-      <div data-testid="postsFeed-flatlist">
-        <div data-testid="feedItem-by-alice.test">
-          <a href="/profile/alice.test/post/abc"></a>
-          <button data-testid="likeBtn" aria-label="0 likes"></button>
-        </div>
-        <div><div dir="auto">フィードの終わり</div></div>
-      </div>
-    `;
-    const scrollTo = vi.spyOn(window, "scrollTo").mockImplementation(() => {});
-    scrollTo.mockClear();
-    const runtime = startContentRuntime(
-      new ContentScriptContext("sift-test"),
-      blueskyAdapter,
-    );
-    await setFiltering(true);
-
-    await vi.waitFor(() => {
-      expect(
-        document.querySelector('[data-sift-filter-state="hidden"]'),
-      ).not.toBeNull();
+      },
+    };
+    runtime = startContentRuntime(undefined, adapter);
+    await settings({
+      mediaEnabled: true,
+      mediaMode: "images",
+      hideReplies: true,
+      hideQuotes: true,
+      hideReposts: true,
     });
-    expect(
-      document.documentElement.hasAttribute("data-sift-layout-probe"),
-    ).toBe(false);
-    expect(scrollTo).not.toHaveBeenCalled();
-
-    dispatchTrustedWheel(100);
-    await new Promise((resolve) => window.setTimeout(resolve, 50));
-    expect(
-      document.documentElement.hasAttribute("data-sift-layout-probe"),
-    ).toBe(false);
-    expect(scrollTo).not.toHaveBeenCalled();
-
-    runtime.dispose();
+    expect((await context()).posts.map((p) => p.id)).toEqual(["1"]);
+    await settings({
+      mediaEnabled: true,
+      mediaMode: "video",
+      hideReplies: true,
+      hideQuotes: true,
+      hideReposts: true,
+    });
+    expect((await context()).posts.map((p) => p.id)).toEqual(["2"]);
+    await settings({
+      minReactionsEnabled: true,
+      minReactions: 350,
+      hideReposts: true,
+    });
+    expect((await context()).posts.map((p) => p.id)).toEqual(["4"]);
   });
-
-  it("Blueskyで読み込み判定中に上へスクロールしたら最下部への移動を止める", async () => {
-    history.replaceState({}, "", "/profile/alice.test");
-    document.body.innerHTML = `
-      <div data-testid="homeScreenFeedTabs-selector-Following">
-        <div style="background-color: blue"></div>
-      </div>
-      <div data-testid="feedItem-by-alice.test">
-        <a href="/profile/alice.test/post/abc"></a>
-        <button data-testid="likeBtn" aria-label="0 likes"></button>
-      </div>
-    `;
-    vi.spyOn(window, "scrollTo").mockImplementation(() => {});
-    const scrollingElement =
-      document.scrollingElement ?? document.documentElement;
-    scrollingElement.scrollTop = 600;
-    const runtime = startContentRuntime(
-      new ContentScriptContext("sift-test"),
-      blueskyAdapter,
-    );
-    await setFiltering(true);
-
-    await vi.waitFor(() => {
-      expect(
-        document.documentElement.hasAttribute("data-sift-layout-probe"),
-      ).toBe(true);
+  it("いいね数が不明な投稿は最低値ありでは掲載せず、指定なしでは掲載する", async () => {
+    document.body.innerHTML = post("1", null);
+    await settings({ minReactionsEnabled: true, minReactions: 100000 });
+    runtime = startContentRuntime(undefined, xAdapter);
+    expect(await context()).toMatchObject({
+      posts: [],
+      metricSampleCount: 1,
+      metricCounts: [],
     });
-
-    dispatchTrustedWheel(-100);
-    window.dispatchEvent(new Event("scroll"));
-    await new Promise((resolve) => window.setTimeout(resolve, 50));
-    expect(
-      document.documentElement.hasAttribute("data-sift-layout-probe"),
-    ).toBe(false);
-    expect(window.scrollTo).toHaveBeenLastCalledWith({
-      top: 500,
-      behavior: "instant",
-    });
-
-    dispatchTrustedWheel(100);
-    await vi.waitFor(() => {
-      expect(
-        document.documentElement.hasAttribute("data-sift-layout-probe"),
-      ).toBe(true);
-    });
-
-    runtime.dispose();
+    await settings({ minReactionsEnabled: false });
+    expect((await context()).posts).toMatchObject([
+      { id: "1", metricCount: null },
+    ]);
   });
-
-  it("戻る操作でキャッシュから復元された後もサイドパネルへ応答する", async () => {
-    document.body.innerHTML = timelineMarkup;
-    const runtime = startContentRuntime(
-      new ContentScriptContext("sift-test"),
-      xAdapter,
-    );
-    await setFiltering(true);
-
-    dispatchPageTransition("pagehide", true);
-    dispatchPageTransition("pageshow", true);
-
-    await expect(getFilterContext()).resolves.toMatchObject({
-      site: "x",
-      filteringEnabled: true,
+  it("投稿URLを読めない状態が続くと、正常な空一覧として扱わない", async () => {
+    document.querySelector("a")?.remove();
+    const clock = vi.spyOn(Date, "now").mockReturnValue(1000);
+    runtime = startContentRuntime(undefined, xAdapter);
+    expect((await context()).health?.state).toBe("loading");
+    clock.mockReturnValue(10000);
+    expect((await context()).health).toMatchObject({
+      state: "unreadable",
+      issue: "posts",
     });
-
-    runtime.dispose();
+    document.body.innerHTML = post("1");
+    expect((await context()).health?.state).toBe("ready");
   });
-
-  it.each([
-    {
-      adapter: xAdapter,
-      path: "/search?q=sift&f=live",
-      markup: xPostMarkup("100", 14000) + xPostMarkup("200", 800),
-    },
-    {
-      adapter: blueskyAdapter,
-      path: "/profile/example.bsky.social",
-      markup: [14000, 800]
-        .map(
-          (count) =>
-            `<div data-testid="feedItem-by-example.bsky.social"><button data-testid="likeBtn" aria-label="${count} likes"></button></div>`,
-        )
-        .join(""),
-    },
-  ])(
-    "$adapter.id の候補は最低値未満の投稿も集計する",
-    async ({ adapter, path, markup }) => {
-      history.replaceState({}, "", path);
-      document.body.innerHTML = markup;
-      const runtime = startContentRuntime(
-        new ContentScriptContext("sift-test"),
-        adapter,
-      );
-      try {
-        await setFiltering(true);
-        await vi.waitFor(async () => {
-          await expect(getFilterContext()).resolves.toMatchObject({
-            site: adapter.id,
-            metricCounts: [14000, 800],
-            metricSampleCount: 2,
-          });
-        });
-      } finally {
-        runtime.dispose();
-      }
-    },
-  );
-
-  it("抽出の切替後も、表示に残る投稿を同じ位置に保つ", async () => {
-    document.body.innerHTML = timelineMarkup;
-    const runtime = startContentRuntime(
-      new ContentScriptContext("sift-test"),
-      xAdapter,
+  it("一部の投稿リンクが壊れていても、指標の取得失敗とは区別して知らせる", async () => {
+    document.body.innerHTML = post("1") + post("2");
+    document.querySelectorAll("a")[1]?.remove();
+    runtime = startContentRuntime(undefined, xAdapter);
+    const result = await context();
+    expect(result.health).toMatchObject({
+      state: "degraded",
+      issue: "posts",
+      sampledPosts: 2,
+      readableMetrics: 2,
+    });
+    expect(result.collectedCount).toBe(1);
+  });
+  it("本文を表示できる場合は、最低値なしで指標の欠損だけを理由に操作を止めない", async () => {
+    document.body.innerHTML = post("1", null);
+    runtime = startContentRuntime(undefined, xAdapter);
+    expect((await context()).health?.state).toBe("degraded");
+  });
+  it("別のメッセージへ応答せず、閉じたパネル向けの常駐タイマーも作らない", async () => {
+    const interval = vi.spyOn(window, "setInterval");
+    runtime = startContentRuntime(undefined, xAdapter);
+    const response = await fakeBrowser.runtime.onMessage.trigger(
+      { type: "other" },
+      {},
+      () => {},
     );
-    await setFiltering(true);
-    await vi.waitFor(() => {
-      expect(
-        document.querySelector<HTMLElement>("[data-sift-filter-state]"),
-      ).not.toBeNull();
-    });
-
-    const cell = document.querySelector<HTMLElement>(
-      "[data-testid=cellInnerDiv]",
+    expect(response).toEqual([undefined]);
+    expect(interval).not.toHaveBeenCalled();
+  });
+  it("bfcacheで保存したページは復帰後も読め、破棄時はメッセージ受信を解除する", async () => {
+    runtime = startContentRuntime(undefined, xAdapter);
+    const event = new Event("pagehide");
+    Object.defineProperty(event, "persisted", { value: true });
+    window.dispatchEvent(event);
+    expect((await context()).posts).toHaveLength(1);
+    window.dispatchEvent(new Event("pagehide"));
+    const response = await fakeBrowser.runtime.onMessage.trigger(
+      { type: FILTER_CONTEXT_REQUEST },
+      {},
+      () => {},
     );
-    if (!cell) {
-      throw new Error("テスト用の投稿セルが見つからない");
-    }
-    vi.spyOn(cell, "getBoundingClientRect").mockImplementation(() => {
-      // 抽出を外すと、前に隠れていた投稿がこの投稿の上に加わる想定。
-      const top = cell.dataset.siftFilterState ? 48 : 248;
-      return new DOMRect(0, top, 600, 180);
+    expect(response).toEqual([]);
+  });
+  it("Blueskyの実DOM契約からも新しい投稿応答を作る", async () => {
+    history.replaceState({}, "", "/profile/example.test/lists/abc");
+    document.body.innerHTML =
+      '<div data-testid="feedItem-by-example.test"><a href="/profile/example.test/post/abc">投稿時刻</a><button data-testid="likeBtn" aria-label="1000 likes"></button><div data-testid="postText">本文</div></div>';
+    runtime = startContentRuntime(undefined, blueskyAdapter);
+    expect((await context()).posts[0]).toMatchObject({
+      url: "https://bsky.app/profile/example.test/post/abc",
     });
-    const scrollBy = vi
-      .spyOn(window, "scrollBy")
-      .mockImplementation(() => undefined);
-
-    await setFiltering(false);
-
-    await vi.waitFor(() => {
-      expect(scrollBy).toHaveBeenCalledWith({ top: 200, behavior: "instant" });
-    });
-
-    runtime.dispose();
   });
 });

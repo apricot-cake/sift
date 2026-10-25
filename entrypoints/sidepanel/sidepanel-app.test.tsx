@@ -8,9 +8,15 @@ import {
 } from "../../utils/filter-context.ts";
 import { t } from "../../utils/i18n.ts";
 import { checkPanelBuild } from "../../utils/local-build-reload.ts";
-import { defaults, type Settings } from "../../utils/settings.ts";
+import type { PanelPost } from "../../utils/panel-post.ts";
+import {
+  defaults,
+  type Settings,
+  settingsFor,
+  withSiteSettings,
+} from "../../utils/settings.ts";
 import { settingsItem } from "../../utils/settings-storage.ts";
-import { TIMELINE_CONTROL } from "../../utils/timeline-controls.ts";
+import { SIDE_PANEL_CONTROL } from "../../utils/sidepanel-controls.ts";
 import { SidepanelApp } from "./sidepanel-app.tsx";
 
 vi.mock("../../utils/local-build-reload.ts", async (importOriginal) => ({
@@ -33,11 +39,27 @@ function context(site: FilterContextResponse["site"]): FilterContextResponse {
     pageTitle: site,
     pageKey: site,
     timelineAvailable: true,
-    filteringEnabled: false,
-    continuousLoadingWarning: false,
+    posts: [],
+    collectedCount: 0,
+    collectionTruncated: false,
     metricSampleCount: 1,
     metricCounts: [10],
   };
+}
+function post(id: number, text = "投稿の本文"): PanelPost {
+  return {
+    id: String(id),
+    url: `https://x.com/example/status/${id}`,
+    author: "投稿者",
+    handle: "example",
+    text,
+    images: [],
+    metricCount: 10,
+  };
+}
+
+function postsContext(posts: readonly PanelPost[], total = posts.length) {
+  return { ...context("x"), posts, collectedCount: total };
 }
 let root: Root;
 let container: HTMLElement;
@@ -49,11 +71,16 @@ async function flush() {
     for (let i = 0; i < 30; i++) await Promise.resolve();
   });
 }
-async function mount() {
+async function mount(openFilters = true) {
   await act(async () => {
     root.render(<SidepanelApp />);
   });
   await flush();
+  if (openFilters) {
+    await act(async () =>
+      container.querySelector<HTMLElement>("details summary")?.click(),
+    );
+  }
 }
 beforeEach(() => {
   vi.mocked(checkPanelBuild).mockResolvedValue(true);
@@ -82,6 +109,175 @@ beforeEach(() => {
   });
   vi.spyOn(settingsItem, "watch").mockReturnValue(() => {});
 });
+
+describe("パネルの投稿一覧", () => {
+  it("いいね数を取得できなくても最低値の条件を解除できる", async () => {
+    let onSettingsChange = (_value: Settings) => {};
+    vi.mocked(settingsItem.watch).mockImplementation((callback) => {
+      onSettingsChange = (value) => callback(value, defaults);
+      return () => {};
+    });
+    request = async () => ({
+      ...postsContext([], 1),
+      metricCounts: [],
+      health: {
+        state: "unreadable",
+        issue: "metrics",
+        sampledPosts: 1,
+        readableMetrics: 0,
+      },
+    });
+    await mount();
+    await act(async () =>
+      onSettingsChange(
+        withSiteSettings(defaults, "x", {
+          ...settingsFor(defaults, "x"),
+          minReactionsEnabled: true,
+          minReactions: 100,
+        }),
+      ),
+    );
+    expect(container.querySelector("[data-minimum-group]")).not.toBeNull();
+    expect(
+      container.querySelector<HTMLFieldSetElement>("fieldset")?.disabled,
+    ).toBe(false);
+    expect(container.textContent).toContain(t("sidepanelMetricUnavailable"));
+    await act(async () =>
+      onSettingsChange(
+        withSiteSettings(defaults, "x", {
+          ...settingsFor(defaults, "x"),
+          minReactionsEnabled: false,
+        }),
+      ),
+    );
+    expect(container.textContent).not.toContain(
+      t("sidepanelMetricUnavailable"),
+    );
+  });
+
+  it("条件は初期状態で折りたたみ、投稿へのリンクを表示する", async () => {
+    request = async () => postsContext([post(1)]);
+    await mount(false);
+    expect(container.querySelector("details")?.open).toBe(false);
+    const link = container.querySelector<HTMLAnchorElement>("[data-post-link]");
+    expect(link?.href).toBe("https://x.com/example/status/1");
+    expect(link?.target).toBe("_blank");
+    expect(link?.rel).toBe("noreferrer");
+    expect(link?.textContent).toContain("投稿の本文");
+    expect(container.querySelector("[data-post-count]")?.textContent).toBe(
+      t("sidepanelPostCount", { count: "1", total: "1" }),
+    );
+  });
+
+  it("投稿本文を文字として表示し、画像は遅延読み込みする", async () => {
+    request = async () =>
+      postsContext([
+        {
+          ...post(1, '<img id="injected" src=x onerror="alert(1)">'),
+          images: [
+            { url: "https://pbs.twimg.com/media/example.jpg", alt: "作品" },
+          ],
+          metricCount: null,
+        },
+      ]);
+    await mount();
+    expect(container.querySelector("#injected")).toBeNull();
+    expect(container.querySelector("[data-post-link]")?.textContent).toContain(
+      '<img id="injected"',
+    );
+    const image = container.querySelector<HTMLImageElement>(
+      "[data-post-link] img",
+    );
+    expect(image?.alt).toBe("作品");
+    expect(image?.getAttribute("loading")).toBe("lazy");
+    expect(image?.getAttribute("referrerpolicy")).toBe("no-referrer");
+    expect(container.textContent).toContain(t("sidepanelLikesUnknown"));
+  });
+
+  it("大量の投稿を50件ずつ表示する", async () => {
+    request = async () =>
+      postsContext(Array.from({ length: 101 }, (_, index) => post(index + 1)));
+    await mount();
+    expect(container.querySelectorAll("[data-post-link]")).toHaveLength(50);
+    await act(async () =>
+      container
+        .querySelector<HTMLButtonElement>("[data-show-more-posts]")
+        ?.click(),
+    );
+    expect(container.querySelectorAll("[data-post-link]")).toHaveLength(100);
+    await act(async () =>
+      container
+        .querySelector<HTMLButtonElement>("[data-show-more-posts]")
+        ?.click(),
+    );
+    expect(container.querySelectorAll("[data-post-link]")).toHaveLength(101);
+    expect(container.querySelector("[data-show-more-posts]")).toBeNull();
+  });
+
+  it("画像表示で一覧キーが一時的に不明になっても追加表示を保つ", async () => {
+    let snapshot: FilterContextResponse = {
+      ...postsContext(
+        Array.from({ length: 51 }, (_, index) => post(index + 1)),
+      ),
+      pageKey: tab.url,
+      timelineKey: "home:following",
+    };
+    request = async () => snapshot;
+    await mount();
+    await act(async () =>
+      container
+        .querySelector<HTMLButtonElement>("[data-show-more-posts]")
+        ?.click(),
+    );
+    expect(container.querySelectorAll("[data-post-link]")).toHaveLength(51);
+    snapshot = { ...snapshot, timelineKey: null };
+    await act(async () => vi.advanceTimersByTimeAsync(750));
+    expect(container.querySelector("[data-post-id='51']")).not.toBeNull();
+    expect(container.querySelectorAll("[data-post-link]")).toHaveLength(51);
+    snapshot = { ...snapshot, timelineKey: "home:following" };
+    await act(async () => vi.advanceTimersByTimeAsync(750));
+    expect(container.querySelectorAll("[data-post-link]")).toHaveLength(51);
+  });
+
+  it("未取得と条件に合わない場合を区別する", async () => {
+    request = async () => postsContext([]);
+    await mount();
+    expect(container.textContent).toContain(t("sidepanelNoCollectedPosts"));
+    request = async () => postsContext([], 3);
+    await act(async () => vi.advanceTimersByTimeAsync(750));
+    expect(container.textContent).toContain(t("sidepanelNoMatchingPosts"));
+    expect(container.textContent).not.toContain(t("sidepanelNoCollectedPosts"));
+  });
+
+  it("保存した条件で一覧を取り直し、保存前の遅い応答を破棄する", async () => {
+    const old = deferred<FilterContextResponse>();
+    const read = vi
+      .fn()
+      .mockResolvedValueOnce(postsContext([post(1)]))
+      .mockImplementationOnce(() => old.promise)
+      .mockResolvedValue(postsContext([post(2)], 2));
+    request = read;
+    await mount();
+    await act(async () => vi.advanceTimersByTimeAsync(750));
+    await act(async () =>
+      container
+        .querySelector<HTMLButtonElement>(
+          `button[aria-label="${t("optionsHideReplies")}"]`,
+        )
+        ?.click(),
+    );
+    await flush();
+    expect(writes.at(-1)?.siteSettings.x?.hideReplies).toBe(true);
+    expect(
+      container.querySelector("[data-post-id]")?.getAttribute("data-post-id"),
+    ).toBe("2");
+    old.resolve(postsContext([post(1)]));
+    await flush();
+    expect(
+      container.querySelector("[data-post-id]")?.getAttribute("data-post-id"),
+    ).toBe("2");
+  });
+});
 afterEach(async () => {
   await act(async () => root.unmount());
   container.remove();
@@ -97,14 +293,10 @@ describe("接続先と非同期応答", () => {
     expect(checkPanelBuild).toHaveBeenCalledOnce();
   });
 
-  it("起動時に新版を検知したら設定の初期化やフィルター有効化をしない", async () => {
+  it("起動時に新版を検知したら投稿の取得や設定の初期化をしない", async () => {
     vi.mocked(checkPanelBuild).mockResolvedValue(false);
     await mount();
     expect(writes).toHaveLength(0);
-    expect(fakeBrowser.tabs.sendMessage).not.toHaveBeenCalledWith(1, {
-      type: TIMELINE_CONTROL.setFiltering,
-      enabled: true,
-    });
   });
 
   it("操作直前の確認を待ち、新版なら設定を変更しない", async () => {
@@ -219,12 +411,13 @@ describe("接続先と非同期応答", () => {
     slow.resolve(context("x"));
     await flush();
     expect(writes).toHaveLength(1);
-    expect(fakeBrowser.tabs.sendMessage).toHaveBeenCalledWith(1, {
-      type: TIMELINE_CONTROL.setFiltering,
-      enabled: true,
-    });
+    expect(
+      container
+        .querySelector("[data-sift-site]")
+        ?.getAttribute("data-sift-site"),
+    ).toBe("x");
   });
-  it("タブ変更後の古い応答は設定の初期化や再有効化に使わない", async () => {
+  it("タブ変更後の古い応答は投稿表示や設定の初期化に使わない", async () => {
     const old = deferred<FilterContextResponse>();
     request = (id) => (id === 1 ? old.promise : Promise.resolve(context("x")));
     await mount();
@@ -236,10 +429,6 @@ describe("接続先と非同期応答", () => {
     expect(writes).toHaveLength(0);
     expect(fakeBrowser.tabs.sendMessage).not.toHaveBeenCalledWith(2, {
       type: FILTER_CONTEXT_REQUEST,
-    });
-    expect(fakeBrowser.tabs.sendMessage).not.toHaveBeenCalledWith(1, {
-      type: TIMELINE_CONTROL.setFiltering,
-      enabled: true,
     });
   });
   it("同じタブのURLが変わった後の応答は反映しない", async () => {
@@ -342,13 +531,9 @@ describe("接続先と非同期応答", () => {
     visibility.mockReturnValue("visible");
     write.resolve(undefined);
     await flush();
-    expect(fakeBrowser.tabs.sendMessage).not.toHaveBeenCalledWith(1, {
-      type: TIMELINE_CONTROL.setFiltering,
-      enabled: true,
-    });
   });
   it.each(["unmount", "switch"])(
-    "ユーザー設定の保存待ちで%sしても有効化を再送しない",
+    "ユーザー設定の保存待ちで%sしても投稿を再取得しない",
     async (change) => {
       tab = { id: 1, url: "https://x.com/example" };
       request = async () => context("x");
@@ -374,10 +559,7 @@ describe("接続先と非同期応答", () => {
       vi.mocked(fakeBrowser.tabs.sendMessage).mockClear();
       write.resolve(undefined);
       await flush();
-      expect(fakeBrowser.tabs.sendMessage).not.toHaveBeenCalledWith(
-        expect.any(Number),
-        { type: TIMELINE_CONTROL.setFiltering, enabled: true },
-      );
+      expect(fakeBrowser.tabs.sendMessage).not.toHaveBeenCalled();
     },
   );
   it("破棄後の遅い応答で設定を書き換えない", async () => {

@@ -244,7 +244,6 @@ function trackedPage(url = "https://x.com/NASA") {
     pageKey: url,
     timelineKey: url,
     timelineAvailable: true,
-    filteringEnabled: true,
   };
   const stored: Record<string, unknown> = {
     "sift:sidepanel-page:7": {
@@ -420,7 +419,7 @@ it("初回のアクションでは所有記録を捏造せず開いた通知へ�
   expect(api.runtime.sendMessage).not.toHaveBeenCalled();
 });
 
-it("元の一覧を離れると同じサイトでも閉じて絞り込みを解除する", async () => {
+it("元の一覧を離れると同じサイトでも閉じて所有記録を解除する", async () => {
   const { context, check } = trackedPage();
   api.tabs.get.mockResolvedValue({
     id: 7,
@@ -439,10 +438,7 @@ it("元の一覧を離れると同じサイトでも閉じて絞り込みを解�
       "sift:sidepanel-page:7",
     ),
   );
-  expect(api.tabs.sendMessage).toHaveBeenCalledWith(7, {
-    type: "sift:timeline-set-filtering",
-    enabled: false,
-  });
+  expect(api.scripting.insertCSS).not.toHaveBeenCalled();
 });
 
 it("ライトボックスを開いて閉じても背景一覧が同じなら維持する", async () => {
@@ -692,13 +688,11 @@ it("閉じた記録の削除完了を待ってから新しい所有記録を保�
     tabId: 7,
     resetMinimum: true,
   });
-  expect(api.tabs.sendMessage).not.toHaveBeenCalledWith(7, {
-    type: "sift:timeline-set-filtering",
-    enabled: false,
-  });
   expect(
     api.runtime.sendMessage.mock.invocationCallOrder[0] ?? Infinity,
-  ).toBeLessThan(api.scripting.insertCSS.mock.invocationCallOrder[0] ?? 0);
+  ).toBeLessThan(
+    api.scripting.executeScript.mock.invocationCallOrder[0] ?? Infinity,
+  );
 });
 
 it("別サイトへ移動すると注入せずパネルを閉じる", async () => {
@@ -811,7 +805,7 @@ it("権限による注入失敗を再接続失敗として返す", async () => {
   });
   for (let i = 0; i < 8; i++)
     api.tabs.sendMessage.mockRejectedValueOnce(new Error("No receiver"));
-  api.scripting.insertCSS.mockRejectedValueOnce(
+  api.scripting.executeScript.mockRejectedValueOnce(
     new Error("Cannot access contents"),
   );
   const connect = api.runtime.onMessage.addListener.mock.calls[0]?.[0];
@@ -821,7 +815,10 @@ it("権限による注入失敗を再接続失敗として返す", async () => {
       { url: "chrome-extension://test/sidepanel.html?tabId=7" },
     ),
   ).toBe(false);
-  expect(api.scripting.executeScript).not.toHaveBeenCalled();
+  expect(api.scripting.executeScript).toHaveBeenCalledExactlyOnceWith({
+    target: { tabId: 7 },
+    files: ["/sift.js"],
+  });
 });
 
 it.each([

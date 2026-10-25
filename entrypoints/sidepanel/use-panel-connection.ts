@@ -1,10 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { browser } from "wxt/browser";
 import {
-  shouldDisablePreviousFiltering,
-  shouldEnableFiltering,
-} from "../../utils/filter-activation.ts";
-import {
   FILTER_CONTEXT_REQUEST,
   type FilterContextResponse,
   isFilterContextResponse,
@@ -24,7 +20,6 @@ import {
   SIDE_PANEL_CONTROL,
   sidePanelTabIdFromUrl,
 } from "../../utils/sidepanel-controls.ts";
-import { TIMELINE_CONTROL } from "../../utils/timeline-controls.ts";
 
 interface ConnectedPage {
   tabId: number;
@@ -60,14 +55,12 @@ export function usePanelConnection({
     useState<FilterContextResponse | null>(null);
   const [knownUnsupportedSite, setKnownUnsupportedSite] = useState(false);
   const [selectedSite, setSelectedSite] = useState<SiteSettingsKey>("x");
-  const [pageFilteringEnabled, setPageFilteringEnabled] = useState(false);
   const activePageRef = useRef<ConnectedPage | null>(null);
   const connectionEpoch = useRef(0);
   const panelMounted = useRef(true);
   const panelTabId = useRef(sidePanelTabIdFromUrl(location.href));
-  const panelInitialized = useRef(false);
   const initializedMinimums = useRef(new Set<SiteSettingsKey>());
-  const pageFilteringExpected = useRef(false);
+  const refresh = useRef<() => Promise<void>>(async () => {});
 
   const runPanelAction = (action: () => void): void => {
     const epoch = connectionEpoch.current;
@@ -87,20 +80,11 @@ export function usePanelConnection({
     return () => {
       panelMounted.current = false;
       connectionEpoch.current += 1;
-      const activePage = activePageRef.current;
-      if (activePage !== null) {
-        void browser.tabs
-          .sendMessage(activePage.tabId, {
-            type: TIMELINE_CONTROL.setFiltering,
-            enabled: false,
-          })
-          .catch(() => {});
-      }
     };
   }, []);
 
   useEffect(() => {
-    // 初回の設定初期化やフィルター有効化も、更新確認が終わるまで待つ。
+    // 初回の設定初期化も、更新確認が終わるまで待つ。
     // 定期的なページ情報取得では Native Host へ問い合わせない。
     const openingBuild = checkPanelBuild();
     let refreshGeneration = 0;
@@ -147,7 +131,6 @@ export function usePanelConnection({
           );
         };
         setKnownUnsupportedSite(isKnownUnsupportedSite(tab?.url));
-        const panelTabMatches = panelTabId.current === tab?.id;
         let context: FilterContextResponse | null = null;
         if (tab?.id !== undefined) {
           context = await readFilterContext(tab.id);
@@ -185,27 +168,6 @@ export function usePanelConnection({
           tab?.id !== undefined && context?.timelineAvailable
             ? { tabId: tab.id, pageKey: context.pageKey, url: tab.url }
             : null;
-        const previousPage = activePageRef.current;
-        const pageChanged =
-          previousPage !== null &&
-          (nextPage === null ||
-            previousPage.tabId !== nextPage.tabId ||
-            previousPage.pageKey !== nextPage.pageKey);
-        if (
-          previousPage !== null &&
-          shouldDisablePreviousFiltering({
-            pageChanged,
-            previousTabId: previousPage.tabId,
-            nextTabId: nextPage?.tabId ?? null,
-          })
-        ) {
-          void browser.tabs
-            .sendMessage(previousPage.tabId, {
-              type: TIMELINE_CONTROL.setFiltering,
-              enabled: false,
-            })
-            .catch(() => {});
-        }
         if (
           context !== null &&
           !initializedMinimums.current.has(context.site)
@@ -227,32 +189,6 @@ export function usePanelConnection({
             throw error;
           }
         }
-        const enableFiltering = shouldEnableFiltering({
-          contentFilteringEnabled: context?.filteringEnabled ?? false,
-          hasNextPage: nextPage !== null,
-          panelTabMatches,
-          panelExpectedFiltering: pageFilteringExpected.current,
-          panelInitialized: panelInitialized.current,
-        });
-        if (enableFiltering && nextPage !== null) {
-          void browser.tabs
-            .sendMessage(nextPage.tabId, {
-              type: TIMELINE_CONTROL.setFiltering,
-              enabled: true,
-            })
-            .catch(() => {});
-          pageFilteringExpected.current = true;
-          setPageFilteringEnabled(true);
-        } else if (nextPage === null) {
-          // 未接続や対象外ページへの一時的な遷移では、ユーザーの設定を変えない。
-          setPageFilteringEnabled(false);
-        } else {
-          pageFilteringExpected.current = context?.filteringEnabled ?? false;
-          setPageFilteringEnabled(context?.filteringEnabled ?? false);
-        }
-        if (nextPage !== null) {
-          panelInitialized.current = true;
-        }
         activePageRef.current = nextPage;
         setActiveContext(context);
         const site = context?.site ?? null;
@@ -265,6 +201,7 @@ export function usePanelConnection({
       }
     };
 
+    refresh.current = () => refreshActiveHost(true);
     const handleTabActivated = () => void refreshActiveHost(true);
     const handleTabUpdated = (
       tabId: number,
@@ -301,6 +238,7 @@ export function usePanelConnection({
     browser.runtime.onMessage.addListener(handlePanelTab);
     return () => {
       disposed = true;
+      refresh.current = async () => {};
       refreshGeneration += 1;
       browser.tabs.onActivated.removeListener(handleTabActivated);
       browser.tabs.onUpdated.removeListener(handleTabUpdated);
@@ -310,38 +248,13 @@ export function usePanelConnection({
     };
   }, [onSettingsInitialized, onMinimumReset]);
 
-  const updateFiltering = (enabled: boolean): void => {
-    const epoch = connectionEpoch.current;
-    const activePage = activePageRef.current;
-    if (activePage === null) {
-      return;
-    }
-    pageFilteringExpected.current = enabled;
-    setPageFilteringEnabled(enabled);
-    void browser.tabs
-      .sendMessage(activePage.tabId, {
-        type: TIMELINE_CONTROL.setFiltering,
-        enabled,
-      })
-      .catch(() => {
-        if (
-          !panelMounted.current ||
-          epoch !== connectionEpoch.current ||
-          activePageRef.current?.pageKey !== activePage.pageKey
-        )
-          return;
-        pageFilteringExpected.current = false;
-        setPageFilteringEnabled(false);
-      });
-  };
-
   const captureConnection = (): ConnectionSnapshot => ({
     epoch: connectionEpoch.current,
     page: activePageRef.current,
   });
 
-  /** 設定の保存中に接続先が変わった場合は有効化を再送しない。 */
-  const restoreFiltering = async ({
+  /** 設定の保存中に接続先が変わった場合は古い一覧を更新しない。 */
+  const refreshContext = async ({
     epoch,
     page,
   }: ConnectionSnapshot): Promise<void> => {
@@ -366,7 +279,7 @@ export function usePanelConnection({
       activePage?.tabId === page.tabId &&
       activePage.pageKey === page.pageKey
     ) {
-      updateFiltering(true);
+      await refresh.current();
     }
   };
 
@@ -375,10 +288,8 @@ export function usePanelConnection({
     activeSite: activeContext?.site ?? null,
     knownUnsupportedSite,
     selectedSite,
-    pageFilteringEnabled,
     runPanelAction,
-    updateFiltering,
     captureConnection,
-    restoreFiltering,
+    refreshContext,
   };
 }

@@ -48,6 +48,14 @@ body {
   margin: 0;
 }
 
+[data-filter-controls] summary::-webkit-details-marker {
+  display: none;
+}
+
+[data-filter-controls][open] > summary > svg {
+  transform: rotate(180deg);
+}
+
 [data-sift-sidepanel] [data-threshold-suggestions] p {
   text-wrap: pretty;
   overflow-wrap: anywhere;

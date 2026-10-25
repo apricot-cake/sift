@@ -2,804 +2,160 @@ import { browser } from "wxt/browser";
 import type { ContentScriptContext } from "wxt/utils/content-script-context";
 import type { ServiceAdapter } from "./adapters/types.ts";
 import {
-  type ContinuousLoadObservation,
-  ContinuousLoadWarningTracker,
-} from "./continuous-load-warning.ts";
-import {
   type FilterContextResponse,
   isFilterContextRequest,
 } from "./filter-context.ts";
-import {
-  type ClassifyReason,
-  type ClassifyState,
-  classifyPost,
-} from "./filter-core.ts";
-import { hasRetainedPostBelowViewport } from "./layout-probe.ts";
+import { classifyPost } from "./filter-core.ts";
 import { PageHealthTracker } from "./page-health.ts";
 import {
-  defaults,
-  normalizeSettings,
-  type Settings,
-  settingsFor,
-  thresholdsFor,
-} from "./settings.ts";
+  type CollectedPost,
+  type PanelPost,
+  POST_COLLECTION_LIMIT,
+} from "./panel-post.ts";
+import { normalizeSettings, settingsFor, thresholdsFor } from "./settings.ts";
 import { settingsItem } from "./settings-storage.ts";
-import {
-  isTimelineControlRequest,
-  TIMELINE_CONTROL,
-} from "./timeline-controls.ts";
-import { TimelineViewport } from "./timeline-viewport.ts";
 
-const HIDDEN_THREAD_CONNECTOR = "data-sift-thread-connector-hidden";
-const MAX_AUTOMATIC_LAYOUT_PROBES = 3;
-
+/** パネルからの問い合わせ時だけ一覧を読み取り、ページのDOMやスクロールは変更しない。 */
 export function startContentRuntime(
   _ctx: ContentScriptContext | undefined,
-  maybeAdapter: ServiceAdapter | null,
+  adapter: ServiceAdapter | null,
 ) {
-  // ここには読むものが無い。それでも実行環境が dispose() に答えるのは、呼び出し
-  // 側が「始まったかどうか」を知らずに済むように。
-  if (!maybeAdapter) {
-    return { dispose() {} };
-  }
-  // 一度も代入し直されない新しい const へ入れ直してあるのは、下で宣言する関数が
-  // null でないという絞り込みを保てるように＝TS は引数の絞り込みを、巻き上げ
-  // られた関数宣言の中まで自分では運ばない。
-  const adapter = maybeAdapter;
-  const timelineViewport = adapter.readTimelineKey
-    ? new TimelineViewport(adapter)
-    : null;
-
-  let settings = normalizeSettings(defaults);
-  let observer: MutationObserver | null = null;
-  let routeTimer: number | null = null;
-  let filterFrame: number | null = null;
-  let layoutProbeFrame: number | null = null;
-  let layoutProbeTimer: number | null = null;
-  let scrollTopBeforeLayoutProbe: number | null = null;
-  let layoutProbePausedByUser = false;
-  let automaticLayoutProbeCount = 0;
-  let keepViewportOnNextFilter = false;
-  let disposed = false;
-  let pageFilteringEnabled = false;
-  let reportedTimelineAvailable: boolean | null = null;
-  let metricContextCache: {
-    metricSampleCount: number;
-    metricCounts: number[];
-    metricContextTruncated: boolean;
-  } | null = null;
-  const loadWarningTracker = adapter.readPostId
-    ? new ContinuousLoadWarningTracker()
-    : null;
-  let observedPageKey = pageKey();
+  if (!adapter) return { dispose() {} };
+  const service = adapter;
+  const collected = new Map<string, CollectedPost>();
   const healthTracker = new PageHealthTracker();
-  let healthCounts: {
-    sampledPosts: number;
-    readableMetrics: number;
-  } | null = null;
-
-  function pageHealth() {
-    if (healthCounts === null) {
-      // 診断のための全件再走査は避け、先頭の投稿を上限付きで確認する。
-      const cards = adapter.getMetricPostCards(document, 32).cards;
-      healthCounts = {
-        sampledPosts: cards.length,
-        readableMetrics: cards.filter((card) =>
-          Number.isFinite(adapter.readMetricCount?.(card)),
-        ).length,
-      };
-    }
-    const thresholds = thresholdsFor(selectedSiteSettings());
-    return healthTracker.observe({
-      pageKey: pageKey(),
-      support:
-        adapter.readPageSupport?.(document, location) ??
-        (timelineAvailable() ? "supported" : "unsupported"),
-      empty: adapter.hasEmptyTimeline?.(document) ?? false,
-      requiresMetrics:
-        filteringEnabled() && thresholds.inclusion.minimum !== null,
-      ...healthCounts,
-    });
+  let sourcePage: string | null = null;
+  let sourceTimeline: string | null = null;
+  let truncated = false;
+  let disposed = false;
+  function clearCollection(): void {
+    collected.clear();
+    truncated = false;
   }
-
-  function runtimeIsActive(): boolean {
-    if (disposed) return false;
-    try {
-      if (browser.runtime.id) return true;
-    } catch {
-      // 拡張機能の更新で旧コンテキストへのアクセスが失敗する場合も停止する。
-    }
-    dispose();
-    return false;
-  }
-
-  function filteringEnabled(): boolean {
-    return pageFilteringEnabled;
-  }
-
-  function timelineAvailable(): boolean {
-    const available = adapter.isTimelineAvailable(document, location);
-    if (available !== reportedTimelineAvailable) {
-      reportedTimelineAvailable = available;
-    }
-    return available;
-  }
-
-  function pageKey(): string {
-    return `${location.origin}${adapter.readPageKey?.(document, location) ?? `${location.pathname}${location.search}`}`;
-  }
-
-  // 画像と動画のどちらを絞り込むかは読み手の設定なので、2つはアダプターから
-  // 別々に届き、ここで畳み合わされる。`all` は本文だけの投稿も通す。
-  function selectedSiteSettings() {
-    return settingsFor(settings, adapter.settingsKey);
-  }
-
-  function matchesMediaFilter(
-    postCard: Element,
-    siteSettings: ReturnType<typeof selectedSiteSettings>,
-  ): boolean {
-    const { hasImage, hasVideo } = adapter.readMedia(postCard);
-    if (!siteSettings.mediaEnabled) {
-      return true;
-    }
-    const mediaMode = siteSettings.mediaMode;
-    if (mediaMode === "images") {
-      return hasImage;
-    }
-    if (mediaMode === "video") {
-      return hasVideo;
-    }
-    return hasImage || hasVideo;
-  }
-
-  function metricContextForContext(): {
-    metricSampleCount: number;
-    metricCounts: number[];
-    metricContextTruncated: boolean;
-  } {
-    const siteSettings = selectedSiteSettings();
-    if (!timelineAvailable()) {
-      return {
-        metricSampleCount: 0,
-        metricCounts: [],
-        metricContextTruncated: false,
-      };
-    }
-    if (metricContextCache !== null) return metricContextCache;
-
-    const thresholds = thresholdsFor(siteSettings);
-    const withoutMinimum = {
-      ...thresholds,
-      inclusion: {
-        ...thresholds.inclusion,
-        minimum: null,
-      },
-    };
-
-    let metricSampleCount = 0;
-    const metricCounts: number[] = [];
-    // パネルを開いたままでも、巨大なページを問い合わせのたびに全走査しない。
-    // 先頭から同じ上限で切ることで、応答配列だけでなく読み取り処理も制限する。
-    const sample = adapter.getMetricPostCards(document);
-    for (const postCard of sample.cards) {
-      const metricCount = adapter.readMetricCount?.(postCard) ?? Number.NaN;
-      const result = classifyPost(
-        {
-          mediaMatches: matchesMediaFilter(postCard, siteSettings),
-          metricCount,
-          isReply: adapter.readIsReply?.(postCard) ?? false,
-          isQuote: adapter.readIsQuote?.(postCard) ?? false,
-          isRepost: adapter.readIsRepost(postCard),
-        },
-        withoutMinimum,
-      );
-      if (result.state === "hidden") {
-        continue;
-      }
-
-      metricSampleCount += 1;
-      if (Number.isSafeInteger(metricCount) && metricCount >= 0) {
-        metricCounts.push(metricCount);
-      }
-    }
-    metricContextCache = {
-      metricSampleCount,
-      metricCounts,
-      metricContextTruncated: sample.truncated,
-    };
-    return metricContextCache;
-  }
-
-  function setCellState(
-    cell: HTMLElement,
-    state: ClassifyState,
-    reason: ClassifyReason,
-  ): void {
-    if (cell.dataset.siftFilterState !== state) {
-      cell.dataset.siftFilterState = state;
-    }
-    if (cell.dataset.siftFilterReason !== reason) {
-      cell.dataset.siftFilterReason = reason;
-    }
-  }
-
-  function clearCellState(cell: HTMLElement): void {
-    delete cell.dataset.siftFilterState;
-    delete cell.dataset.siftFilterReason;
-  }
-
-  function setThreadConnectorsHidden(postCard: Element, hidden: boolean): void {
-    for (const connector of adapter.findThreadConnectors?.(postCard) ?? []) {
-      connector.toggleAttribute(HIDDEN_THREAD_CONNECTOR, hidden);
-    }
-  }
-
-  function* readCurrentPostIds(): Iterable<string> {
-    if (!adapter.readPostId) return;
-    for (const postCard of adapter.getPostCards(document)) {
-      const id = adapter.readPostId(postCard);
-      if (id !== null) yield id;
-    }
-  }
-
-  // CSS の scroll anchoring はページ側がどの投稿をアンカーにするかで結果が変わる。
-  // 抽出の切替は投稿をまとめて display:none にするので、ここでは読んでいた投稿を
-  // 明示的に選ぶ。切替後にも残る、画面上端に最も近い投稿をその位置へ戻す。
-  function findViewportAnchor(
-    updates: readonly { cell: HTMLElement; state: ClassifyState | null }[],
-  ): { cell: HTMLElement; top: number } | null {
-    let beforeViewport: { cell: HTMLElement; top: number } | null = null;
-    let afterViewport: { cell: HTMLElement; top: number } | null = null;
-
-    for (const update of updates) {
-      if (update.state === "hidden") {
-        continue;
-      }
-
-      const { top, bottom } = update.cell.getBoundingClientRect();
-      if (bottom <= 0 || top >= window.innerHeight) {
-        continue;
-      }
-      if (top <= 0 && (!beforeViewport || top > beforeViewport.top)) {
-        beforeViewport = { cell: update.cell, top };
-      } else if (top > 0 && (!afterViewport || top < afterViewport.top)) {
-        afterViewport = { cell: update.cell, top };
-      }
-    }
-
-    return beforeViewport ?? afterViewport;
-  }
-
-  function restoreViewportAnchor(
-    anchor: { cell: HTMLElement; top: number } | null,
-  ): void {
-    if (!anchor) {
-      return;
-    }
-
-    window.requestAnimationFrame(() => {
-      if (disposed || !anchor.cell.isConnected) {
-        return;
-      }
-      const offset = anchor.cell.getBoundingClientRect().top - anchor.top;
-      if (offset !== 0) {
-        window.scrollBy({ top: offset, behavior: "instant" });
-      }
-    });
-  }
-
-  function stopLayoutProbe(restoreScroll = true): void {
-    if (layoutProbeFrame !== null) {
-      window.cancelAnimationFrame(layoutProbeFrame);
-      layoutProbeFrame = null;
-    }
-    if (layoutProbeTimer !== null) {
-      window.clearTimeout(layoutProbeTimer);
-      layoutProbeTimer = null;
-    }
-    document.documentElement.removeAttribute("data-sift-layout-probe");
-    if (scrollTopBeforeLayoutProbe !== null) {
-      const scrollTop = scrollTopBeforeLayoutProbe;
-      scrollTopBeforeLayoutProbe = null;
-      if (restoreScroll) {
-        window.requestAnimationFrame(() => {
-          if (!disposed) {
-            window.scrollTo({ top: scrollTop, behavior: "instant" });
-          }
-        });
-      }
-    }
-  }
-
-  function startLayoutProbe(): void {
-    if (
-      disposed ||
-      timelineViewport?.isRestoring() ||
-      !adapter.needsLayoutProbeForPagination ||
-      adapter.hasReachedTimelineEnd?.(document) ||
-      layoutProbePausedByUser ||
-      automaticLayoutProbeCount >= MAX_AUTOMATIC_LAYOUT_PROBES ||
-      layoutProbeFrame !== null ||
-      layoutProbeTimer !== null
-    ) {
-      return;
-    }
-
-    const scrollingElement =
-      document.scrollingElement ?? document.documentElement;
-    scrollTopBeforeLayoutProbe = scrollingElement.scrollTop;
-    automaticLayoutProbeCount += 1;
-    document.documentElement.setAttribute("data-sift-layout-probe", "");
-    layoutProbeFrame = window.requestAnimationFrame(() => {
-      layoutProbeFrame = null;
-      if (disposed || !filteringEnabled()) {
-        stopLayoutProbe();
-        return;
-      }
-      window.scrollTo({
-        top: scrollingElement.scrollHeight,
-        behavior: "instant",
-      });
-      layoutProbeTimer = window.setTimeout(() => {
-        layoutProbeTimer = null;
-        stopLayoutProbe();
-        scheduleFilter();
-      }, 2_000);
-    });
-  }
-
-  function isAtPageBottom(): boolean {
-    const scrollingElement =
-      document.scrollingElement ?? document.documentElement;
-    return (
-      scrollingElement.scrollHeight -
-        scrollingElement.clientHeight -
-        scrollingElement.scrollTop <=
-      4
-    );
-  }
-
-  function filterVisiblePosts(): void {
-    filterFrame = null;
-    if (!runtimeIsActive()) {
-      return;
-    }
-
-    // 次ページ確認中も画面遷移は追跡する。一時スクロールの座標は保存しない。
-    if (filteringEnabled()) timelineViewport?.syncRoute();
-
-    if (!timelineAvailable()) {
-      if (filteringEnabled()) timelineViewport?.update();
-      clearTimelineState();
-      return;
-    }
-
-    const postCards = adapter.getPostCards(document);
-    if (postCards.length === 0) {
-      clearAllFiltering();
-      return;
-    }
-
-    const siteSettings = selectedSiteSettings();
-    const thresholds = thresholdsFor(siteSettings);
-    const loadObservations: ContinuousLoadObservation[] = [];
-    const updates: {
-      cell: HTMLElement;
-      state: ClassifyState | null;
-      reason: ClassifyReason | null;
-    }[] = [];
-
-    for (const postCard of postCards) {
-      // 生きたページ上の投稿は必ず HTMLElement。アダプターの約束が Element
-      // までなのは、そこまでしか読まないから。
-      const cell = adapter.findPostCell(postCard) as HTMLElement;
-      setThreadConnectorsHidden(postCard, filteringEnabled());
-      if (!filteringEnabled()) {
-        updates.push({
-          cell,
-          state: null,
-          reason: null,
-        });
-        continue;
-      }
-
-      const result = classifyPost(
-        {
-          mediaMatches: matchesMediaFilter(postCard, siteSettings),
-          metricCount: adapter.readMetricCount?.(postCard) ?? Number.NaN,
-          isReply: adapter.readIsReply?.(postCard) ?? false,
-          isQuote: adapter.readIsQuote?.(postCard) ?? false,
-          isRepost: adapter.readIsRepost(postCard),
-        },
-        thresholds,
-      );
-
-      updates.push({
-        cell,
-        state: result.state,
-        reason: result.reason,
-      });
-      const postId = adapter.readPostId?.(postCard);
-      if (postId) {
-        loadObservations.push({ id: postId, state: result.state });
-      }
-    }
-
-    loadWarningTracker?.observe(loadObservations);
-
-    const viewportAnchor = keepViewportOnNextFilter
-      ? findViewportAnchor(updates)
-      : null;
-    keepViewportOnNextFilter = false;
-
-    for (const update of updates) {
-      if (update.state === null || update.reason === null) {
-        clearCellState(update.cell);
-      } else {
-        setCellState(update.cell, update.state, update.reason);
-      }
-    }
-    // 種別条件だけの場合や指標を読めない場合も、残した投稿を数える。
-    const hasRetainedPost = hasRetainedPostBelowViewport(
-      updates,
-      window.innerHeight,
-    );
-    // 一時的に全投稿を展開している間の座標では回数を戻さない。
-    if (hasRetainedPost && scrollTopBeforeLayoutProbe === null) {
-      automaticLayoutProbeCount = 0;
-    }
-    if (
-      filteringEnabled() &&
-      adapter.needsLayoutProbeForPagination &&
-      !adapter.hasReachedTimelineEnd?.(document) &&
-      !hasRetainedPost
-    ) {
-      startLayoutProbe();
-    } else {
-      stopLayoutProbe();
-    }
-    restoreViewportAnchor(viewportAnchor);
-    if (filteringEnabled() && scrollTopBeforeLayoutProbe === null)
-      timelineViewport?.update();
-  }
-
-  function scheduleFilter(): void {
-    healthCounts = null;
-    metricContextCache = null;
-    if (!runtimeIsActive()) return;
-    if (filterFrame !== null) {
-      return;
-    }
-    filterFrame = window.requestAnimationFrame(filterVisiblePosts);
-  }
-
-  function clearAllFiltering(): void {
-    for (const cell of document.querySelectorAll<HTMLElement>(
-      "[data-sift-filter-state]",
-    )) {
-      clearCellState(cell);
-    }
-    for (const connector of document.querySelectorAll(
-      `[${HIDDEN_THREAD_CONNECTOR}]`,
-    )) {
-      connector.removeAttribute(HIDDEN_THREAD_CONNECTOR);
-    }
-  }
-
-  function clearTimelineState(): void {
-    stopLayoutProbe();
-    loadWarningTracker?.reset();
-    clearAllFiltering();
-  }
-
-  function handleRoute(): void {
-    if (!runtimeIsActive()) return;
-    // 対象外画面でフィルターを解除する前に、元の一覧を離れたことを記録する。
-    if (filteringEnabled()) timelineViewport?.syncRoute();
-    const nextPageKey = pageKey();
-    const pageChanged = nextPageKey !== observedPageKey;
-    const previousAvailability = reportedTimelineAvailable;
-    if (pageChanged) {
-      stopLayoutProbe(false);
-      observedPageKey = nextPageKey;
-      layoutProbePausedByUser = false;
-      automaticLayoutProbeCount = 0;
-      loadWarningTracker?.reset(readCurrentPostIds());
-    }
-    const available = timelineAvailable();
-    if (available) {
-      if (pageChanged || previousAvailability !== available) scheduleFilter();
-    } else if (pageChanged || previousAvailability !== available) {
-      healthCounts = null;
-      metricContextCache = null;
-      clearTimelineState();
-    }
-  }
-
-  function setFiltering(enabled: boolean): void {
-    if (pageFilteringEnabled === enabled) {
-      return;
-    }
-    pageFilteringEnabled = enabled;
-    if (enabled) {
-      layoutProbePausedByUser = false;
-      automaticLayoutProbeCount = 0;
-    } else {
-      stopLayoutProbe();
-      // パネルは対象外画面への遷移でも停止通知を送る。戻り先の位置は残す。
-      // 対応一覧上で明示的に停止した場合は、従来どおり破棄する。
-      if (timelineAvailable()) timelineViewport?.reset();
-      else timelineViewport?.syncRoute();
-    }
-    loadWarningTracker?.reset(readCurrentPostIds());
-    keepViewportOnNextFilter = true;
-    if (timelineAvailable()) {
-      scheduleFilter();
-    } else {
-      clearTimelineState();
-    }
-  }
-
-  async function handleTimelineControlMessage(
-    message: unknown,
+  async function readContext(
+    reset: boolean,
   ): Promise<FilterContextResponse | undefined> {
-    if (isFilterContextRequest(message)) {
-      const metricContext = metricContextForContext();
-      return {
-        health: pageHealth(),
-        site: adapter.settingsKey,
-        pageTitle: document.title,
-        pageKey: pageKey(),
-        timelineKey: adapter.readTimelineKey?.(document, location) ?? null,
-        timelineAvailable: timelineAvailable(),
-        filteringEnabled: filteringEnabled(),
-        continuousLoadingWarning:
-          filteringEnabled() && (loadWarningTracker?.warning ?? false),
-        ...metricContext,
-      };
-    }
-    if (!isTimelineControlRequest(message)) {
-      return undefined;
-    }
+    // 再開の初期化は受信順に行い、古い問い合わせの遅延で新しい蓄積を消さない。
+    if (reset) clearCollection();
+    // 設定変更の直後にも同じ条件で返す。監視やタイマーを常駐させず、
+    // パネルが閉じている間は設定・投稿の読み取りも停止する。
+    const settings = settingsFor(
+      normalizeSettings(await settingsItem.getValue()),
+      service.settingsKey,
+    );
+    if (disposed) return;
+    const pageKey = `${location.origin}${service.readPageKey?.(document, location) ?? `${location.pathname}${location.search}`}`;
+    const timelineKey = service.readTimelineKey?.(document, location) ?? null;
+    const available = service.isTimelineAvailable(document, location);
+    const support =
+      service.readPageSupport?.(document, location) ??
+      (available ? "supported" : "unsupported");
     if (
-      message.type === TIMELINE_CONTROL.setFiltering &&
-      typeof message.enabled === "boolean"
-    ) {
-      setFiltering(message.enabled);
-    }
-    return undefined;
-  }
-
-  // 設定は1つの値として保管されているので、丸ごと来る＝この実行環境が既に
-  // 持っていたものへ差分を戻す作業は無い。
-  function handleSettingsChange(storedSettings: Settings | null): void {
-    if (disposed) {
-      return;
-    }
-
-    settings = normalizeSettings(storedSettings);
-    timelineViewport?.reset();
-    automaticLayoutProbeCount = 0;
-    loadWarningTracker?.reset(readCurrentPostIds());
-    scheduleFilter();
-  }
-
-  function dispose(): void {
-    if (disposed) {
-      return;
-    }
-
-    disposed = true;
-    timelineViewport?.reset();
-    observer?.disconnect();
-    observer = null;
-    if (routeTimer !== null) {
-      window.clearInterval(routeTimer);
-      routeTimer = null;
-    }
-    if (filterFrame !== null) {
-      window.cancelAnimationFrame(filterFrame);
-      filterFrame = null;
-    }
-    stopLayoutProbe();
-    window.removeEventListener("pagehide", handlePageHide);
-    window.removeEventListener("pageshow", handlePageShow);
-    try {
-      browser.runtime.onMessage.removeListener(handleTimelineControlMessage);
-    } catch {
-      // 無効になったコンテキストでも、残りの監視とタイマーは必ず解除する。
-    }
-    window.removeEventListener("wheel", handleUserNavigation, true);
-    window.removeEventListener("touchstart", handleUserNavigation, true);
-    window.removeEventListener("pointerdown", handleUserNavigation, true);
-    window.removeEventListener("keydown", handleUserNavigation, true);
-    window.removeEventListener("scroll", handleScroll);
-    window.removeEventListener("resize", handleResize);
-    loadWarningTracker?.dispose();
-    try {
-      unwatchSettings();
-    } catch {
-      // 拡張機能のコンテキストが既に無効になっているかもしれない。
-    }
-    clearTimelineState();
-  }
-
-  function handlePageHide(event: PageTransitionEvent): void {
-    if (!event.persisted) {
-      dispose();
-    }
-  }
-
-  function handlePageShow(event: PageTransitionEvent): void {
-    if (!event.persisted || disposed) {
-      return;
-    }
-    void settingsItem
-      .getValue()
-      .then(handleSettingsChange)
-      .catch(() => {});
-    handleRoute();
-  }
-
-  function handleUserNavigation(event: Event): void {
-    if (!event.isTrusted) {
-      return;
-    }
-    if (
-      event instanceof KeyboardEvent &&
-      ![
-        "ArrowDown",
-        "ArrowUp",
-        "End",
-        "Home",
-        "PageDown",
-        "PageUp",
-        " ",
-      ].includes(event.key)
-    ) {
-      return;
-    }
-    if (filteringEnabled()) {
-      timelineViewport?.cancelForUserNavigation();
-      loadWarningTracker?.reset(readCurrentPostIds());
-      if (!adapter.needsLayoutProbeForPagination) {
-        return;
+      pageKey !== sourcePage ||
+      (timelineKey !== null &&
+        sourceTimeline !== null &&
+        timelineKey !== sourceTimeline) ||
+      support === "unsupported"
+    )
+      clearCollection();
+    if (pageKey !== sourcePage) sourceTimeline = null;
+    sourcePage = pageKey;
+    // 画像モーダル内で一覧キーを確定できなくても、背景一覧の蓄積は保つ。
+    if (timelineKey !== null || support === "unsupported")
+      sourceTimeline = timelineKey;
+    const sample = available
+      ? service.getMetricPostCards(document)
+      : { cards: [], truncated: false };
+    let readablePosts = 0;
+    let readableMetrics = 0;
+    for (const card of sample.cards) {
+      const post = service.readPost(card);
+      const metric = post ? post.metricCount : service.readMetricCount?.(card);
+      if (Number.isSafeInteger(metric) && (metric ?? -1) >= 0)
+        readableMetrics += 1;
+      if (!post) continue;
+      readablePosts += 1;
+      // 仮想リストから消えた投稿も残し、再描画された同じ投稿は更新する。
+      if (!collected.has(post.id) && collected.size >= POST_COLLECTION_LIMIT) {
+        truncated = true;
+        continue;
       }
-
-      const movesTowardStart =
-        (event instanceof WheelEvent && event.deltaY < 0) ||
-        (event instanceof KeyboardEvent &&
-          (["ArrowUp", "Home", "PageUp"].includes(event.key) ||
-            (event.key === " " && event.shiftKey)));
-      const movesTowardEnd =
-        (event instanceof WheelEvent && event.deltaY > 0) ||
-        (event instanceof KeyboardEvent &&
-          (["ArrowDown", "End", "PageDown"].includes(event.key) ||
-            (event.key === " " && !event.shiftKey)));
-      // scroll は自動移動でも発生するため、閲覧操作でだけ回数を戻す。
-      if (
-        movesTowardEnd ||
-        event.type === "touchstart" ||
-        event.type === "pointerdown"
-      ) {
-        automaticLayoutProbeCount = 0;
-        if (isAtPageBottom() && !layoutProbePausedByUser) scheduleFilter();
-      }
-      const layoutProbeRunning =
-        layoutProbeFrame !== null ||
-        layoutProbeTimer !== null ||
-        document.documentElement.hasAttribute("data-sift-layout-probe");
-
-      if (movesTowardStart && layoutProbeRunning) {
-        const scrollingElement =
-          document.scrollingElement ?? document.documentElement;
-        const initialScrollTop =
-          scrollTopBeforeLayoutProbe ?? scrollingElement.scrollTop;
-        let targetScrollTop = 0;
-        if (event instanceof WheelEvent) {
-          const pixelsPerUnit =
-            event.deltaMode === WheelEvent.DOM_DELTA_LINE
-              ? 40
-              : event.deltaMode === WheelEvent.DOM_DELTA_PAGE
-                ? window.innerHeight
-                : 1;
-          targetScrollTop = Math.max(
-            0,
-            initialScrollTop + event.deltaY * pixelsPerUnit,
-          );
-        } else if (event instanceof KeyboardEvent && event.key !== "Home") {
-          const distance =
-            event.key === "ArrowUp" ? 40 : window.innerHeight * 0.9;
-          targetScrollTop = Math.max(0, initialScrollTop - distance);
+      collected.set(post.id, post);
+    }
+    truncated ||= sample.truncated;
+    const thresholds = thresholdsFor(settings);
+    const withoutMinimum = { ...thresholds, inclusion: { minimum: null } };
+    const posts: PanelPost[] = [];
+    const metricCounts: number[] = [];
+    let metricSampleCount = 0;
+    if (available) {
+      for (const post of collected.values()) {
+        const mediaMatches =
+          !settings.mediaEnabled ||
+          (settings.mediaMode === "images"
+            ? post.hasImage
+            : settings.mediaMode === "video"
+              ? post.hasVideo
+              : post.hasImage || post.hasVideo);
+        const input = {
+          ...post,
+          mediaMatches,
+          metricCount: post.metricCount ?? Number.NaN,
+        };
+        if (classifyPost(input, withoutMinimum).state !== "hidden") {
+          metricSampleCount += 1;
+          if (post.metricCount !== null) metricCounts.push(post.metricCount);
         }
-        layoutProbePausedByUser = true;
-        stopLayoutProbe(false);
-        window.requestAnimationFrame(() => {
-          if (!disposed) {
-            window.scrollTo({ top: targetScrollTop, behavior: "instant" });
-          }
-        });
-      } else if (
-        layoutProbePausedByUser &&
-        movesTowardEnd &&
-        isAtPageBottom()
-      ) {
-        layoutProbePausedByUser = false;
-        scheduleFilter();
+        if (classifyPost(input, thresholds).state !== "hidden") {
+          // 判定用の属性をメッセージに混ぜず、描画用の情報だけを渡す。
+          const { id, url, author, handle, text, images, metricCount } = post;
+          posts.push({ id, url, author, handle, text, images, metricCount });
+        }
       }
     }
+    return {
+      health: healthTracker.observe({
+        pageKey: `${pageKey}:${timelineKey ?? sourceTimeline ?? ""}`,
+        support,
+        empty: service.hasEmptyTimeline?.(document) ?? false,
+        requiresMetrics: thresholds.inclusion.minimum !== null,
+        sampledPosts: sample.cards.length,
+        readablePosts,
+        readableMetrics,
+      }),
+      site: service.settingsKey,
+      pageTitle: document.title,
+      pageKey,
+      timelineKey,
+      timelineAvailable: available,
+      posts,
+      collectedCount: available ? collected.size : 0,
+      collectionTruncated: available && truncated,
+      metricCounts,
+      metricSampleCount,
+      metricContextTruncated: available && truncated,
+    };
   }
-
-  function handleScroll(): void {
-    if (filteringEnabled() && scrollTopBeforeLayoutProbe === null)
-      timelineViewport?.update();
-    if (
-      filteringEnabled() &&
-      adapter.needsLayoutProbeForPagination &&
-      !layoutProbePausedByUser
-    ) {
-      scheduleFilter();
+  // 対象メッセージだけPromiseを返し、他の受信者の応答を奪わない。
+  function onMessage(message: unknown) {
+    if (disposed || !isFilterContextRequest(message)) return;
+    return readContext(message.reset === true);
+  }
+  function dispose(): void {
+    if (disposed) return;
+    disposed = true;
+    collected.clear();
+    window.removeEventListener("pagehide", onPageHide);
+    try {
+      browser.runtime.onMessage.removeListener(onMessage);
+    } catch {
+      // 拡張更新でコンテキストが破棄された場合もローカルの情報は解放する。
     }
   }
-
-  function handleResize(): void {
-    // 次ページ判定用の一時スクロールと読んでいた位置の復元を競合させない。
-    stopLayoutProbe(false);
-    if (filteringEnabled()) timelineViewport?.resize();
-    scheduleFilter();
+  function onPageHide(event: PageTransitionEvent): void {
+    if (!event.persisted) dispose();
   }
-
-  void settingsItem
-    .getValue()
-    .then((storedSettings) => {
-      if (!runtimeIsActive()) {
-        return;
-      }
-      settings = normalizeSettings(storedSettings);
-      scheduleFilter();
-      observer = new MutationObserver(scheduleFilter);
-      observer.observe(document.body, {
-        childList: true,
-        characterData: true,
-        attributes: true,
-        attributeFilter: [
-          "aria-selected",
-          "selected",
-          "aria-label",
-          "datetime",
-          "href",
-          "src",
-          "hidden",
-          "data-testid",
-          "style",
-          "class",
-        ],
-        subtree: true,
-      });
-      routeTimer = window.setInterval(handleRoute, 750);
-    })
-    .catch(() => {
-      // 拡張機能のコンテキストが差し替わった可能性がある。監視は始めず、次の
-      // 注入に任せる。
-    });
-
-  const unwatchSettings = settingsItem.watch(handleSettingsChange);
-  browser.runtime.onMessage.addListener(handleTimelineControlMessage);
-  window.addEventListener("pagehide", handlePageHide);
-  window.addEventListener("pageshow", handlePageShow);
-  window.addEventListener("wheel", handleUserNavigation, {
-    capture: true,
-    passive: true,
-  });
-  window.addEventListener("touchstart", handleUserNavigation, {
-    capture: true,
-    passive: true,
-  });
-  window.addEventListener("pointerdown", handleUserNavigation, true);
-  window.addEventListener("keydown", handleUserNavigation, true);
-  window.addEventListener("scroll", handleScroll, { passive: true });
-  window.addEventListener("resize", handleResize);
-
+  browser.runtime.onMessage.addListener(onMessage);
+  window.addEventListener("pagehide", onPageHide);
   return { dispose };
 }

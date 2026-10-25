@@ -2,7 +2,7 @@ import { selectAdapter } from "../utils/adapters/index.ts";
 import { startContentRuntime } from "../utils/content-runtime.ts";
 
 export default defineUnlistedScript(() => {
-  const runtimeKey = "__siftContentRuntimeStarted__";
+  const runtimeKey = "__siftPostCollectionStarted__";
   const page = globalThis as typeof globalThis & Record<string, boolean>;
   if (page[runtimeKey]) {
     return;

@@ -8,17 +8,15 @@ sift
 
 ### 概要
 
-X・Blueskyでイラストを探すための拡張機能です。投稿をいいね数や画像の有無で絞り込めます。
+X・Blueskyの投稿をサイドパネルに集め、いいね数や画像の有無で絞り込めます。投稿は新しいタブで開きます。
 
 ### 詳細説明
 
-いつものタイムラインで、イラスト探しに集中してみませんか。
+X・Blueskyのタイムラインやリストで、条件に合う投稿をサイドパネルへ集めます。
 
-画像のある投稿や、いいねの多い投稿に絞って表示できます。
+いいね数や画像・動画の有無で絞り込み、返信・引用・リポストを除外できます。投稿をクリックすると新しいタブで開きます。元ページの表示は変更しません。
 
-X・Blueskyの対応するタイムラインやリストを開き、sift のボタンを押して条件を選ぶだけです。
-
-使い方・操作デモ: <https://github.com/apricot-cake/sift#操作デモ>
+使い方: <https://github.com/apricot-cake/sift#使い方>
 
 ### カテゴリ
 
@@ -32,17 +30,15 @@ sift
 
 ### Summary
 
-Find illustrations on X and Bluesky by filtering posts by like count and the presence of images.
+Collect X and Bluesky posts in a side panel, filter by likes and images, and open posts in new tabs.
 
 ### Detailed description
 
-Make room for illustrations in your usual timeline.
+Collect matching posts from supported X and Bluesky timelines and lists in a side panel.
 
-Show only posts with images, or narrow the list to posts with more likes.
+Filter by likes, images or videos, and exclude replies, quotes, and reposts. Click a post to open it in a new tab. The original page stays unchanged.
 
-Open a supported timeline or list on X or Bluesky, click the sift button, and choose your filters.
-
-Usage and demo: <https://github.com/apricot-cake/sift#操作デモ>
+Usage: <https://github.com/apricot-cake/sift#使い方>
 
 ### Category
 
@@ -52,23 +48,24 @@ Productivity
 
 以下は掲載文とは別の確認事項です。提出前に、実装と掲載内容を照合してください。
 
-- 対象は読み込み済みの投稿です。画像の内容は判定せず、投稿の並び順も変更しません。
+- 対象は画面に読み込まれた投稿です。同じ一覧内で最大1,000件を一時保持します。画像の内容は判定せず、元ページの投稿を隠したり並べ替えたりしません。
 - 絞り込みはブラウザー内で行い、開発者へのデータ送信は行いません。Chrome の同期ストレージによる設定の同期とは区別してください。
 - 掲載画像は架空の投稿による操作デモです。画像内でもデモであることを明示してください。
+- パネル一覧への移行後の画像・動画は未作成です。ストアへ提出する前に、旧方式を示す掲載画像を差し替えてください。
 - 対応する画面は [対応サービス](../docs/対応サービス.md)と照合してください。
 
 ## プライバシー欄
 
 ### 単一用途
 
-X・Blueskyでイラストを探すために、表示された投稿をいいね数、画像・動画の有無、返信・引用・リポストの除外で絞り込みます。
+X・Blueskyでイラストを探すために、読み取った投稿をサイドパネルへ表示します。いいね数、画像・動画の有無、返信・引用・リポストの除外条件でパネル内の一覧を絞り込みます。
 
 ### 権限の理由
 
 - `storage`: サイトごとの絞り込み条件を Chrome の同期ストレージに保存するため。接続先タブのURL・識別子と、元の一覧・選択タブを識別する情報、画像拡大中の遷移を確認するための一時的なURLと時刻をセッション中だけ保存します。この接続情報は同期しません。
-- `sidePanel`: 閲覧中のページと並べて絞り込み条件を操作するため。
-- `activeTab`: ユーザーが拡張機能のボタンを押した現在のタブだけで、対応画面を判定して絞り込みを開始するため。
-- `scripting`: `activeTab` で許可された現在のタブへ、絞り込み用のコードとスタイルを注入するため。
+- `sidePanel`: 閲覧中のページと並べて収集した投稿と絞り込み条件を表示するため。
+- `activeTab`: ユーザーが拡張機能のボタンを押した現在のタブだけで、対応画面を判定して投稿を読み取るため。
+- `scripting`: `activeTab` で許可された現在のタブへ、投稿を読み取るコードと、パネル開閉時の閲覧位置を保つコードを実行するため。
 
 ### リモートコード
 
@@ -76,7 +73,7 @@ X・Blueskyでイラストを探すために、表示された投稿をいいね
 
 ### データ利用の申告
 
-- ウェブサイトのコンテンツ: 絞り込みに必要な投稿の判定値をブラウザー内で一時的に読み取ります。投稿の内容は永続保存せず、外部送信もしません。
+- ウェブサイトのコンテンツ: 一覧に必要な投稿URL、投稿者、本文、画像URLと判定値をブラウザー内で一時的に保持します。投稿は永続保存せず、開発者へ送信しません。画像の表示時にはサービスの画像配信元へ通信することがあります。
 - ウェブ履歴: 接続先のURLと元の一覧を識別する情報をブラウザー内のセッション中だけ保存します。閲覧履歴の蓄積や外部送信は行いません。
 - データの販売、広告利用、第三者提供、人による閲覧: いずれも行いません。
 - Limited Use の各項目: 準拠として申告します。

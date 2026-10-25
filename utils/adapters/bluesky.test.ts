@@ -94,27 +94,6 @@ describe("投稿を見つける", () => {
   });
 });
 
-describe("フィードの終端を読む", () => {
-  it.each(["フィードの終わり", "End of feed"])(
-    "%s を終端として読む",
-    (label) => {
-      const page = render(`
-        <div data-testid="postsFeed-flatlist">
-          <div><div dir="auto">${label}</div></div>
-        </div>
-      `);
-
-      expect(blueskyAdapter.hasReachedTimelineEnd?.(page)).toBe(true);
-    },
-  );
-
-  it("フィードの外にある同じ文言は終端として読まない", () => {
-    const page = render('<div dir="auto">フィードの終わり</div>');
-
-    expect(blueskyAdapter.hasReachedTimelineEnd?.(page)).toBe(false);
-  });
-});
-
 describe("Home の対象フィード", () => {
   it("Following は投稿の描き直し中でも操作できる", () => {
     const page = render(`
@@ -191,7 +170,7 @@ describe("Home の対象フィード", () => {
 
 // X と違い、Bluesky は区切り線と周囲の余白をカードの内側に持っているので、
 // 外側のセルを探しにいく必要が無い。
-describe("隠される単位", () => {
+describe("閲覧位置の基準となるセル", () => {
   it("カードそのもの", () => {
     const card = renderPost();
 

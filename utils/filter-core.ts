@@ -100,8 +100,7 @@ export function parseMetric(value: unknown): number {
   }
 
   // 単位だと分かっているのに桁が決まらない綴り＝判定不能。0（数値が無い）
-  // とは区別する必要があるため、`Number.NaN` を返す。`classifyPost` はこれを
-  // 隠さない扱いにする。
+  // とは区別する必要があるため、`Number.NaN` を返す。
   if (ambiguousUnits.has(unit)) {
     return Number.NaN;
   }
@@ -170,11 +169,9 @@ export function classifyPost(
   }
 
   if (settings.inclusion.minimum !== null) {
-    // `parseMetric` が判定不能（`Number.NaN`）を返した投稿。誤って隠すと
-    // 利用者からは見えず回復できないが、誤って残すのは目に入るだけなので、
-    // ここでは線を付けずに残す（#82）。
+    // 最低値を確認できない投稿はパネルの結果へ含めない。元の投稿は変更しない。
     if (!Number.isFinite(post.metricCount)) {
-      return { state: "visible", reason: "indeterminate-metric" };
+      return { state: "hidden", reason: "indeterminate-metric" };
     }
 
     if (

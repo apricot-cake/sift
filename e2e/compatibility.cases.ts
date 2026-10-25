@@ -38,6 +38,14 @@ import {
   releaseCasePage,
 } from "./live.ts";
 import type { LiveCase } from "./live-case.ts";
+import {
+  assertPageReadOnly,
+  assertPostOpensInNewTab,
+  capturePanelScreenshot,
+  openFilterControls,
+  postKey,
+  readPanelPosts,
+} from "./panel-posts.ts";
 import { changeXSearch } from "./x-navigation.ts";
 
 // サイドパネルでは背景タブ扱いでrequestAnimationFrameが停止することがある。
@@ -276,14 +284,52 @@ async function snapshot(
   }
   return result;
 }
-async function observations(page: Page, target: CompatibilityCase) {
+export async function observations(page: Page, target: CompatibilityCase) {
   const selection = regionFor(target);
   const rows = await page.$$eval(
     selection.card,
     (cards, metric) =>
       cards
         .filter((card) => {
-          // サイトが別タブ用に退避した一覧は対象外。Siftが隠したカード自身は含める。
+          if (
+            card.matches('article[data-testid="tweet"]') &&
+            card.closest('[data-testid="placementTracking"]')
+          ) {
+            const permalink = [...card.querySelectorAll("time[datetime]")].some(
+              (time) => {
+                if (time.closest('article[data-testid="tweet"]') !== card)
+                  return false;
+                for (
+                  let parent = time.parentElement;
+                  parent && parent !== card;
+                  parent = parent.parentElement
+                ) {
+                  if (
+                    parent.matches('div[role="link"]') &&
+                    parent.querySelector('[data-testid="Tweet-User-Avatar"]')
+                  )
+                    return false;
+                }
+                const href = time.closest("a")?.getAttribute("href");
+                if (!href || !URL.canParse(href, "https://x.com")) return false;
+                const url = new URL(href, "https://x.com");
+                return (
+                  url.protocol === "https:" &&
+                  !url.username &&
+                  !url.password &&
+                  !url.port &&
+                  (url.hostname === "x.com" ||
+                    url.hostname === "twitter.com") &&
+                  /^\/(?:\w{1,15}|i\/web)\/status\/\d+(?:\/(?:photo|video)\/\d+)?\/?$/.test(
+                    url.pathname,
+                  )
+                );
+              },
+            );
+            // 広告のラッパーは祖先にある。動画内の同名マーカーだけでは除外しない。
+            if (!permalink) return false;
+          }
+          // サイトが別タブ用に退避した一覧は対象外。
           for (
             let parent = card.parentElement;
             parent;
@@ -364,6 +410,7 @@ async function observations(page: Page, target: CompatibilityCase) {
               ),
             ),
             id:
+              card.querySelector("a:has(time)")?.getAttribute("href") ??
               card.getAttribute("href") ??
               card
                 .querySelector('a[href*="/status/"], a[href*="/post/"]')
@@ -419,7 +466,7 @@ async function observations(page: Page, target: CompatibilityCase) {
   );
   return rows.map((row) => ({
     ...row,
-    count: parseMetric(row.metrics[0] ?? ""),
+    count: row.metrics.length ? parseMetric(row.metrics[0]) : Number.NaN,
   }));
 }
 async function inclusionFilter(
@@ -431,6 +478,22 @@ async function inclusionFilter(
 ) {
   session.loadGuard.setContext(target.id, "minimum-apply");
   const before = await observations(page, target);
+  expect(before.length, "最低値の照合に必要な実投稿があること").toBeGreaterThan(
+    0,
+  );
+  await expect
+    .poll(
+      async () => {
+        const collected = new Set(
+          (await readPanelPosts(panel)).map((post) => postKey(post.url)),
+        );
+        return before.every(
+          (row) => row.id && collected.has(postKey(row.id, page.url())),
+        );
+      },
+      { message: "操作前の実投稿が条件なしのパネルへ収集されること" },
+    )
+    .toBe(true);
   const combo = `[data-minimum-picker] >>> ${aria("combobox")}`;
   await panelClick(await element(panel, combo));
   const options = aria("option");
@@ -550,57 +613,63 @@ async function inclusionFilter(
   } finally {
     await storageClient.detach();
   }
-  let lastRows: Awaited<ReturnType<typeof observations>> = [];
-  try {
-    await expect
-      .poll(async () => {
-        const rows = await observations(page, target);
-        lastRows = rows;
-        return (
-          rows.length > 0 &&
-          rows.every(
-            (r) =>
-              Number.isFinite(r.count) &&
-              (r.count >= threshold ? r.visible && r.height > 0 : !r.visible),
-          )
-        );
-      })
-      .toBe(true);
-  } finally {
-    await evidence(task, "filter-observations", {
-      body: JSON.stringify({ threshold, rows: lastRows }),
-      contentType: "application/json",
-    });
-  }
-  // 非同期で入れ替わる一覧は、条件と表示の一致を確認した同じ観測で判定する。
-  const filtered = lastRows;
-  const excludedBefore = before.filter((r) => r.count < threshold);
-  expect(
-    excludedBefore.every(
-      (r) =>
-        r.id && !filtered.some((after) => after.id === r.id && after.visible),
-    ),
-  ).toBe(true);
-  expect(filtered.some((r) => r.visible)).toBe(
-    filtered.some((r) => r.count >= threshold),
+  const matched = async () => {
+    const rows = await observations(page, target);
+    const links = await readPanelPosts(panel);
+    const included = new Set(links.map((post) => postKey(post.url)));
+    return (
+      rows.length > 0 &&
+      before.every(
+        (row) =>
+          row.id &&
+          included.has(postKey(row.id, page.url())) ===
+            (Number.isFinite(row.count) && row.count >= threshold),
+      ) &&
+      rows.every(
+        (row) =>
+          row.id &&
+          row.visible &&
+          row.height > 0 &&
+          included.has(postKey(row.id, page.url())) ===
+            (Number.isFinite(row.count) && row.count >= threshold),
+      )
+    );
+  };
+  await expect.poll(matched).toBe(true);
+  await assertPageReadOnly(page);
+  const filtered = await readPanelPosts(panel);
+  const excludedBefore = before.filter(
+    (row) => !Number.isFinite(row.count) || row.count < threshold,
   );
+  await evidence(task, "filter-observations", {
+    body: JSON.stringify({
+      threshold,
+      source: await observations(page, target),
+      panel: filtered,
+    }),
+    contentType: "application/json",
+  });
   session.loadGuard.setContext(target.id, "minimum-clear");
   await panelClick(await element(panel, combo));
   await panelClick(await element(panel, aria("option")));
   await expect
-    .poll(async () =>
-      (await observations(page, target)).every(
-        (r) => r.visible && r.height > 0,
-      ),
-    )
+    .poll(async () => {
+      const posts = new Set(
+        (await readPanelPosts(panel)).map((post) => postKey(post.url)),
+      );
+      return before.every(
+        (row) => row.id && posts.has(postKey(row.id, page.url())),
+      );
+    })
     .toBe(true);
+  await assertPageReadOnly(page);
   return {
     applied: true,
     cleared: true,
     noOverfilter: true,
     threshold,
-    visible: filtered.filter((r) => r.visible).length,
-    hidden: excludedBefore.length,
+    visible: filtered.length,
+    excluded: excludedBefore.length,
     status: excludedBefore.length ? "verified" : "operation-only",
   };
 }
@@ -614,6 +683,19 @@ async function categoricalFilter(
 ) {
   const before = await observations(page, target);
   expect(before.length, "操作前の投稿が必要です").toBeGreaterThan(0);
+  await expect
+    .poll(
+      async () => {
+        const collected = new Set(
+          (await readPanelPosts(panel)).map((post) => postKey(post.url)),
+        );
+        return before.every(
+          (row) => row.id && collected.has(postKey(row.id, page.url())),
+        );
+      },
+      { message: "種別条件の操作前に実投稿が収集されること" },
+    )
+    .toBe(true);
   const excludes = (row: (typeof before)[number]) =>
     kind === "media" ? !row.media : row[kind];
   const excluded = before.filter(excludes);
@@ -666,24 +748,17 @@ async function categoricalFilter(
     session.loadGuard.setContext(target.id, `${kind}-apply`);
     await apply(true);
     await expect
-      .poll(async () =>
-        (await observations(page, target)).every((row) =>
-          excludes(row) ? !row.visible : row.visible,
-        ),
-      )
+      .poll(async () => {
+        const links = new Set(
+          (await readPanelPosts(panel)).map((post) => postKey(post.url)),
+        );
+        return before.every(
+          (row) =>
+            row.id && links.has(postKey(row.id, page.url())) === !excludes(row),
+        );
+      })
       .toBe(true);
-    const after = await observations(page, target);
-    if (before.some((row) => !excludes(row)))
-      expect(
-        after.some((row) => !excludes(row) && row.visible),
-        "条件に合う投稿が残ること",
-      ).toBe(true);
-    expect(
-      excluded.every(
-        (row) =>
-          row.id && !after.some((item) => item.id === row.id && item.visible),
-      ),
-    ).toBe(true);
+    await assertPageReadOnly(page);
   } finally {
     await evidence(task, `${kind}-observations`, {
       body: JSON.stringify({
@@ -698,12 +773,15 @@ async function categoricalFilter(
   }
   await expect
     .poll(async () => {
-      const rows = await observations(page, target);
-      return (
-        rows.length > 0 && rows.every((row) => row.visible && row.height > 0)
+      const links = new Set(
+        (await readPanelPosts(panel)).map((post) => postKey(post.url)),
+      );
+      return before.every(
+        (row) => row.id && links.has(postKey(row.id, page.url())),
       );
     })
     .toBe(true);
+  await assertPageReadOnly(page);
   await evidence(task, `${kind}-filter`, {
     body: JSON.stringify({
       excluded: excluded.length,
@@ -729,7 +807,7 @@ export function createCompatibilityCases(): LiveCase[] {
         let cleanupError: unknown;
         let healthy = false;
         try {
-          // 保存済みの強い条件で初期一覧を隠し、サイトの追加取得を誘発しない。
+          // ケース間で条件を解除し、最初のパネル一覧を実投稿と照合する。
           // UIからの適用・解除と起動後の「指定なし」確認は、この後で個別に行う。
           await session.api.evaluate(`(async (site) => {
           const stored = await chrome.storage.sync.get('settings');
@@ -753,6 +831,7 @@ export function createCompatibilityCases(): LiveCase[] {
           });
           session.loadGuard.setContext(target.id, "open-panel");
           const panel = await openPanel(session, page);
+          await openFilterControls(panel);
           await expect
             .poll(() => visible(panel, aria("heading", "最低いいね数")))
             .toBe(true);
@@ -815,7 +894,7 @@ export function createCompatibilityCases(): LiveCase[] {
             for (const kind of ["media", "reply", "quote", "repost"] as const)
               await categoricalFilter(session, page, panel, target, kind, task);
             // 全条件の解除を確認し、同じ一覧の先頭を最低値の独立した観測に使う。
-            // 復元できなければ再読込で隠さず、このケースの失敗として記録する。
+            // 復元できなければ再読込で回避せず、このケースの失敗として記録する。
             const pageKey = (await readContext(session, page)).pageKey;
             await page.evaluate(() => window.scrollTo(0, 0));
             await expect
@@ -849,7 +928,7 @@ export function createCompatibilityCases(): LiveCase[] {
               contentType: "application/json",
             });
           }
-          // 最低値は追加読み込みを大きく進めることがあるため、種別の確認後に行う。
+          // 種別条件を解除してから、最低いいね数を独立して確認する。
           {
             const result = await inclusionFilter(
               session,
@@ -862,6 +941,20 @@ export function createCompatibilityCases(): LiveCase[] {
               body: JSON.stringify(result),
               contentType: "application/json",
             });
+          }
+          const postLinks = await readPanelPosts(panel);
+          expect(postLinks.length).toBeGreaterThan(0);
+          expect(
+            postLinks.every(
+              (post) =>
+                post.target === "_blank" &&
+                post.rel?.split(/\s+/).includes("noreferrer"),
+            ),
+          ).toBe(true);
+          await assertPageReadOnly(page);
+          if (target.id === "x-profile" || target.id === "bluesky-profile") {
+            await capturePanelScreenshot(panel, target.site);
+            await assertPostOpensInNewTab(session, page, panel);
           }
           await evidence(task, "candidate", {
             body: JSON.stringify(session.candidate),

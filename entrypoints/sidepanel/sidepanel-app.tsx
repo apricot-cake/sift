@@ -1,5 +1,8 @@
 import {
+  ChevronDown,
   CircleMinus,
+  ExternalLink,
+  Heart,
   Image,
   ListFilter,
   type LucideIcon,
@@ -9,7 +12,9 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { t } from "../../utils/i18n.ts";
+import { checkPanelBuild } from "../../utils/local-build-reload.ts";
 import { metricThresholdSuggestions } from "../../utils/metric-threshold-suggestions.ts";
+import type { PanelPost } from "../../utils/panel-post.ts";
 import {
   defaults,
   normalizeSettings,
@@ -21,7 +26,6 @@ import {
 } from "../../utils/settings.ts";
 import { settingsItem } from "../../utils/settings-storage.ts";
 import { Button } from "./components/ui/button.tsx";
-import { Card, CardContent } from "./components/ui/card.tsx";
 import { Input } from "./components/ui/input.tsx";
 import {
   Select,
@@ -71,11 +75,9 @@ export function SidepanelApp(): React.JSX.Element {
     activeSite,
     knownUnsupportedSite,
     selectedSite,
-    pageFilteringEnabled,
     runPanelAction,
-    updateFiltering,
     captureConnection,
-    restoreFiltering,
+    refreshContext,
   } = usePanelConnection({
     onSettingsInitialized: setSettings,
     onMinimumReset: clearManualMinimums,
@@ -88,7 +90,7 @@ export function SidepanelApp(): React.JSX.Element {
     setSettings(normalized);
     void settingsItem
       .setValue(normalized)
-      .then(() => restoreFiltering(connection))
+      .then(() => refreshContext(connection))
       .catch(() => setStatus(t("optionsErrorSaveFailed")));
   };
 
@@ -115,7 +117,6 @@ export function SidepanelApp(): React.JSX.Element {
   const manualActive = manualSites[selectedSite] === true;
   const manualMinimum =
     selectedSettings.manualMinimum ?? selectedSettings.minReactions;
-  const filteringEnabled = pageFilteringEnabled;
 
   const saveSiteSettings = (
     site: SiteSettingsKey,
@@ -157,21 +158,30 @@ export function SidepanelApp(): React.JSX.Element {
 
   const currentPageIsEditable = activeSite === selectedSite;
   const healthState = activeContext?.health?.state;
+  const metricIssue = activeContext?.health?.issue === "metrics";
   const healthMessage =
-    healthState === "unreadable"
-      ? "sidepanelReadFailed"
-      : healthState === "loading"
-        ? "sidepanelReading"
-        : healthState === "empty"
-          ? "sidepanelEmpty"
-          : healthState === "degraded" &&
-              activeContext?.health?.warnPartial === true
-            ? "sidepanelPartialData"
-            : null;
+    metricIssue &&
+    selectedSettings.minReactionsEnabled &&
+    (healthState === "unreadable" ||
+      (healthState === "degraded" &&
+        activeContext?.health?.warnPartial === true))
+      ? "sidepanelMetricUnavailable"
+      : !metricIssue && healthState === "unreadable"
+        ? "sidepanelReadFailed"
+        : healthState === "loading"
+          ? "sidepanelReading"
+          : healthState === "empty"
+            ? "sidepanelEmpty"
+            : !metricIssue &&
+                healthState === "degraded" &&
+                activeContext?.health?.warnPartial === true
+              ? "sidepanelPartialData"
+              : null;
   const healthBlocksControls =
-    healthState === "unreadable" ||
-    healthState === "loading" ||
-    healthState === "empty";
+    !metricIssue &&
+    (healthState === "unreadable" ||
+      healthState === "loading" ||
+      healthState === "empty");
   const filteringIsAvailable =
     activeContext?.timelineAvailable === true &&
     activeContext.site === selectedSite;
@@ -185,8 +195,8 @@ export function SidepanelApp(): React.JSX.Element {
       data-sift-sidepanel=""
       data-sift-site={activeSite ?? undefined}
     >
-      <div className="relative mx-auto flex min-h-screen max-w-xl flex-col p-6">
-        <div data-filter-controls="">
+      <div className="relative mx-auto flex min-h-screen max-w-xl flex-col p-4">
+        <div>
           {healthMessage !== null && activeSite !== null && (
             <p
               role="status"
@@ -241,132 +251,135 @@ export function SidepanelApp(): React.JSX.Element {
           {currentPageIsEditable &&
             !pageIsUnsupported &&
             !healthBlocksControls && (
-              <fieldset
-                className="m-0 min-w-0 space-y-7 border-0 p-0 disabled:opacity-60"
-                disabled={!filteringIsAvailable}
+              <details
+                data-filter-controls=""
+                className="mb-5 rounded-lg border border-border"
               >
-                <div>
-                  <section data-minimum-group="">
-                    <h2 className="m-0 pb-3 text-sm font-medium">
-                      <ItemLabel icon={ListFilter}>
-                        {t("optionsMinLikes")}
-                      </ItemLabel>
-                    </h2>
-                    <ReactionThresholdSuggestions
-                      truncated={activeContext?.metricContextTruncated === true}
-                      minimumEnabled={selectedSettings.minReactionsEnabled}
-                      onManual={() =>
-                        runPanelAction(() => toggleManualMinimum(true))
-                      }
-                      onClear={() =>
-                        runPanelAction(() => toggleManualMinimum(false))
-                      }
-                      selectionEnabled={
-                        !manualActive && selectedSettings.minReactionsEnabled
-                      }
-                      currentMinimum={selectedSettings.minReactions}
-                      metricCounts={activeContext?.metricCounts ?? []}
-                      onSelect={(minimum) =>
-                        runPanelAction(() => {
-                          setManualSites((sites) => ({
-                            ...sites,
-                            [selectedSite]: false,
-                          }));
+                <summary className="flex cursor-pointer list-none items-center justify-between gap-3 p-4 text-sm font-medium text-foreground focus-visible:outline-2 focus-visible:outline-ring">
+                  <ItemLabel icon={ListFilter}>
+                    {t("sidepanelFilterConditions")}
+                  </ItemLabel>
+                  <ChevronDown className="size-4 shrink-0" aria-hidden="true" />
+                </summary>
+                <fieldset
+                  className="m-0 min-w-0 space-y-7 border-0 px-4 pb-4 disabled:opacity-60"
+                  disabled={!filteringIsAvailable}
+                >
+                  <div>
+                    <section data-minimum-group="">
+                      <h2 className="m-0 pb-3 text-sm font-medium">
+                        <ItemLabel icon={ListFilter}>
+                          {t("optionsMinLikes")}
+                        </ItemLabel>
+                      </h2>
+                      <ReactionThresholdSuggestions
+                        truncated={
+                          activeContext?.metricContextTruncated === true
+                        }
+                        minimumEnabled={selectedSettings.minReactionsEnabled}
+                        onManual={() =>
+                          runPanelAction(() => toggleManualMinimum(true))
+                        }
+                        onClear={() =>
+                          runPanelAction(() => toggleManualMinimum(false))
+                        }
+                        selectionEnabled={
+                          !manualActive && selectedSettings.minReactionsEnabled
+                        }
+                        currentMinimum={selectedSettings.minReactions}
+                        metricCounts={activeContext?.metricCounts ?? []}
+                        sampleCount={activeContext?.metricSampleCount ?? 0}
+                        onSelect={(minimum) =>
+                          runPanelAction(() => {
+                            setManualSites((sites) => ({
+                              ...sites,
+                              [selectedSite]: false,
+                            }));
+                            saveSiteSettings(selectedSite, {
+                              ...settingsFor(settingsRef.current, selectedSite),
+                              manualMinimum,
+                              minReactions: minimum,
+                              minReactionsEnabled: true,
+                            });
+                          })
+                        }
+                      >
+                        <ThresholdSetting
+                          label={t("optionsManualMinimum")}
+                          min={0}
+                          onValueChange={(value) =>
+                            runPanelAction(() => setManualMinimum(value, true))
+                          }
+                          suffix={t("sidepanelLikeSuggestionMinimumSuffix")}
+                          value={manualMinimum}
+                        />
+                      </ReactionThresholdSuggestions>
+                    </section>
+                    <MediaSetting
+                      enabled={selectedSettings.mediaEnabled}
+                      mode={selectedSettings.mediaMode}
+                      onChange={(mediaEnabled, mediaMode) =>
+                        runPanelAction(() =>
                           saveSiteSettings(selectedSite, {
                             ...settingsFor(settingsRef.current, selectedSite),
-                            manualMinimum,
-                            minReactions: minimum,
-                            minReactionsEnabled: true,
-                          });
-                        })
+                            mediaEnabled,
+                            mediaMode,
+                          }),
+                        )
                       }
-                    >
-                      <ThresholdSetting
-                        label={t("optionsManualMinimum")}
-                        min={0}
-                        onValueChange={(value) =>
-                          runPanelAction(() => setManualMinimum(value, true))
-                        }
-                        suffix={t("sidepanelLikeSuggestionMinimumSuffix")}
-                        value={manualMinimum}
-                      />
-                    </ReactionThresholdSuggestions>
-                  </section>
-                  <MediaSetting
-                    enabled={selectedSettings.mediaEnabled}
-                    mode={selectedSettings.mediaMode}
-                    onChange={(mediaEnabled, mediaMode) =>
-                      runPanelAction(() =>
-                        saveSiteSettings(selectedSite, {
-                          ...settingsFor(settingsRef.current, selectedSite),
-                          mediaEnabled,
-                          mediaMode,
-                        }),
-                      )
-                    }
-                  />
-                </div>
+                    />
+                  </div>
 
-                <section data-filter-section="">
-                  <h2>
-                    <ItemLabel icon={CircleMinus}>
-                      {t("optionsSectionExclude")}
-                    </ItemLabel>
-                  </h2>
-                  <SettingRow
-                    icon={MessageCircle}
-                    label={t("optionsHideReplies")}
-                  >
-                    <Switch
-                      aria-label={t("optionsHideReplies")}
-                      checked={selectedSettings.hideReplies}
-                      onCheckedChange={(value) =>
-                        updateReactionSetting("hideReplies", value)
-                      }
-                    />
-                  </SettingRow>
-                  <SettingRow icon={Quote} label={t("optionsHideQuotes")}>
-                    <Switch
-                      aria-label={t("optionsHideQuotes")}
-                      checked={selectedSettings.hideQuotes}
-                      onCheckedChange={(value) =>
-                        updateReactionSetting("hideQuotes", value)
-                      }
-                    />
-                  </SettingRow>
-                  <SettingRow icon={Repeat2} label={t("optionsHideReposts")}>
-                    <Switch
-                      aria-label={t("optionsHideReposts")}
-                      checked={selectedSettings.hideReposts}
-                      onCheckedChange={(value) =>
-                        updateReactionSetting("hideReposts", value)
-                      }
-                    />
-                  </SettingRow>
-                </section>
-              </fieldset>
+                  <section data-filter-section="">
+                    <h2>
+                      <ItemLabel icon={CircleMinus}>
+                        {t("optionsSectionExclude")}
+                      </ItemLabel>
+                    </h2>
+                    <SettingRow
+                      icon={MessageCircle}
+                      label={t("optionsHideReplies")}
+                    >
+                      <Switch
+                        aria-label={t("optionsHideReplies")}
+                        checked={selectedSettings.hideReplies}
+                        onCheckedChange={(value) =>
+                          updateReactionSetting("hideReplies", value)
+                        }
+                      />
+                    </SettingRow>
+                    <SettingRow icon={Quote} label={t("optionsHideQuotes")}>
+                      <Switch
+                        aria-label={t("optionsHideQuotes")}
+                        checked={selectedSettings.hideQuotes}
+                        onCheckedChange={(value) =>
+                          updateReactionSetting("hideQuotes", value)
+                        }
+                      />
+                    </SettingRow>
+                    <SettingRow icon={Repeat2} label={t("optionsHideReposts")}>
+                      <Switch
+                        aria-label={t("optionsHideReposts")}
+                        checked={selectedSettings.hideReposts}
+                        onCheckedChange={(value) =>
+                          updateReactionSetting("hideReposts", value)
+                        }
+                      />
+                    </SettingRow>
+                  </section>
+                </fieldset>
+              </details>
             )}
         </div>
 
-        {filteringEnabled && activeContext?.continuousLoadingWarning && (
-          <Card className="mb-6 mt-3 border-amber-500/60 bg-amber-50/70 dark:bg-amber-950/20">
-            <CardContent className="space-y-3 p-4 text-sm leading-6">
-              <div>
-                <p className="m-0 font-medium">
-                  {t("continuousLoadingWarningTitle")}
-                </p>
-                <p className="m-0 mt-1 text-muted-foreground">
-                  {t("continuousLoadingWarningDescription")}
-                </p>
-              </div>
-              <Button
-                className="w-full"
-                onClick={() => runPanelAction(() => updateFiltering(false))}
-              >
-                {t("continuousLoadingWarningDisable")}
-              </Button>
-            </CardContent>
-          </Card>
+        {!pageIsUnsupported && activeContext !== null && (
+          <PostList
+            key={`${activeContext.site}:${activeContext.pageKey}`}
+            posts={activeContext.posts}
+            collectedCount={activeContext.collectedCount}
+            truncated={activeContext.collectionTruncated}
+            reading={healthState === "loading" || healthState === "unreadable"}
+          />
         )}
 
         <footer className="mt-auto flex justify-end pt-8">
@@ -445,6 +458,154 @@ export function SidepanelApp(): React.JSX.Element {
   );
 }
 
+const POSTS_PER_PAGE = 50;
+const reactionFormatter = new Intl.NumberFormat(undefined, {
+  notation: "compact",
+  maximumFractionDigits: 1,
+});
+
+function PostList({
+  posts,
+  collectedCount,
+  truncated,
+  reading,
+}: {
+  posts: readonly PanelPost[];
+  collectedCount: number;
+  truncated: boolean;
+  reading: boolean;
+}): React.JSX.Element {
+  const [visibleCount, setVisibleCount] = useState(POSTS_PER_PAGE);
+  return (
+    <section aria-label={t("sidepanelPostsTitle")}>
+      <p
+        className="m-0 text-sm font-medium text-foreground"
+        data-post-count=""
+        aria-live="polite"
+      >
+        {t("sidepanelPostCount", {
+          count: posts.length.toLocaleString(),
+          total: collectedCount.toLocaleString(),
+        })}
+      </p>
+      <p className="mb-4 mt-2 text-xs leading-5 text-muted-foreground">
+        {t("sidepanelPostInstructions")}
+      </p>
+      {truncated && (
+        <p
+          className="mb-4 text-xs leading-5 text-muted-foreground"
+          role="status"
+        >
+          {t("sidepanelCollectionLimit", {
+            count: collectedCount.toLocaleString(),
+          })}
+        </p>
+      )}
+      {posts.length === 0 ? (
+        !reading && (
+          <p
+            className="py-8 text-sm leading-6 text-muted-foreground"
+            data-post-empty=""
+          >
+            {t(
+              collectedCount === 0
+                ? "sidepanelNoCollectedPosts"
+                : "sidepanelNoMatchingPosts",
+            )}
+          </p>
+        )
+      ) : (
+        <ul className="m-0 list-none space-y-3 p-0" data-post-list="">
+          {posts.slice(0, visibleCount).map((post) => (
+            <PostRow key={post.id} post={post} />
+          ))}
+        </ul>
+      )}
+      {posts.length > visibleCount && (
+        <Button
+          className="mt-4 w-full"
+          variant="outline"
+          data-show-more-posts=""
+          onClick={() => setVisibleCount((count) => count + POSTS_PER_PAGE)}
+        >
+          {t("sidepanelShowMorePosts")}
+        </Button>
+      )}
+    </section>
+  );
+}
+
+function PostRow({ post }: { post: PanelPost }): React.JSX.Element {
+  return (
+    <li data-post-id={post.id}>
+      <a
+        href={post.url}
+        target="_blank"
+        rel="noreferrer"
+        data-post-link=""
+        className="block overflow-hidden rounded-lg border border-border p-3 text-foreground no-underline transition-colors hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring"
+      >
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0">
+            <p className="m-0 truncate text-sm font-medium">
+              {post.author ||
+                (post.handle
+                  ? post.handle.startsWith("@")
+                    ? post.handle
+                    : `@${post.handle}`
+                  : t("sidepanelPostFallback"))}
+            </p>
+            {post.author && post.handle && (
+              <p className="m-0 mt-0.5 truncate text-xs text-muted-foreground">
+                {post.handle.startsWith("@") ? post.handle : `@${post.handle}`}
+              </p>
+            )}
+          </div>
+          <ExternalLink
+            className="mt-0.5 size-3.5 shrink-0 text-muted-foreground"
+            aria-hidden="true"
+          />
+        </div>
+        {post.text && (
+          <p className="mb-0 mt-2 line-clamp-3 whitespace-pre-line break-words text-sm leading-6">
+            {post.text}
+          </p>
+        )}
+        {post.images.length > 0 && (
+          <div
+            className={
+              "mt-3 grid gap-1.5 " +
+              (post.images.length > 1 ? "grid-cols-2" : "grid-cols-1")
+            }
+          >
+            {post.images.map((image) => (
+              <img
+                key={image.url}
+                src={image.url}
+                alt={image.alt}
+                loading="lazy"
+                decoding="async"
+                referrerPolicy="no-referrer"
+                className="h-40 w-full rounded-md bg-muted object-contain"
+              />
+            ))}
+          </div>
+        )}
+        <p className="mb-0 mt-3 flex items-center gap-1.5 text-xs text-muted-foreground">
+          <Heart className="size-3.5" aria-hidden="true" />
+          <span>
+            {post.metricCount === null
+              ? t("sidepanelLikesUnknown")
+              : t("sidepanelPostLikes", {
+                  count: reactionFormatter.format(post.metricCount),
+                })}
+          </span>
+        </p>
+      </a>
+    </li>
+  );
+}
+
 function ItemLabel({
   icon: Icon,
   children,
@@ -490,6 +651,7 @@ function ReactionThresholdSuggestions({
   selectionEnabled,
   currentMinimum,
   metricCounts,
+  sampleCount,
   truncated = false,
   onSelect,
 }: {
@@ -501,6 +663,7 @@ function ReactionThresholdSuggestions({
   currentMinimum: number;
   truncated?: boolean;
   metricCounts: readonly number[];
+  sampleCount: number;
   onSelect: (minimum: number) => void;
 }): React.JSX.Element {
   const suggestions = metricThresholdSuggestions(metricCounts, currentMinimum);
@@ -574,7 +737,7 @@ function ReactionThresholdSuggestions({
           <SelectItem value="none">
             {t("optionsMinimumNone")}
             <span data-choice-count="">
-              {metricCounts.length.toLocaleString()}
+              {sampleCount.toLocaleString()}
               {t("sidepanelLikeSuggestionCountSuffix")}
             </span>
           </SelectItem>

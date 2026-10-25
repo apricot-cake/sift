@@ -6,6 +6,7 @@ import {
   FILTER_CONTEXT_REQUEST,
   type FilterContextResponse,
 } from "../../utils/filter-context.ts";
+import { t } from "../../utils/i18n.ts";
 import { defaults } from "../../utils/settings.ts";
 import { settingsItem } from "../../utils/settings-storage.ts";
 import { SidepanelApp } from "./sidepanel-app.tsx";
@@ -34,8 +35,9 @@ describe("集計が一部の場合の表示", () => {
         pageTitle: site,
         pageKey: site,
         timelineAvailable: true,
-        filteringEnabled: false,
-        continuousLoadingWarning: false,
+        posts: [],
+        collectedCount: 1_000,
+        collectionTruncated: true,
         metricSampleCount: metricCounts.length,
         metricCounts,
         metricContextTruncated: true,
@@ -61,11 +63,10 @@ describe("集計が一部の場合の表示", () => {
           for (let i = 0; i < 40; i++) await Promise.resolve();
         });
         expect(element.textContent).toContain(
-          "Counts cover a sample of loaded posts",
+          t("sidepanelSampleScope", { count: metricCounts.length }),
         );
-        expect(element.textContent).toContain("not the full total");
         expect(element.textContent).toContain(
-          "Filters still apply to the entire list",
+          t("sidepanelCollectionLimit", { count: "1,000" }),
         );
       } finally {
         await act(async () => root.unmount());

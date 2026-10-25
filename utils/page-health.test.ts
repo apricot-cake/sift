@@ -13,6 +13,23 @@ const good: PageHealthObservation = {
   readableMetrics: 3,
 };
 describe("ページ情報の健全性", () => {
+  it("投稿URLや本文の取得失敗と、いいね数だけの欠損を区別する", () => {
+    const tracker = new PageHealthTracker(100);
+    const partial = { ...good, readablePosts: 2, requiresMetrics: false };
+    expect(tracker.observe(partial, 0)).toMatchObject({
+      state: "degraded",
+      issue: "posts",
+      warnPartial: false,
+    });
+    expect(tracker.observe(partial, 100)).toMatchObject({
+      state: "degraded",
+      issue: "posts",
+      warnPartial: true,
+    });
+    expect(tracker.observe({ ...partial, readablePosts: 3 }, 101).state).toBe(
+      "ready",
+    );
+  });
   it("不要な情報の欠損は内部診断だけに残す", () => {
     const tracker = new PageHealthTracker(100);
     const partial = { ...good, readableMetrics: 1 };

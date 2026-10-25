@@ -2,6 +2,13 @@
 // 要素が投稿で、判定の入力がそれぞれどこに書かれているか。判定そのものは
 // filter-core.ts にあり、全サービスで共有している。
 import { parseMetric } from "../filter-core.ts";
+import {
+  type CollectedPost,
+  canonicalPostUrl,
+  postImages,
+  postMetric,
+  postText,
+} from "../panel-post.ts";
 import { collectMetricCards } from "./metric-cards.ts";
 import type { ServiceAdapter } from "./types.ts";
 
@@ -88,10 +95,42 @@ export function isXFilterPage(
 
 function timelinePostCards(root: ParentNode): Element[] {
   return Array.from(root.querySelectorAll(X_SELECTORS.postCard)).filter(
-    (postCard) =>
-      postCard.parentElement?.closest(X_SELECTORS.postCard) === null &&
-      !postCard.closest('[role="dialog"]'),
+    isTimelinePostCard,
   );
+}
+
+function isTimelinePostCard(card: Element): boolean {
+  if (
+    !card.matches(X_SELECTORS.postCard) ||
+    card.parentElement?.closest(X_SELECTORS.postCard) !== null ||
+    card.closest('[role="dialog"]')
+  )
+    return false;
+  // メディア内にも同じ属性があるため、広告枠はカードの祖先だけで判定する。
+  if (!card.closest('[data-testid="placementTracking"]')) return true;
+  return Array.from(card.querySelectorAll(X_SELECTORS.statusTime)).some(
+    (node) => {
+      const href = node.closest("a")?.getAttribute("href");
+      return (
+        isOwnPostNode(card, node) &&
+        Boolean(href && canonicalPostUrl(href, "x"))
+      );
+    },
+  );
+}
+
+function isOwnPostNode(postCard: Element, node: Element): boolean {
+  if (node.closest(X_SELECTORS.postCard) !== postCard) return false;
+  let parent = node.parentElement;
+  while (parent && parent !== postCard) {
+    if (
+      parent.matches('div[role="link"]') &&
+      parent.querySelector(X_SELECTORS.avatar)
+    )
+      return false;
+    parent = parent.parentElement;
+  }
+  return true;
 }
 
 function directChildUnder(ancestor: Element, descendant: Element): Element {
@@ -139,6 +178,53 @@ export const xAdapter = Object.freeze({
   id: "x",
   matches: Object.freeze(["https://x.com/*", "https://twitter.com/*"]),
   settingsKey: "x",
+  readPost(postCard: Element): CollectedPost | null {
+    const timestamp = Array.from(
+      postCard.querySelectorAll(X_SELECTORS.statusTime),
+    ).find((node) => isOwnPostNode(postCard, node));
+    const href = timestamp?.closest("a")?.getAttribute("href");
+    const url = href ? canonicalPostUrl(href, "x") : null;
+    if (!url) return null;
+    const id = X_STATUS_ID.exec(url)?.[1];
+    if (!id || id.length > 1_000) return null;
+    const account = new URL(url).pathname.split("/")[1] ?? "";
+    const header = Array.from(
+      postCard.querySelectorAll(X_SELECTORS.userName),
+    ).find((node) => isOwnPostNode(postCard, node));
+    const names = Array.from(header?.querySelectorAll("a") ?? [])
+      .map((node) => postText(node.textContent, 100))
+      .filter(Boolean);
+    const handle =
+      names.find((name) => name.startsWith("@")) ??
+      (account === "i" ? "" : `@${account}`);
+    const text = Array.from(
+      postCard.querySelectorAll('[data-testid="tweetText"]'),
+    ).find((node) => isOwnPostNode(postCard, node));
+    const images = Array.from(
+      postCard.querySelectorAll<HTMLImageElement>(
+        '[data-testid="tweetPhoto"] img',
+      ),
+    ).filter(
+      (node) =>
+        isOwnPostNode(postCard, node) && !node.closest(X_SELECTORS.video),
+    );
+    return {
+      id,
+      url,
+      author: postText(
+        names.find((name) => !name.startsWith("@")) ?? handle,
+        100,
+      ),
+      handle: postText(handle, 100),
+      text: postText(text?.textContent, 500),
+      images: postImages(images),
+      metricCount: postMetric(this.readMetricCount(postCard)),
+      ...this.readMedia(postCard),
+      isReply: this.readIsReply(postCard),
+      isQuote: this.readIsQuote(postCard),
+      isRepost: this.readIsRepost(postCard),
+    };
+  },
   readPageKey(root: ParentNode, page: Pick<Location, "pathname" | "search">) {
     const background = backgroundPage(root, page);
     return `${background.pathname}${background.search ?? ""}`;
@@ -188,12 +274,7 @@ export const xAdapter = Object.freeze({
   getMetricPostCards(root: ParentNode, limit?: number) {
     return collectMetricCards(
       root,
-      (element) =>
-        element.matches(X_SELECTORS.postCard) &&
-        element.parentElement?.closest(X_SELECTORS.postCard) === null &&
-        !element.closest('[role="dialog"]')
-          ? element
-          : null,
+      (element) => (isTimelinePostCard(element) ? element : null),
       undefined,
       100_000,
       limit,
@@ -218,16 +299,9 @@ export const xAdapter = Object.freeze({
     return isXFilterPage(root, page);
   },
 
-  // 隠される単位。X は投稿を、区切り線と周囲の余白も持つセルで包んでいるので、
-  // カードだけを隠すと隙間が残る。
+  // 幅変更前後の位置は、区切り線と余白を含む投稿セルを基準にする。
   findPostCell(postCard: Element) {
     return postCard.closest(X_SELECTORS.postCell) || postCard;
-  },
-
-  findThreadConnectors(postCard: Element) {
-    const avatar = postCard.querySelector(X_SELECTORS.avatar);
-    const connector = avatar?.nextElementSibling;
-    return connector && connector.childElementCount === 0 ? [connector] : [];
   },
 
   readPostId(postCard: Element) {

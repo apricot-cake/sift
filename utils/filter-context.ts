@@ -1,4 +1,9 @@
 import { isPageHealth, type PageHealth } from "./page-health.ts";
+import {
+  isPanelPost,
+  type PanelPost,
+  POST_COLLECTION_LIMIT,
+} from "./panel-post.ts";
 import type { SiteSettingsKey } from "./settings.ts";
 
 export const FILTER_CONTEXT_REQUEST = "sift:get-filter-context";
@@ -6,6 +11,7 @@ export const FILTER_CONTEXT_METRIC_LIMIT = 1_000;
 
 export interface FilterContextRequest {
   readonly type: typeof FILTER_CONTEXT_REQUEST;
+  readonly reset?: boolean;
 }
 
 export interface FilterContextResponse {
@@ -15,8 +21,9 @@ export interface FilterContextResponse {
   readonly pageKey: string;
   readonly timelineKey?: string | null;
   readonly timelineAvailable: boolean;
-  readonly filteringEnabled: boolean;
-  readonly continuousLoadingWarning: boolean;
+  readonly posts: readonly PanelPost[];
+  readonly collectedCount: number;
+  readonly collectionTruncated: boolean;
   readonly metricContextTruncated?: boolean;
   /** 最低いいね数の条件を除いた現在の条件に合う、パネル集計用サンプルの投稿数。 */
   readonly metricSampleCount: number;
@@ -30,7 +37,9 @@ export function isFilterContextRequest(
   return (
     typeof value === "object" &&
     value !== null &&
-    (value as { type?: unknown }).type === FILTER_CONTEXT_REQUEST
+    (value as { type?: unknown }).type === FILTER_CONTEXT_REQUEST &&
+    ((value as { reset?: unknown }).reset === undefined ||
+      typeof (value as { reset?: unknown }).reset === "boolean")
   );
 }
 
@@ -50,8 +59,15 @@ export function isFilterContextResponse(
       response.timelineKey === null ||
       typeof response.timelineKey === "string") &&
     typeof response.timelineAvailable === "boolean" &&
-    typeof response.filteringEnabled === "boolean" &&
-    typeof response.continuousLoadingWarning === "boolean" &&
+    !("filteringEnabled" in response) &&
+    !("continuousLoadingWarning" in response) &&
+    Number.isSafeInteger(response.collectedCount) &&
+    (response.collectedCount ?? -1) >= 0 &&
+    (response.collectedCount ?? Infinity) <= POST_COLLECTION_LIMIT &&
+    typeof response.collectionTruncated === "boolean" &&
+    Array.isArray(response.posts) &&
+    response.posts.length <= (response.collectedCount ?? -1) &&
+    response.posts.every(isPanelPost) &&
     (response.metricContextTruncated === undefined ||
       typeof response.metricContextTruncated === "boolean") &&
     typeof response.metricSampleCount === "number" &&

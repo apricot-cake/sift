@@ -3,6 +3,7 @@
 // 対して検査されるようにするため。
 
 import type { PageSupport } from "../page-health.ts";
+import type { CollectedPost } from "../panel-post.ts";
 import type { SiteSettingsKey } from "../settings.ts";
 import type { MetricCards } from "./metric-cards.ts";
 
@@ -12,6 +13,7 @@ export interface PostMedia {
 }
 
 export interface ServiceAdapter {
+  readPost(postCard: Element): CollectedPost | null;
   readPageSupport?(
     root: ParentNode,
     page: Pick<Location, "pathname"> & Partial<Pick<Location, "search">>,
@@ -26,11 +28,6 @@ export interface ServiceAdapter {
   readonly matches: readonly string[];
   // このサービスが読むサイト別設定。
   readonly settingsKey: SiteSettingsKey;
-  // 全件をレイアウトから外すと、ページ末尾の次ページ判定が止まるサービス。
-  readonly needsLayoutProbeForPagination?: boolean;
-  // サービス自身が、これ以上読み込む投稿が無いと画面に示しているか。
-  hasReachedTimelineEnd?(root: ParentNode): boolean;
-
   getPostCards(root: ParentNode): Element[];
   // パネル用の件数は上限付きで取得する。投稿のフィルター範囲とは別に扱う。
   getMetricPostCards(root: ParentNode, limit?: number): MetricCards;
@@ -40,12 +37,9 @@ export interface ServiceAdapter {
     root: ParentNode,
     page: Pick<Location, "pathname"> & Partial<Pick<Location, "search">>,
   ): boolean;
-  // 隠される単位＝投稿カードそのものとは限らない。
+  // 幅変更前後の閲覧位置を保持するセル。投稿カードそのものとは限らない。
   findPostCell(postCard: Element): Element;
-  // 絞り込み後の投稿間では関係を保てない、サービス側の接続線。
-  findThreadConnectors?(postCard: Element): Element[];
-  // 仮想リストが同じ投稿を描き直しても、新しい取得として数え直さないための
-  // 識別子。連続読み込みを観測するサービスだけが実装する。
+  // パネルを開く幅変更でDOMが描き直されても、同じ投稿を追跡する識別子。
   readPostId?(postCard: Element): string | null;
   // 幅変更や別画面から戻る際に位置を復元する一覧。モーダルなどは null。
   readTimelineKey?(

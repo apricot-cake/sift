@@ -25,7 +25,7 @@ export const Disconnected: Story = {
   name: "未接続",
   beforeEach: () => preparePanel("disconnected"),
 };
-export const Warning: Story = {
-  name: "連続読み込みの警告",
+export const CollectionLimit: Story = {
+  name: "収集上限",
   beforeEach: () => preparePanel("x", true),
 };

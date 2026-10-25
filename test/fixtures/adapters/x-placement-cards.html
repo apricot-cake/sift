@@ -1,0 +1,39 @@
+<!-- 実機で観測した祖先/子孫構造を再現。作者・ID・本文は架空。 -->
+<div data-testid="ScrollSnap-List" role="tablist">
+  <button type="button" role="tab" aria-selected="false">おすすめ</button>
+  <button type="button" role="tab" aria-selected="true">フォロー中</button>
+</div>
+<div data-testid="cellInnerDiv" data-fixture="normal-video">
+  <article data-testid="tweet">
+    <a href="/sample_author/status/101"><time datetime="2026-10-25T00:00:00Z">時刻</time></a>
+    <div data-testid="tweetText">架空の動画投稿</div>
+    <div data-testid="placementTracking"><div data-testid="videoPlayer"><video muted></video></div></div>
+    <button type="button" data-testid="like" aria-label="12 likes"></button>
+  </article>
+</div>
+<div data-testid="cellInnerDiv" data-fixture="unlinked-ad">
+  <div data-testid="placementTracking">
+    <article data-testid="tweet">
+      <div data-testid="User-Name"><a href="/sample_ad">架空の広告主</a><span>広告</span></div>
+      <div data-testid="tweetText">架空の商品案内</div>
+      <div data-testid="card.wrapper"><div data-testid="placementTracking"><div data-testid="videoPlayer"></div></div></div>
+      <button type="button" data-testid="like" aria-label="34 likes"></button>
+    </article>
+  </div>
+</div>
+<div data-testid="cellInnerDiv" data-fixture="broken-post">
+  <article data-testid="tweet">
+    <div data-testid="User-Name"><a href="/sample_author">架空の作者</a></div>
+    <div data-testid="tweetText">投稿リンクの描画が欠けた一般投稿</div>
+    <button type="button" data-testid="like" aria-label="56 likes"></button>
+  </article>
+</div>
+<div data-testid="cellInnerDiv" data-fixture="linked-placement">
+  <div data-testid="placementTracking">
+    <article data-testid="tweet">
+      <a href="/sample_author/status/104"><time datetime="2026-10-25T00:01:00Z">時刻</time></a>
+      <div data-testid="tweetText">投稿リンクを持つ架空の案内</div>
+      <button type="button" data-testid="like" aria-label="78 likes"></button>
+    </article>
+  </div>
+</div>

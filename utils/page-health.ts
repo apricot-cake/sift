@@ -22,6 +22,7 @@ export interface PageHealthObservation {
   support: PageSupport;
   empty: boolean;
   sampledPosts: number;
+  readablePosts?: number;
   readableMetrics: number;
 }
 
@@ -42,8 +43,12 @@ export class PageHealthTracker {
     const { pageKey, support, empty, sampledPosts, readableMetrics } =
       observation;
     const counts = { sampledPosts, readableMetrics };
-    const requiredIssue =
-      observation.requiresMetrics && readableMetrics < sampledPosts
+    const missingPosts =
+      observation.readablePosts !== undefined &&
+      observation.readablePosts < sampledPosts;
+    const requiredIssue = missingPosts
+      ? "posts"
+      : observation.requiresMetrics && readableMetrics < sampledPosts
         ? "metrics"
         : undefined;
     const partialKey =
@@ -65,9 +70,9 @@ export class PageHealthTracker {
     const issue: PageHealthIssue | undefined =
       support === "unknown"
         ? "page"
-        : sampledPosts === 0
+        : sampledPosts === 0 || observation.readablePosts === 0
           ? "posts"
-          : readableMetrics === 0
+          : observation.requiresMetrics !== false && readableMetrics === 0
             ? "metrics"
             : undefined;
     if (issue) {
@@ -84,7 +89,11 @@ export class PageHealthTracker {
       };
     }
     this.failureKey = "";
-    const partial = readableMetrics < sampledPosts ? "metrics" : undefined;
+    const partial = missingPosts
+      ? "posts"
+      : readableMetrics < sampledPosts
+        ? "metrics"
+        : undefined;
     return {
       state: partial ? "degraded" : "ready",
       warnPartial:

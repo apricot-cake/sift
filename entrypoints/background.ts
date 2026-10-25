@@ -1,5 +1,4 @@
 import { browser } from "wxt/browser";
-import { contentStyle } from "../utils/content-style.ts";
 import {
   FILTER_CONTEXT_REQUEST,
   type FilterContextResponse,
@@ -25,7 +24,6 @@ import {
   sidePanelTabIdFromUrl,
 } from "../utils/sidepanel-controls.ts";
 import { isSupportedSiteUrl } from "../utils/site-matches.ts";
-import { TIMELINE_CONTROL } from "../utils/timeline-controls.ts";
 
 const FILTER_CONTEXT_RETRY_COUNT = 8;
 const FILTER_CONTEXT_RETRY_DELAY_MS = 25;
@@ -38,13 +36,17 @@ function waitForContentRuntime(): Promise<void> {
 
 async function readFilterContext(
   tabId: number,
+  reset = false,
 ): Promise<FilterContextResponse | null> {
   // 動的に注入する sift.js は executeScript が完了した直後でも、メッセージの
   // 受信準備を終えていないことがある。最初のクリックを捨てないよう、短時間だけ
   // 受信側の起動を待つ。
   for (let attempt = 0; attempt < FILTER_CONTEXT_RETRY_COUNT; attempt += 1) {
     const context = await browser.tabs
-      .sendMessage(tabId, { type: FILTER_CONTEXT_REQUEST })
+      .sendMessage(tabId, {
+        type: FILTER_CONTEXT_REQUEST,
+        ...(reset ? { reset: true } : {}),
+      })
       .then((response) => (isFilterContextResponse(response) ? response : null))
       .catch(() => null);
     if (context !== null) {
@@ -107,7 +109,7 @@ export default defineBackground(() => {
     if (tab.id === undefined) return;
     const tabId = tab.id;
     const previousAction = panelActions.get(tabId);
-    // パネルの幅変更より前に、対象外の一覧で読んでいた実投稿の位置を記録する。
+    // パネルの幅変更より前に、一覧で読んでいた実投稿の位置を記録する。
     const viewport = isSupportedSiteUrl(tab.url)
       ? browser.scripting.executeScript({
           target: { tabId },
@@ -180,12 +182,10 @@ export default defineBackground(() => {
     if (!isCurrent()) return;
     if (isSupportedSiteUrl(tab.url)) {
       const target = { tabId };
-      await browser.scripting.insertCSS({ target, css: contentStyle });
-      if (!isCurrent()) return;
       await browser.scripting.executeScript({ target, files: ["/sift.js"] });
       if (!isCurrent()) return;
       // カードが未描画でも閉じない。対応状況はパネルが継続して取得する。
-      const context = await readFilterContext(tabId);
+      const context = await readFilterContext(tabId, previous === undefined);
       const current = await browser.storage.session.get(panelPageKey(tabId));
       const latestTab = await browser.tabs.get(tabId).catch(() => null);
       if (
@@ -308,8 +308,6 @@ export default defineBackground(() => {
     if ((await readFilterContext(tabId)) === null) {
       if (!(await isCurrent())) return;
       const target = { tabId };
-      await browser.scripting.insertCSS({ target, css: contentStyle });
-      if (!(await isCurrent())) return;
       await browser.scripting.executeScript({ target, files: ["/sift.js"] });
     }
 
@@ -411,11 +409,6 @@ export default defineBackground(() => {
       )
         return;
       await browser.storage.session.remove(key);
-      if (panelActions.get(tabId) !== null) return;
-      await browser.tabs.sendMessage(tabId, {
-        type: TIMELINE_CONTROL.setFiltering,
-        enabled: false,
-      });
     })()
       .catch(() => {})
       .finally(() => {

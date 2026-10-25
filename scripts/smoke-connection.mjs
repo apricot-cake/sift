@@ -205,6 +205,20 @@ try {
     const panels = [];
     for (const target of ownedBrowser.targets().filter(isPanel)) {
       const panel = await target.asPage();
+      if (await panel.evaluate(() => document.visibilityState === "visible")) {
+        const filters = await panel.$("details[data-filter-controls]");
+        if (filters) {
+          try {
+            if (!(await filters.evaluate((node) => node.hasAttribute("open"))))
+              await panel
+                .locator("details[data-filter-controls] > summary")
+                .setWaitForStableBoundingBox(false)
+                .click();
+          } finally {
+            await filters.dispose();
+          }
+        }
+      }
       panels.push(
         await panel.evaluate(async () => {
           const tabs = await chrome.tabs.query({
@@ -226,6 +240,7 @@ try {
             controls: document.querySelectorAll(
               "button[role=combobox],button[role=switch]",
             ).length,
+            posts: document.querySelectorAll("a[data-post-link]").length,
           };
         }),
       );
@@ -273,6 +288,7 @@ try {
   const forSite = (site) => (p) =>
     p.site === site &&
     p.controls > 0 &&
+    p.posts > 0 &&
     /最低いいね数|Minimum likes/.test(p.text);
   const x = forSite("x");
   const bluesky = forSite("bluesky");

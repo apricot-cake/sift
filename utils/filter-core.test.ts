@@ -178,7 +178,7 @@ describe("classifyPost", () => {
     ).toEqual({ state: "hidden", reason: "quote" });
   });
 
-  it("指標が判定不能な投稿は線を付けずに残す", () => {
+  it("最低値を判定できない投稿はパネルの結果から除外する", () => {
     expect(
       classifyPost(
         {
@@ -190,6 +190,6 @@ describe("classifyPost", () => {
         },
         settings,
       ),
-    ).toEqual({ state: "visible", reason: "indeterminate-metric" });
+    ).toEqual({ state: "hidden", reason: "indeterminate-metric" });
   });
 });

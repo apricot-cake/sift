@@ -23,6 +23,11 @@ import {
   releaseCasePage,
 } from "./live.ts";
 import type { LiveCase } from "./live-case.ts";
+import {
+  assertPageReadOnly,
+  openFilterControls,
+  readPanelPosts,
+} from "./panel-posts.ts";
 
 async function selectBluesky(page: Page, name: string) {
   const tab = aria("tab", name);
@@ -98,6 +103,8 @@ export function createLifecycleCases(): LiveCase[] {
             .poll(async () => (await readContext(session, page)).health?.state)
             .toBe("ready");
           const originalPageKey = (await readContext(session, page)).pageKey;
+          await openFilterControls(panel);
+          const unfilteredPosts = await readPanelPosts(panel);
           const picker = `[data-minimum-picker] >>> ${aria("combobox")}`;
           await expect.poll(() => visible(panel, picker)).toBe(true);
           await panel
@@ -191,26 +198,12 @@ export function createLifecycleCases(): LiveCase[] {
             });
           }
           await expect
-            .poll(() =>
-              page.$$eval(
-                '[data-sift-filter-state="hidden"]',
-                (nodes) => nodes.length,
-              ),
-            )
-            .toBeGreaterThan(0);
-          if (target.site === "x") {
-            expect(
-              await page.$$eval(
-                'article[data-testid="tweet"]',
-                (cards) =>
-                  cards.filter(
-                    (card) =>
-                      !card.closest('[data-sift-filter-state="hidden"]'),
-                  ).length,
-              ),
-              "部分除外後も条件に合う投稿を残す",
-            ).toBeGreaterThan(0);
-          }
+            .poll(async () => {
+              const posts = await readPanelPosts(panel);
+              return posts.length > 0 && posts.length < unfilteredPosts.length;
+            })
+            .toBe(true);
+          await assertPageReadOnly(page);
           const closedWidth = await page.evaluate(() => innerWidth);
           const assertAutomaticClose = await observeAutomaticPanelClose(
             session,
@@ -279,11 +272,7 @@ export function createLifecycleCases(): LiveCase[] {
           }
           await assertAutomaticClose();
           opened = false;
-          await expect
-            .poll(
-              async () => (await readContext(session, page)).filteringEnabled,
-            )
-            .toBe(false);
+          await assertPageReadOnly(page);
           await expect
             .poll(() =>
               page.$$eval(
@@ -300,7 +289,7 @@ export function createLifecycleCases(): LiveCase[] {
           if (target.site === "bluesky")
             await page.locator(aria("tab", "投稿")).click();
           else await page.goBack({ waitUntil: "domcontentloaded" });
-          // 一覧へ戻っても明示アクションまでは閉じたまま、絞り込みも再開しない。
+          // 一覧へ戻っても明示アクションまではパネルは閉じたまま。
           await expect
             .poll(async () => (await readContext(session, page)).pageKey)
             .toBe(originalPageKey);
@@ -309,11 +298,7 @@ export function createLifecycleCases(): LiveCase[] {
               async () => (await readContext(session, page)).timelineAvailable,
             )
             .toBe(true);
-          await expect
-            .poll(
-              async () => (await readContext(session, page)).filteringEnabled,
-            )
-            .toBe(false);
+          await assertPageReadOnly(page);
           await expect
             .poll(() => page.evaluate(() => innerWidth))
             .toBeGreaterThan(closedWidth);
@@ -327,6 +312,7 @@ export function createLifecycleCases(): LiveCase[] {
             .toBe(0);
           panel = await openPanel(session, page);
           opened = true;
+          await openFilterControls(panel);
           await expect
             .poll(() =>
               panel.$eval(

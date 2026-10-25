@@ -316,6 +316,9 @@ export function createUnsupportedCases(): LiveCase[] {
             await expect
               .poll(() => panel.$$eval(aria("switch"), (nodes) => nodes.length))
               .toBe(0);
+            expect(
+              await panel.$$eval("a[data-post-link]", (nodes) => nodes.length),
+            ).toBe(0);
             await expect
               .poll(() =>
                 page.$$eval(
@@ -343,6 +346,7 @@ export function createUnsupportedCases(): LiveCase[] {
                 state: "unsupported",
                 controls: 0,
                 hidden: 0,
+                panelPosts: 0,
                 timelineAvailable: false,
               }),
               contentType: "application/json",

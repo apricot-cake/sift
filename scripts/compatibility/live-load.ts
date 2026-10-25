@@ -4,6 +4,13 @@ import path from "node:path";
 import type { HTTPRequest, Page } from "puppeteer-core";
 
 export type LiveSite = "x" | "bluesky";
+export interface LiveNavigationReservation {
+  url: string;
+  site: LiveSite;
+  documentObserved: boolean;
+  responseObserved: boolean;
+  completed: boolean;
+}
 export function liveSite(url: string): LiveSite | undefined {
   let host: string;
   try {
@@ -166,6 +173,7 @@ interface NetworkRequestRecord {
   resourceType: string;
   navigation: boolean;
   pagination: "initial" | "continuation" | "unknown";
+  prepaid?: boolean;
 }
 
 export function networkPagination(
@@ -294,6 +302,7 @@ export class LiveLoadGuard {
   private counts = new WeakMap<Page, { requests: number }>();
   private context = { caseId: "unassigned", phase: "unassigned" };
   private requests = new WeakMap<HTTPRequest, NetworkRequestRecord>();
+  private reservations = new WeakMap<Page, LiveNavigationReservation>();
   readonly networkFile: string;
   constructor(budget = new LiveLoadBudget()) {
     this.budget = budget;
@@ -313,11 +322,111 @@ export class LiveLoadGuard {
       })}\n`,
     );
   }
-  async watch(page: Page) {
+  async reserveNavigation(rawUrl: string): Promise<LiveNavigationReservation> {
+    const url = new URL(rawUrl);
+    const site = liveSite(url.href);
+    if (!site)
+      throw Error("予約する移動先が実機検証の対象サイトではありません");
+    const wait = this.budget.request(site, true, false);
+    if (wait) await new Promise((resolve) => setTimeout(resolve, wait));
+    this.budget.assert(site);
+    this.record({
+      event: "navigation-reserved",
+      ...this.context,
+      site,
+      host: url.hostname,
+      endpoint: networkEndpoint(url.href),
+      waitMs: wait,
+    });
+    return {
+      url: url.href,
+      site,
+      documentObserved: false,
+      responseObserved: false,
+      completed: false,
+    };
+  }
+  async completeReservedNavigation(page: Page): Promise<void> {
+    const reserved = this.reservations.get(page);
+    if (!reserved || reserved.completed) return;
+    reserved.completed = true;
+    const status = await page.evaluate(
+      () =>
+        (
+          performance.getEntriesByType("navigation")[0] as
+            | PerformanceNavigationTiming
+            | undefined
+        )?.responseStatus ?? 0,
+    );
+    this.record({
+      event: "reserved-navigation-completed",
+      ...this.context,
+      site: reserved.site,
+      documentObserved: reserved.documentObserved,
+      responseObserved: reserved.responseObserved,
+      status: status || null,
+      observationGap: !reserved.documentObserved,
+    });
+    // 応答イベントで読めた Retry-After は、後から不明値で上書きしない。
+    if (!this.budget.read().sites[reserved.site]?.blocked) {
+      if (status === 429)
+        this.budget.stop(
+          reserved.site,
+          "HTTP 429（利用制限・初回応答のRetry-After不明）",
+        );
+      else if (status === 401 || status === 403)
+        this.budget.stop(reserved.site, `HTTP ${status}（認証・アクセス拒否）`);
+    }
+    this.budget.assert(reserved.site);
+    if (!status && !reserved.responseObserved) {
+      this.budget.stop(
+        reserved.site,
+        "新規タブの初回HTTP応答を確認できません（未完了）",
+      );
+      this.budget.assert(reserved.site);
+    }
+  }
+  async watch(
+    page: Page,
+    options: { reservedNavigation?: LiveNavigationReservation } = {},
+  ) {
     if (this.pages.has(page)) return;
     this.pages.add(page);
+    if (options.reservedNavigation)
+      this.reservations.set(page, options.reservedNavigation);
     const count = { requests: 0 };
     this.counts.set(page, count);
+    page.on("response", (response) => {
+      const entry = this.requests.get(response.request());
+      if (entry)
+        this.record({
+          event: "response",
+          ...entry,
+          status: response.status(),
+          fromCache: response.fromCache(),
+          fromServiceWorker: response.fromServiceWorker(),
+        });
+      const site = liveSite(response.url());
+      if (!site) return;
+      const request = response.request();
+      const main =
+        request.isNavigationRequest() && request.frame() === page.mainFrame();
+      if (main) {
+        const reserved = this.reservations.get(page);
+        if (reserved && !reserved.completed) reserved.responseObserved = true;
+      }
+      if (response.status() === 429)
+        this.budget.stop(
+          site,
+          "HTTP 429（利用制限）",
+          response.headers()["retry-after"],
+        );
+      else if (main && (response.status() === 401 || response.status() === 403))
+        this.budget.stop(
+          site,
+          `HTTP ${response.status()}（認証・アクセス拒否）`,
+        );
+    });
     await page.setRequestInterception(true);
     page.on("request", (request) => {
       void handle(request);
@@ -353,7 +462,17 @@ export class LiveLoadGuard {
         this.budget.assert(site);
         let wait = 0;
         if (site && (navigation || data)) {
-          wait = this.budget.request(site, navigation, data);
+          const reserved = this.reservations.get(page);
+          const prepaid =
+            navigation &&
+            reserved &&
+            !reserved.completed &&
+            !reserved.documentObserved &&
+            request.url() === reserved.url;
+          if (prepaid) {
+            reserved.documentObserved = true;
+            if (entry) entry.prepaid = true;
+          } else wait = this.budget.request(site, navigation, data);
           if (data && ++count.requests > LIVE_LOAD_LIMITS.caseDataRequests) {
             this.budget.stop(
               site,
@@ -382,33 +501,6 @@ export class LiveLoadGuard {
         }
       }
     };
-    page.on("response", (response) => {
-      const entry = this.requests.get(response.request());
-      if (entry)
-        this.record({
-          event: "response",
-          ...entry,
-          status: response.status(),
-          fromCache: response.fromCache(),
-          fromServiceWorker: response.fromServiceWorker(),
-        });
-      const site = liveSite(response.url());
-      if (!site) return;
-      const request = response.request();
-      const main =
-        request.isNavigationRequest() && request.frame() === page.mainFrame();
-      if (response.status() === 429)
-        this.budget.stop(
-          site,
-          "HTTP 429（利用制限）",
-          response.headers()["retry-after"],
-        );
-      else if (main && (response.status() === 401 || response.status() === 403))
-        this.budget.stop(
-          site,
-          `HTTP ${response.status()}（認証・アクセス拒否）`,
-        );
-    });
     page.on("requestfailed", (request) => {
       const entry = this.requests.get(request);
       if (entry) this.record({ event: "requestfailed", ...entry });

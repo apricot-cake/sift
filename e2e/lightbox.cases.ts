@@ -11,6 +11,12 @@ import {
   releaseCasePage,
 } from "./live.ts";
 import type { LiveCase } from "./live-case.ts";
+import {
+  assertPageReadOnly,
+  openFilterControls,
+  postKey,
+  readPanelPosts,
+} from "./panel-posts.ts";
 
 export function createLightboxCases(): LiveCase[] {
   const entries: LiveCase[] = [];
@@ -59,6 +65,7 @@ export function createLightboxCases(): LiveCase[] {
             .poll(async () => (await readContext(session, page)).health?.state)
             .toBe("ready");
           await completeInitialLoad(session, page, task, "ready");
+          await openFilterControls(panel);
           const mediaPicker = aria("combobox", "コンテンツタイプ");
           await (await element(panel, mediaPicker)).click();
           await (
@@ -82,7 +89,7 @@ export function createLightboxCases(): LiveCase[] {
           await photoLink.scrollIntoView();
           const before = await readContext(session, page);
           expect(before.timelineAvailable).toBe(true);
-          expect(before.filteringEnabled).toBe(true);
+          await assertPageReadOnly(page);
           expect(before.metricSampleCount).toBeGreaterThan(0);
           const photoHref = await photoLink.evaluate((node) =>
             node.getAttribute("href"),
@@ -106,26 +113,18 @@ export function createLightboxCases(): LiveCase[] {
             .toBe(true);
           const photoUrl = page.url();
           // スクロールで実投稿が増えることは許容し、現在の背景一覧と照合する。
+          const collectedBefore = new Set(
+            (await readPanelPosts(panel)).map((post) => postKey(post.url)),
+          );
           const sampleMatchesBackground = async () => {
             const context = await readContext(session, page);
-            const backgroundCount = await page.$$eval(
-              'article[data-testid="tweet"]',
-              (cards) =>
-                cards.filter(
-                  (card) =>
-                    !card.closest('[role="dialog"]') &&
-                    !card.parentElement?.closest(
-                      'article[data-testid="tweet"]',
-                    ) &&
-                    card.querySelector(
-                      '[data-testid="tweetPhoto"], [data-testid="videoPlayer"], [data-testid="videoComponent"], video, a[href*="/photo/"], a[href*="/video/"]',
-                    ),
-                ).length,
+            const posts = new Set(
+              (await readPanelPosts(panel)).map((post) => postKey(post.url)),
             );
             return (
               context.pageKey === before.pageKey &&
-              context.metricSampleCount === backgroundCount &&
-              backgroundCount > 0
+              collectedBefore.size > 0 &&
+              [...collectedBefore].every((key) => posts.has(key))
             );
           };
           await expect.poll(sampleMatchesBackground).toBe(true);
@@ -169,6 +168,7 @@ export function createLightboxCases(): LiveCase[] {
             .toBe(false);
           await expect.poll(sampleMatchesBackground).toBe(true);
           expect(await selected()).toBe("画像・動画のみ");
+          await assertPageReadOnly(page);
           await closePanel(session, page);
           opened = false;
 

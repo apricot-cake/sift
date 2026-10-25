@@ -3,7 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import type { Page } from "puppeteer-core";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   LIVE_LOAD_LIMITS,
   LiveLoadBudget,
@@ -15,6 +15,7 @@ import {
 
 const dirs: string[] = [];
 afterEach(() => {
+  vi.useRealTimers();
   for (const dir of dirs.splice(0))
     fs.rmSync(dir, { recursive: true, force: true });
 });
@@ -228,5 +229,161 @@ describe("実機検証の通信予算", () => {
     expect(events).toHaveLength(1);
     expect(events[0].disposition).toBe("aborted");
     expect(events[0].method).toBe("unknown");
+  });
+
+  it.each([true, false])(
+    "新規タブのdocument予約は一度だけ消費しreloadを免除しない: 初回観測=%s",
+    async (observed) => {
+      vi.useFakeTimers();
+      vi.setSystemTime(10000);
+      const b = budget();
+      const guard = new LiveLoadGuard(b);
+      const url = "https://x.com/NASA/status/123";
+      const reserved = await guard.reserveNavigation(url);
+      expect(b.read().sites.x?.navigations).toBe(1);
+      const frame = {};
+      const page = Object.assign(new EventEmitter(), {
+        setRequestInterception: async () => {},
+        mainFrame: () => frame,
+        url: () => url,
+        evaluate: async () => 200,
+      });
+      await guard.watch(page as unknown as Page, {
+        reservedNavigation: reserved,
+      });
+      const request = () => ({
+        isInterceptResolutionHandled: () => false,
+        url: () => url,
+        isNavigationRequest: () => true,
+        frame: () => frame,
+        resourceType: () => "document",
+        method: () => "GET",
+        continue: async () => {},
+        abort: async () => {},
+      });
+      if (observed) {
+        page.emit("request", request());
+        await Promise.resolve();
+        await Promise.resolve();
+        expect(b.read().sites.x?.navigations).toBe(1);
+      }
+      await guard.completeReservedNavigation(page as unknown as Page);
+      expect(reserved.completed).toBe(true);
+      vi.setSystemTime(13000);
+      page.emit("request", request());
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(b.read().sites.x?.navigations).toBe(2);
+      const log = fs.readFileSync(guard.networkFile, "utf8");
+      expect(log).toContain(`"observationGap":${String(!observed)}`);
+      expect(log).not.toContain("NASA");
+    },
+  );
+
+  it("新規タブのクリック前予約でも通常の読み込み間隔と上限を維持する", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(10000);
+    const b = budget();
+    const guard = new LiveLoadGuard(b);
+    await guard.reserveNavigation("https://x.com/NASA/status/123");
+    let completed = false;
+    const pending = guard
+      .reserveNavigation("https://x.com/NASA/status/456")
+      .then(() => {
+        completed = true;
+      });
+    await vi.advanceTimersByTimeAsync(LIVE_LOAD_LIMITS.navigationGapMs - 1);
+    expect(completed).toBe(false);
+    await vi.advanceTimersByTimeAsync(1);
+    await pending;
+    expect(completed).toBe(true);
+    for (let i = 2; i < LIVE_LOAD_LIMITS.navigations; i += 1)
+      b.request("x", true, false, 20000 + i * 3000);
+    await expect(
+      guard.reserveNavigation("https://x.com/NASA/status/789"),
+    ).rejects.toThrow("未完了");
+  });
+
+  it.each([429, 401, 403])(
+    "購読前に完了した新規タブのHTTP%sも停止する",
+    async (status) => {
+      const b = budget();
+      const guard = new LiveLoadGuard(b);
+      const reserved = await guard.reserveNavigation(
+        "https://x.com/NASA/status/123",
+      );
+      const page = Object.assign(new EventEmitter(), {
+        setRequestInterception: async () => {},
+        mainFrame: () => ({}),
+        url: () => reserved.url,
+        evaluate: async () => status,
+      });
+      await guard.watch(page as unknown as Page, {
+        reservedNavigation: reserved,
+      });
+      const before = Date.now();
+      await expect(
+        guard.completeReservedNavigation(page as unknown as Page),
+      ).rejects.toThrow(String(status));
+      if (status === 429)
+        expect(b.read().sites.x?.blockedUntil).toBeGreaterThanOrEqual(
+          before + 15 * 60 * 1000,
+        );
+      expect(() => b.assert("x")).toThrow(String(status));
+    },
+  );
+
+  it("interception準備中の応答を拾い、既知のRetry-Afterを不明値で上書きしない", async () => {
+    const b = budget();
+    const guard = new LiveLoadGuard(b);
+    const reserved = await guard.reserveNavigation(
+      "https://x.com/NASA/status/123",
+    );
+    const frame = {};
+    const page = Object.assign(new EventEmitter(), {
+      setRequestInterception: async () => {
+        page.emit("response", {
+          url: () => reserved.url,
+          request: () => ({
+            isNavigationRequest: () => true,
+            frame: () => frame,
+          }),
+          status: () => 429,
+          headers: () => ({ "retry-after": "60" }),
+        });
+      },
+      mainFrame: () => frame,
+      url: () => reserved.url,
+      evaluate: async () => 429,
+    });
+    await guard.watch(page as unknown as Page, {
+      reservedNavigation: reserved,
+    });
+    const until = b.read().sites.x?.blockedUntil;
+    await expect(
+      guard.completeReservedNavigation(page as unknown as Page),
+    ).rejects.toThrow("429");
+    expect(b.read().sites.x?.retryAfter).toBe("60");
+    expect(b.read().sites.x?.blockedUntil).toBe(until);
+  });
+
+  it("初回応答をイベントでもnavigation timingでも確認できなければ未完了で止める", async () => {
+    const b = budget();
+    const guard = new LiveLoadGuard(b);
+    const reserved = await guard.reserveNavigation(
+      "https://x.com/NASA/status/123",
+    );
+    const page = Object.assign(new EventEmitter(), {
+      setRequestInterception: async () => {},
+      url: () => reserved.url,
+      evaluate: async () => 0,
+    });
+    await guard.watch(page as unknown as Page, {
+      reservedNavigation: reserved,
+    });
+    await expect(
+      guard.completeReservedNavigation(page as unknown as Page),
+    ).rejects.toThrow("未完了");
+    expect(() => b.assert("x")).toThrow("初回HTTP応答");
   });
 });

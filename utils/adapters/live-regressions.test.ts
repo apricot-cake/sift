@@ -75,13 +75,6 @@ describe("実機で見つかった表示構造の回帰", () => {
     expect(blueskyAdapter.readTimelineKey(root, page)).not.toBe(before);
   });
 
-  it("非選択タブの終端を現在の終端としない", () => {
-    const root = render(
-      '<div style="display:none"><div data-testid="postsFeed-flatlist"><div dir="auto">End of feed</div></div></div><div data-testid="postsFeed-flatlist"></div>',
-    );
-    expect(blueskyAdapter.hasReachedTimelineEnd(root)).toBe(false);
-  });
-
   it("プロフィール内のフィードタブは対象にしない", () => {
     expect(
       blueskyAdapter.isTimelineAvailable(
