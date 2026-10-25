@@ -2,7 +2,9 @@
 
 X・Blueskyでイラストを探すための Chrome 拡張機能です。いつものタイムラインやリストで、投稿をいいね数や画像の有無で絞り込めます。
 
-[Chrome ウェブストア](https://chromewebstore.google.com/detail/sift/jglehalaegleehefcefnfmmbblgkomeh) · [紹介ページ](https://apricot-cake.github.io/sift/) · [HTMLデモ](https://apricot-cake.github.io/sift/#demo)
+## 紹介ページ
+
+[紹介ページ](https://apricot-cake.github.io/sift/)
 
 ## 主な機能
 
@@ -13,13 +15,9 @@ X・Blueskyでイラストを探すための Chrome 拡張機能です。いつ�
 
 対象は画面に読み込まれた投稿です。画像の内容からイラストかどうかを判定する機能はありません。投稿の並び順は変更しません。
 
-## 必要環境とインストール
+## インストール
 
-デスクトップ版 Google Chrome で利用できます。[Chrome ウェブストア](https://chromewebstore.google.com/detail/sift/jglehalaegleehefcefnfmmbblgkomeh)から追加してください。
-
-X・Blueskyの対応する一覧ページで動作します。検索は「最新」が対象です。X の「おすすめ」や個別投稿など、対応していない画面もあります。詳しくは [対応サービス](docs/対応サービス.md)をご覧ください。
-
-ソースからビルドして使う場合は、[開発ガイド](docs/CONTRIBUTING.md#chrome-で確認する)に手順があります。
+[Chrome ウェブストア](https://chromewebstore.google.com/detail/sift/jglehalaegleehefcefnfmmbblgkomeh)からインストールします。
 
 ## 使い方
 
@@ -31,15 +29,7 @@ X・Blueskyの対応する一覧ページで動作します。検索は「最新
 
 絞り込みはブラウザー内で行います。投稿の内容を開発者へ送信しません。設定の同期など、扱うデータの詳細は [プライバシーポリシー](PRIVACY.md) をご覧ください。
 
-## ドキュメント
-
-- [対応サービス](docs/対応サービス.md): 対応する画面と判定上の制約
-- [開発ガイド](docs/CONTRIBUTING.md): 環境構築、テスト、Chrome・Storybook での確認
-- [ストア提出](docs/ストア提出.md): 提出前の確認、提出フロー、初期設定、提出記録
-- [紹介ページの開発](website/README.md): 操作デモと静的サイトの開発・公開
-- [プライバシーポリシー](PRIVACY.md): データの利用と保存
-
-## 開発・貢献・問い合わせ
+## 開発者向け
 
 開発には Node.js 24.12 以降と、パッケージ管理ツールの pnpm 12.11.2 を使います。[開発ガイド](docs/CONTRIBUTING.md)に沿って依存関係を準備し、変更後に `pnpm run check` を実行してください。
 
