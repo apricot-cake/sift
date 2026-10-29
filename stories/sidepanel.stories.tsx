@@ -1,4 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
+import { userEvent, within } from "storybook/test";
 import { preparePanel } from "../.storybook/browser.ts";
 import { SidepanelApp } from "../entrypoints/sidepanel/sidepanel-app.tsx";
 
@@ -17,6 +18,14 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 export const X: Story = { name: "X" };
+export const FilterConditions: Story = {
+  name: "絞り込み条件",
+  play: async ({ canvasElement }) => {
+    await userEvent.click(
+      await within(canvasElement).findByRole("tab", { name: "絞り込み条件" }),
+    );
+  },
+};
 export const Bluesky: Story = {
   name: "Bluesky",
   beforeEach: () => preparePanel("bluesky"),

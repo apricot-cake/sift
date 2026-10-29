@@ -206,14 +206,27 @@ try {
     for (const target of ownedBrowser.targets().filter(isPanel)) {
       const panel = await target.asPage();
       if (await panel.evaluate(() => document.visibilityState === "visible")) {
-        const filters = await panel.$("details[data-filter-controls]");
+        const selector =
+          '[data-panel-tabs] [role="tab"][data-panel-tab="filters"]';
+        const filters = await panel.$(selector);
         if (filters) {
           try {
-            if (!(await filters.evaluate((node) => node.hasAttribute("open"))))
+            if (
+              (await filters.evaluate((node) =>
+                node.getAttribute("aria-selected"),
+              )) !== "true"
+            )
               await panel
-                .locator("details[data-filter-controls] > summary")
+                .locator(selector)
                 .setWaitForStableBoundingBox(false)
                 .click();
+            await panel.waitForFunction(
+              () =>
+                document
+                  .querySelector('[data-panel-tab="filters"]')
+                  ?.getAttribute("aria-selected") === "true" &&
+                !document.querySelector("[data-filter-panel]")?.hidden,
+            );
           } finally {
             await filters.dispose();
           }

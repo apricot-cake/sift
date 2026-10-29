@@ -40,6 +40,8 @@ import {
 import type { LiveCase } from "./live-case.ts";
 import {
   assertPageReadOnly,
+  assertPanelPhoto,
+  assertPanelTabsPreserveState,
   assertPostOpensInNewTab,
   capturePanelScreenshot,
   openFilterControls,
@@ -636,6 +638,8 @@ async function inclusionFilter(
     );
   };
   await expect.poll(matched).toBe(true);
+  if (target.id === "x-profile" || target.id === "bluesky-profile")
+    await assertPanelTabsPreserveState(panel);
   await assertPageReadOnly(page);
   const filtered = await readPanelPosts(panel);
   const excludedBefore = before.filter(
@@ -952,7 +956,20 @@ export function createCompatibilityCases(): LiveCase[] {
             ),
           ).toBe(true);
           await assertPageReadOnly(page);
+          if (target.id === "x-search" || target.id === "bluesky-profile") {
+            await evidence(task, "panel-photo", {
+              body: JSON.stringify(
+                await assertPanelPhoto(page, panel, target.site),
+              ),
+              contentType: "application/json",
+            });
+            await panel.screenshot({
+              path: `${process.cwd()}/test-results/post-collection-panel-${target.site}-photo.png`,
+              fullPage: false,
+            });
+          }
           if (target.id === "x-profile" || target.id === "bluesky-profile") {
+            await capturePanelScreenshot(panel, target.site, "filters");
             await capturePanelScreenshot(panel, target.site);
             await assertPostOpensInNewTab(session, page, panel);
           }

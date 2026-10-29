@@ -78,7 +78,7 @@ async function mount(openFilters = true) {
   await flush();
   if (openFilters) {
     await act(async () =>
-      container.querySelector<HTMLElement>("details summary")?.click(),
+      container.querySelector<HTMLElement>("[data-panel-tab=filters]")?.click(),
     );
   }
 }
@@ -111,6 +111,136 @@ beforeEach(() => {
 });
 
 describe("パネルの投稿一覧", () => {
+  it("タブを矢印・Home・Endで切り替え、選択中のタブだけTab移動の対象にする", async () => {
+    await mount(false);
+    const posts = container.querySelector<HTMLButtonElement>(
+      "[data-panel-tab=posts]",
+    );
+    const filters = container.querySelector<HTMLButtonElement>(
+      "[data-panel-tab=filters]",
+    );
+    const press = async (node: HTMLButtonElement | null, key: string) => {
+      await act(async () => {
+        node?.focus();
+        node?.dispatchEvent(
+          new KeyboardEvent("keydown", {
+            key,
+            bubbles: true,
+            cancelable: true,
+          }),
+        );
+      });
+    };
+    expect(posts?.tabIndex).toBe(0);
+    expect(filters?.tabIndex).toBe(-1);
+    await press(posts, "ArrowRight");
+    expect(filters?.getAttribute("aria-selected")).toBe("true");
+    expect(document.activeElement).toBe(filters);
+    expect(posts?.tabIndex).toBe(-1);
+    expect(filters?.tabIndex).toBe(0);
+    await press(filters, "ArrowRight");
+    expect(document.activeElement).toBe(posts);
+    await press(posts, "End");
+    expect(document.activeElement).toBe(filters);
+    await press(filters, "Home");
+    expect(document.activeElement).toBe(posts);
+    expect(checkPanelBuild).toHaveBeenCalledOnce();
+    const postsPane =
+      container.querySelector<HTMLElement>("[data-posts-panel]");
+    expect(posts?.getAttribute("aria-controls")).toBe(postsPane?.id);
+    expect(postsPane?.getAttribute("aria-labelledby")).toBe(posts?.id);
+  });
+
+  it("タブの往復で追加表示と各タブのスクロール位置を維持する", async () => {
+    request = async () =>
+      postsContext(Array.from({ length: 51 }, (_, index) => post(index + 1)));
+    await mount(false);
+    await act(async () =>
+      container
+        .querySelector<HTMLButtonElement>("[data-show-more-posts]")
+        ?.click(),
+    );
+    const postsPane =
+      container.querySelector<HTMLDivElement>("[data-posts-panel]");
+    const filtersPane = container.querySelector<HTMLDivElement>(
+      "[data-filter-panel]",
+    );
+    if (!postsPane || !filtersPane) throw Error("タブの内容がありません");
+    postsPane.scrollTop = 340;
+    await act(async () =>
+      container
+        .querySelector<HTMLButtonElement>("[data-panel-tab=filters]")
+        ?.click(),
+    );
+    expect(postsPane.hidden).toBe(true);
+    expect(container.querySelector("[data-post-id='51']")).not.toBeNull();
+    postsPane.scrollTop = 0;
+    filtersPane.scrollTop = 120;
+    await act(async () =>
+      container
+        .querySelector<HTMLButtonElement>("[data-panel-tab=posts]")
+        ?.click(),
+    );
+    expect(postsPane.hidden).toBe(false);
+    expect(postsPane.scrollTop).toBe(340);
+    expect(container.querySelectorAll("[data-post-link]")).toHaveLength(51);
+    filtersPane.scrollTop = 0;
+    await act(async () =>
+      container
+        .querySelector<HTMLButtonElement>("[data-panel-tab=filters]")
+        ?.click(),
+    );
+    expect(filtersPane.scrollTop).toBe(120);
+  });
+
+  it("条件タブから現在のサイトの設定をリセットする", async () => {
+    await mount(true);
+    writes.length = 0;
+    await act(async () =>
+      container.querySelector<HTMLButtonElement>("footer button")?.click(),
+    );
+    await flush();
+    const dialog = container.querySelector<HTMLDialogElement>("dialog");
+    expect(dialog?.open).toBe(true);
+    expect(dialog?.textContent).toContain(
+      t("optionsResetSiteConfirm", { site: "X" }),
+    );
+    await act(async () =>
+      dialog?.querySelector<HTMLButtonElement>("button:last-child")?.click(),
+    );
+    await flush();
+    expect(dialog?.open).toBe(false);
+    expect(writes.at(-1)?.siteSettings.x?.minReactionsEnabled).toBe(true);
+  });
+
+  it("未接続でも全サイトの設定をリセットできる", async () => {
+    request = async () => null;
+    vi.spyOn(fakeBrowser.runtime, "sendMessage").mockResolvedValue(undefined);
+    await mount(false);
+    expect(container.querySelector("[role=tablist]")).toBeNull();
+    await act(async () =>
+      container.querySelector<HTMLButtonElement>("footer button")?.click(),
+    );
+    await flush();
+    const dialog = container.querySelector<HTMLDialogElement>("dialog");
+    expect(dialog?.textContent).toContain(t("optionsResetNoSite"));
+    const reset = dialog?.querySelector<HTMLButtonElement>("button:last-child");
+    expect(reset?.disabled).toBe(true);
+    await act(async () =>
+      dialog?.querySelector<HTMLInputElement>("input[type=checkbox]")?.click(),
+    );
+    await flush();
+    expect(reset?.disabled).toBe(false);
+    await act(async () => reset?.click());
+    await flush();
+    expect(writes).toHaveLength(1);
+    expect(settingsFor(writes[0] ?? defaults, "x")).toEqual(
+      settingsFor(defaults, "x"),
+    );
+    expect(settingsFor(writes[0] ?? defaults, "bluesky")).toEqual(
+      settingsFor(defaults, "bluesky"),
+    );
+  });
   it("いいね数を取得できなくても最低値の条件を解除できる", async () => {
     let onSettingsChange = (_value: Settings) => {};
     vi.mocked(settingsItem.watch).mockImplementation((callback) => {
@@ -127,7 +257,7 @@ describe("パネルの投稿一覧", () => {
         readableMetrics: 0,
       },
     });
-    await mount();
+    await mount(true);
     await act(async () =>
       onSettingsChange(
         withSiteSettings(defaults, "x", {
@@ -155,10 +285,17 @@ describe("パネルの投稿一覧", () => {
     );
   });
 
-  it("条件は初期状態で折りたたみ、投稿へのリンクを表示する", async () => {
+  it("初期状態で投稿タブを選び、投稿へのリンクを表示する", async () => {
     request = async () => postsContext([post(1)]);
     await mount(false);
-    expect(container.querySelector("details")?.open).toBe(false);
+    expect(
+      container
+        .querySelector("[data-panel-tab=posts]")
+        ?.getAttribute("aria-selected"),
+    ).toBe("true");
+    expect(
+      container.querySelector<HTMLDivElement>("[data-filter-panel]")?.hidden,
+    ).toBe(true);
     const link = container.querySelector<HTMLAnchorElement>("[data-post-link]");
     expect(link?.href).toBe("https://x.com/example/status/1");
     expect(link?.target).toBe("_blank");
@@ -180,7 +317,7 @@ describe("パネルの投稿一覧", () => {
           metricCount: null,
         },
       ]);
-    await mount();
+    await mount(false);
     expect(container.querySelector("#injected")).toBeNull();
     expect(container.querySelector("[data-post-link]")?.textContent).toContain(
       '<img id="injected"',
@@ -192,12 +329,55 @@ describe("パネルの投稿一覧", () => {
     expect(image?.getAttribute("loading")).toBe("lazy");
     expect(image?.getAttribute("referrerpolicy")).toBe("no-referrer");
     expect(container.textContent).toContain(t("sidepanelLikesUnknown"));
+    const media = container.querySelector("[data-post-media]");
+    const body = [...container.querySelectorAll("[data-post-link] p")].find(
+      (node) => node.textContent?.startsWith('<img id="injected"'),
+    );
+    expect(
+      media &&
+        body &&
+        Boolean(
+          media.compareDocumentPosition(body) &
+            Node.DOCUMENT_POSITION_FOLLOWING,
+        ),
+    ).toBe(true);
+  });
+
+  it("画像を取得できない場合は案内を表示し、画像URLが更新されたら読み直す", async () => {
+    const sample = {
+      ...post(1),
+      images: [{ url: "https://pbs.twimg.com/media/first.jpg", alt: "作品" }],
+    };
+    request = async () => postsContext([sample]);
+    await mount(false);
+    await act(async () =>
+      container
+        .querySelector<HTMLImageElement>("[data-post-media] img")
+        ?.dispatchEvent(new Event("error")),
+    );
+    expect(
+      container.querySelector("[data-post-image-error]")?.textContent,
+    ).toContain(t("sidepanelImageUnavailable"));
+    request = async () =>
+      postsContext([
+        {
+          ...sample,
+          images: [
+            { url: "https://pbs.twimg.com/media/second.jpg", alt: "作品" },
+          ],
+        },
+      ]);
+    await act(async () => vi.advanceTimersByTimeAsync(750));
+    expect(container.querySelector("[data-post-image-error]")).toBeNull();
+    expect(
+      container.querySelector<HTMLImageElement>("[data-post-media] img")?.src,
+    ).toBe("https://pbs.twimg.com/media/second.jpg");
   });
 
   it("大量の投稿を50件ずつ表示する", async () => {
     request = async () =>
       postsContext(Array.from({ length: 101 }, (_, index) => post(index + 1)));
-    await mount();
+    await mount(false);
     expect(container.querySelectorAll("[data-post-link]")).toHaveLength(50);
     await act(async () =>
       container
@@ -223,7 +403,7 @@ describe("パネルの投稿一覧", () => {
       timelineKey: "home:following",
     };
     request = async () => snapshot;
-    await mount();
+    await mount(false);
     await act(async () =>
       container
         .querySelector<HTMLButtonElement>("[data-show-more-posts]")
@@ -241,7 +421,7 @@ describe("パネルの投稿一覧", () => {
 
   it("未取得と条件に合わない場合を区別する", async () => {
     request = async () => postsContext([]);
-    await mount();
+    await mount(false);
     expect(container.textContent).toContain(t("sidepanelNoCollectedPosts"));
     request = async () => postsContext([], 3);
     await act(async () => vi.advanceTimersByTimeAsync(750));
@@ -257,7 +437,7 @@ describe("パネルの投稿一覧", () => {
       .mockImplementationOnce(() => old.promise)
       .mockResolvedValue(postsContext([post(2)], 2));
     request = read;
-    await mount();
+    await mount(false);
     await act(async () => vi.advanceTimersByTimeAsync(750));
     await act(async () =>
       container

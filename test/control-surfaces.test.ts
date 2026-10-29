@@ -64,7 +64,7 @@ describe("抽出の操作入口", () => {
       /minReactions: minimum,\s*minReactionsEnabled: true/,
     );
     expect(sidepanel).toContain("setManualMinimum(value, true)");
-    expect(sidepanel).toContain(
+    expect(sidepanel.replace(/\s+/g, " ")).toContain(
       "!manualActive && selectedSettings.minReactionsEnabled",
     );
   });
@@ -134,7 +134,7 @@ describe("抽出の操作入口", () => {
     expect(sidepanel).not.toContain("value={selectedSite}");
   });
 
-  it("絞り込み条件を折りたたみ投稿一覧の領域を確保する", () => {
+  it("投稿と絞り込み条件をパネル内タブで分ける", () => {
     const sidepanel = readPanelSource();
 
     expect(sidepanel).toContain('t("optionsHideReplies")');
@@ -144,8 +144,10 @@ describe("抽出の操作入口", () => {
     expect(sidepanel).not.toContain("optionsKeywords");
     expect(sidepanel).not.toContain("collapsible");
     expect(sidepanel).not.toContain("defaultOpen");
-    expect(sidepanel).toContain("<details");
-    expect(sidepanel).toContain("<summary");
+    expect(sidepanel).not.toContain("<details");
+    expect(sidepanel).toContain('role="tablist"');
+    expect(sidepanel).toContain('role="tabpanel"');
+    expect(sidepanel).not.toContain("<summary");
   });
 
   it("指定なし・候補・数値入力の順に並べ集計説明を末尾に置く", () => {
@@ -178,7 +180,7 @@ describe("抽出の操作入口", () => {
   it("サイドパネルの絞り込み項目を一列に並べる", () => {
     const sidepanel = readPanelSource();
     const marker = sidepanel.indexOf('data-filter-controls=""');
-    const end = sidepanel.indexOf("</details>", marker);
+    const end = sidepanel.indexOf("</fieldset>", marker);
     const group = sidepanel.slice(marker, end);
 
     expect(marker).toBeGreaterThan(-1);

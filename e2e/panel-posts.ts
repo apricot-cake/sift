@@ -11,39 +11,230 @@ export function postKey(value: string, base = "https://x.com/"): string {
   return `${url.hostname}${url.pathname.replace(/\/$/, "")}`;
 }
 
+export async function selectPanelTab(panel: Page, tab: "posts" | "filters") {
+  const selector = `[data-panel-tabs] [role="tab"][data-panel-tab="${tab}"]`;
+  await panel.locator(selector).wait();
+  if (
+    (await panel.$eval(selector, (node) =>
+      node.getAttribute("aria-selected"),
+    )) !== "true"
+  )
+    await panel.locator(selector).click();
+  await expect
+    .poll(() =>
+      panel.$eval(selector, (node) => {
+        const pane = document.getElementById(
+          node.getAttribute("aria-controls") ?? "",
+        );
+        return (
+          node.getAttribute("aria-selected") === "true" &&
+          pane?.getAttribute("role") === "tabpanel" &&
+          !pane.hidden
+        );
+      }),
+    )
+    .toBe(true);
+}
+
 export async function openFilterControls(panel: Page): Promise<void> {
-  await panel.locator("details[data-filter-controls]").wait();
-  const controls = await panel.$("details[data-filter-controls]");
-  if (!controls) throw Error("絞り込み条件を取得できません");
-  try {
-    if (!(await controls.evaluate((node) => node.hasAttribute("open"))))
-      await panel.locator("details[data-filter-controls] > summary").click();
-    await expect
-      .poll(() => controls.evaluate((node) => node.hasAttribute("open")))
-      .toBe(true);
-  } finally {
-    await controls.dispose();
-  }
+  await selectPanelTab(panel, "filters");
 }
 
 export async function readPanelPosts(panel: Page) {
-  // 追加表示は収集済みの結果だけを展開する。実サイトのスクロールや取得は行わない。
-  for (let count = 0; count < 20; count += 1) {
-    const more = await panel.$("button[data-show-more-posts]");
-    if (!more) break;
-    try {
-      await more.click();
-    } finally {
-      await more.dispose();
-    }
-  }
-  return panel.$$eval("a[data-post-link]", (links) =>
-    links.map((link) => ({
-      url: (link as HTMLAnchorElement).href,
-      target: link.getAttribute("target"),
-      rel: link.getAttribute("rel"),
-    })),
+  const previous = await panel.$eval(
+    '[data-panel-tabs] [role="tab"][aria-selected="true"]',
+    (node) => node.getAttribute("data-panel-tab"),
   );
+  await selectPanelTab(panel, "posts");
+  try {
+    // 追加表示は収集済みの結果だけを展開する。実サイトのスクロールや取得は行わない。
+    for (let count = 0; count < 20; count += 1) {
+      const more = await panel.$("button[data-show-more-posts]");
+      if (!more) break;
+      try {
+        await more.click();
+      } finally {
+        await more.dispose();
+      }
+    }
+    return await panel.$$eval("a[data-post-link]", (links) =>
+      links.map((link) => ({
+        url: (link as HTMLAnchorElement).href,
+        target: link.getAttribute("target"),
+        rel: link.getAttribute("rel"),
+      })),
+    );
+  } finally {
+    if (previous === "filters") await selectPanelTab(panel, "filters");
+  }
+}
+
+export async function assertPanelTabsPreserveState(panel: Page): Promise<void> {
+  await openFilterControls(panel);
+  const settings = () =>
+    panel.$$eval(
+      '[data-filter-controls] [role="combobox"], [data-filter-controls] [role="switch"], [data-filter-controls] input',
+      (nodes) =>
+        nodes.map((node) => {
+          const copy = node.cloneNode(true) as Element;
+          copy.querySelectorAll("[data-choice-count]").forEach((count) => {
+            count.remove();
+          });
+          return {
+            label: node.getAttribute("aria-label"),
+            checked: node.getAttribute("aria-checked"),
+            value:
+              node instanceof HTMLInputElement
+                ? node.value
+                : copy.textContent?.trim(),
+          };
+        }),
+    );
+  const beforeSettings = await settings();
+  const beforePosts = await readPanelPosts(panel);
+  const tabs = await panel.$$eval('[data-panel-tabs] [role="tab"]', (nodes) =>
+    nodes.map((node) => {
+      const copy = node.cloneNode(true) as Element;
+      copy.querySelectorAll('[aria-hidden="true"]').forEach((child) => {
+        child.remove();
+      });
+      return copy.textContent?.trim();
+    }),
+  );
+  expect(tabs).toEqual(["投稿", "絞り込み条件"]);
+  await selectPanelTab(panel, "posts");
+  const afterPosts = new Set(
+    (await readPanelPosts(panel)).map((post) => postKey(post.url)),
+  );
+  expect(beforePosts.every((post) => afterPosts.has(postKey(post.url)))).toBe(
+    true,
+  );
+  await openFilterControls(panel);
+  expect(await settings()).toEqual(beforeSettings);
+}
+
+export async function assertPanelPhoto(
+  source: Page,
+  panel: Page,
+  site: "x" | "bluesky",
+) {
+  const expected = await source.$$eval(
+    site === "x"
+      ? 'article[data-testid="tweet"]'
+      : '[data-testid^="feedItem-by-"]',
+    (cards, service) =>
+      cards.flatMap((card) => {
+        const href =
+          service === "x"
+            ? card.querySelector("a:has(time[datetime])")?.getAttribute("href")
+            : (card.getAttribute("href") ??
+              card.querySelector('a[href*="/post/"]')?.getAttribute("href"));
+        if (!href) return [];
+        const selector =
+          service === "x"
+            ? '[data-testid="tweetPhoto"] img, a[href*="/photo/"] img'
+            : 'button img, [role="button"] img';
+        const images = [
+          ...card.querySelectorAll<HTMLImageElement>(selector),
+        ].flatMap((image) => {
+          for (
+            let parent = image.parentElement;
+            parent && parent !== card;
+            parent = parent.parentElement
+          ) {
+            if (
+              parent.matches(
+                'article[data-testid="tweet"], [data-testid^="feedItem-by-"], [data-testid^="postThreadItem-by-"]',
+              ) ||
+              (parent.matches('div[role="link"]') &&
+                parent.querySelector(
+                  '[data-testid="Tweet-User-Avatar"], [data-testid="userAvatarImage"], a[href*="/post/"]',
+                ))
+            )
+              return [];
+          }
+          if (
+            service === "bluesky" &&
+            image.closest("a") &&
+            image.closest("a") !== card
+          )
+            return [];
+          return [image.currentSrc, image.src].filter((value) => {
+            if (!URL.canParse(value)) return false;
+            const url = new URL(value);
+            return (
+              url.protocol === "https:" &&
+              (service === "x"
+                ? url.hostname === "pbs.twimg.com" &&
+                  url.pathname.startsWith("/media/")
+                : url.hostname === "cdn.bsky.app" &&
+                  /^\/img\/feed_(thumbnail|fullsize)\//.test(url.pathname))
+            );
+          });
+        });
+        return images.length
+          ? [{ post: new URL(href, location.href).href, images }]
+          : [];
+      }),
+    site,
+  );
+  expect(expected.length, "実サイトの本文写真があること").toBeGreaterThan(0);
+  await selectPanelTab(panel, "posts");
+  await readPanelPosts(panel);
+  const imageKey = (value: string) => {
+    const url = new URL(value);
+    return `${url.origin}${url.pathname}`;
+  };
+  const find = async () => {
+    const images = await panel.$$eval("a[data-post-link] img", (nodes) =>
+      nodes.map((node) => ({
+        post: (node.closest("a") as HTMLAnchorElement).href,
+        src: (node as HTMLImageElement).src,
+      })),
+    );
+    return images.find((image) =>
+      expected.some(
+        (post) =>
+          postKey(post.post) === postKey(image.post) &&
+          post.images.some((url) => imageKey(url) === imageKey(image.src)),
+      ),
+    );
+  };
+  await expect
+    .poll(find, { message: "同一投稿の本文写真がパネルに表示されること" })
+    .toBeTruthy();
+  const image = await find();
+  if (!image) throw Error("照合した投稿画像が消失しました");
+  const handle = await panel.$(
+    `a[data-post-link][href=${JSON.stringify(image.post)}] img[src=${JSON.stringify(image.src)}]`,
+  );
+  if (!handle) throw Error("照合した投稿画像を取得できません");
+  try {
+    // パネル内の1枚だけを表示位置へ移す。元サイトはスクロールしない。
+    await handle.scrollIntoView();
+    await expect
+      .poll(
+        () =>
+          handle.evaluate((node) => {
+            const img = node as HTMLImageElement;
+            return img.complete && img.naturalWidth > 0;
+          }),
+        { message: "CDNの実画像が読み込まれること" },
+      )
+      .toBe(true);
+    return handle.evaluate((node) => {
+      const img = node as HTMLImageElement;
+      return {
+        post: (img.closest("a") as HTMLAnchorElement).href,
+        image: img.currentSrc,
+        complete: img.complete,
+        width: img.naturalWidth,
+        height: img.naturalHeight,
+      };
+    });
+  } finally {
+    await handle.dispose();
+  }
 }
 
 export async function assertPageReadOnly(page: Page): Promise<void> {
@@ -64,6 +255,7 @@ export async function assertPostOpensInNewTab(
   const links = await readPanelPosts(panel);
   const first = links[0];
   if (!first) throw Error("新規タブの確認に必要なパネル投稿がありません");
+  await selectPanelTab(panel, "posts");
   const original = source.url();
   const previousTargets = new Set(session.browser.targets());
   // 初回documentはtarget生成前に始まり得るため、予算と待機をクリック前に確保する。
@@ -164,22 +356,20 @@ export async function assertPostOpensInNewTab(
 export async function capturePanelScreenshot(
   panel: Page,
   site: "x" | "bluesky",
+  tab: "posts" | "filters" = "posts",
 ): Promise<void> {
-  const filters = await panel.$("details[data-filter-controls]");
-  if (filters) {
-    try {
-      if (await filters.evaluate((node) => node.hasAttribute("open")))
-        await panel.locator("details[data-filter-controls] > summary").click();
-      await expect
-        .poll(() => filters.evaluate((node) => node.hasAttribute("open")))
-        .toBe(false);
-    } finally {
-      await filters.dispose();
-    }
-  }
-  await panel.evaluate(() => scrollTo(0, 0));
+  await selectPanelTab(panel, tab);
+  await panel.evaluate(
+    (kind) =>
+      document
+        .querySelector<HTMLElement>(
+          kind === "posts" ? "[data-posts-panel]" : "[data-filter-panel]",
+        )
+        ?.scrollTo(0, 0),
+    tab,
+  );
   await panel.screenshot({
-    path: `${process.cwd()}/test-results/post-collection-panel-${site}.png`,
+    path: `${process.cwd()}/test-results/post-collection-panel-${site}${tab === "filters" ? "-filters" : ""}.png`,
     fullPage: false,
   });
 }
