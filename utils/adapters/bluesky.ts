@@ -25,7 +25,7 @@ const BLUESKY_SELECTORS = Object.freeze({
   postLink: 'a[href*="/post/"]',
   // button の下にあること＝これが、投稿自身の画像と、外部リンクカードの
   // サムネイル（そちらは <a> の下にある）を分けている。
-  image: 'button img[src*="/img/feed_thumbnail/"]',
+  image: 'button img, [role="button"] img',
   // 再生前の動画には <video> 要素が無い＝サムネイルは CSS の背景画像として
   // 描かれている。<video> が現れるのは再生を始めてから。
   video: '[style*="video.bsky.app"]',
@@ -109,6 +109,20 @@ function isOwnPostNode(postCard: Element, node: Element): boolean {
   return parent === postCard;
 }
 
+function readImages(postCard: Element) {
+  return postImages(
+    Array.from(
+      postCard.querySelectorAll<HTMLImageElement>(BLUESKY_SELECTORS.image),
+    ).filter((node) => {
+      const link = node.closest("a");
+      return (
+        isOwnPostNode(postCard, node) &&
+        (!link || link === postCard || !postCard.contains(link))
+      );
+    }),
+  );
+}
+
 // `:` の注釈ではなく `satisfies`。理由は x.ts を参照。
 export const blueskyAdapter = Object.freeze({
   id: "bluesky",
@@ -140,9 +154,7 @@ export const blueskyAdapter = Object.freeze({
     const text = Array.from(
       postCard.querySelectorAll('[data-testid="postText"]'),
     ).find((node) => isOwnPostNode(postCard, node));
-    const images = Array.from(
-      postCard.querySelectorAll<HTMLImageElement>(BLUESKY_SELECTORS.image),
-    ).filter((node) => isOwnPostNode(postCard, node));
+    const images = readImages(postCard);
     return {
       id,
       url,
@@ -152,7 +164,7 @@ export const blueskyAdapter = Object.freeze({
       ),
       handle: postText(handle, 100),
       text: postText(text?.textContent, 500),
-      images: postImages(images),
+      images,
       metricCount: postMetric(this.readMetricCount(postCard)),
       ...this.readMedia(postCard),
       isReply: this.readIsReply(postCard),
@@ -299,7 +311,11 @@ export const blueskyAdapter = Object.freeze({
   // このサービスの作りの話ではない。
   readMedia(postCard: Element) {
     return {
-      hasImage: Boolean(postCard.querySelector(BLUESKY_SELECTORS.image)),
+      // メディア条件は従来どおり引用内の写真も含め、パネルへ転載する画像とは分ける。
+      hasImage:
+        postImages(
+          postCard.querySelectorAll<HTMLImageElement>(BLUESKY_SELECTORS.image),
+        ).length > 0,
       hasVideo: Boolean(
         postCard.querySelector(BLUESKY_SELECTORS.video) ||
           postCard.querySelector(BLUESKY_SELECTORS.animatedImage),

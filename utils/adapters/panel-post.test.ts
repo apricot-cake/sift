@@ -21,6 +21,34 @@ function bskyPost(body: string): Element {
 }
 
 describe("Xのパネル表示用投稿", () => {
+  it("lazy画像のcurrentSrcがプレースホルダーでも安全なsrcを利用する", () => {
+    const card = xPost(
+      '<a href="/alice/status/123"><time datetime="2026-10-25"></time></a><div data-testid="tweetPhoto"><img loading="lazy" src="https://pbs.twimg.com/media/lazy.jpg" alt="写真"></div>',
+    );
+    const image = card.querySelector("img");
+    if (!image) throw new Error("画像がありません");
+    Object.defineProperty(image, "currentSrc", {
+      value: "data:image/gif;base64,placeholder",
+    });
+    expect(xAdapter.readPost(card)?.images).toEqual([
+      { url: "https://pbs.twimg.com/media/lazy.jpg", alt: "写真" },
+    ]);
+  });
+
+  it("ブラウザーがsrcsetから選んだ安全なcurrentSrcを優先する", () => {
+    const card = xPost(
+      '<a href="/alice/status/123"><time datetime="2026-10-25"></time></a><div data-testid="tweetPhoto"><img src="https://pbs.twimg.com/media/small.jpg" srcset="https://pbs.twimg.com/media/large.jpg 2x"></div>',
+    );
+    const image = card.querySelector("img");
+    if (!image) throw new Error("画像がありません");
+    Object.defineProperty(image, "currentSrc", {
+      value: "https://pbs.twimg.com/media/large.jpg",
+    });
+    expect(xAdapter.readPost(card)?.images[0]?.url).toBe(
+      "https://pbs.twimg.com/media/large.jpg",
+    );
+  });
+
   it("投稿URL・作者・プレーンテキスト・本体画像と反応数を読み取る", () => {
     const card =
       xPost(`<div data-testid="User-Name"><a href="/alice">Alice</a><a href="/alice">@alice</a></div>
@@ -91,6 +119,75 @@ describe("Xのパネル表示用投稿", () => {
 });
 
 describe("Blueskyのパネル表示用投稿", () => {
+  it.each(["button", 'div role="button"'])(
+    "%s内の本体fullsize画像を読み、画像条件にも反映する",
+    (wrapper) => {
+      const tag = wrapper.split(" ")[0];
+      const card = bskyPost(
+        `<a href="/profile/alice.test/post/3abc">時刻</a><${wrapper}><img loading="lazy" src="https://cdn.bsky.app/img/feed_fullsize/plain/image.jpg" alt="写真"></${tag}>`,
+      );
+      const post = blueskyAdapter.readPost(card);
+      expect(post).toMatchObject({
+        hasImage: true,
+        images: [
+          {
+            url: "https://cdn.bsky.app/img/feed_fullsize/plain/image.jpg",
+            alt: "写真",
+          },
+        ],
+      });
+      expect(isPanelPost(post)).toBe(true);
+    },
+  );
+
+  it("currentSrcだけが本体CDN URLになった画像も読み取る", () => {
+    const card = bskyPost(
+      '<a href="/profile/alice.test/post/3abc">時刻</a><button><img src="data:image/gif;base64,placeholder"></button>',
+    );
+    const image = card.querySelector("img");
+    if (!image) throw new Error("画像がありません");
+    Object.defineProperty(image, "currentSrc", {
+      value: "https://cdn.bsky.app/img/feed_thumbnail/plain/selected.jpg",
+    });
+    expect(blueskyAdapter.readPost(card)).toMatchObject({
+      hasImage: true,
+      images: [
+        { url: "https://cdn.bsky.app/img/feed_thumbnail/plain/selected.jpg" },
+      ],
+    });
+  });
+
+  it("ボタン内でもアバター・絵文字・外部カード・引用画像を本体写真としない", () => {
+    const card = bskyPost(
+      '<a href="/profile/alice.test/post/3abc">時刻</a><button><img src="https://cdn.bsky.app/img/avatar/plain/avatar.jpg"><img src="https://example.com/emoji.png"></button><a href="https://example.com"><div role="button"><img src="https://cdn.bsky.app/img/feed_thumbnail/plain/external.jpg"></div></a><div data-testid="contentHider-post"><div role="link"><img data-testid="userAvatarImage"><button><img src="https://cdn.bsky.app/img/feed_thumbnail/plain/quote.jpg"></button></div></div>',
+    );
+    expect(blueskyAdapter.readPost(card)).toMatchObject({
+      images: [],
+    });
+  });
+
+  it("引用写真だけの投稿もメディア条件では画像ありとし、表示画像には混ぜない", () => {
+    const card = bskyPost(
+      '<a href="/profile/alice.test/post/3abc">時刻</a><div data-testid="contentHider-post"><div role="link"><img data-testid="userAvatarImage"><button><img src="https://cdn.bsky.app/img/feed_thumbnail/plain/quote.jpg"></button></div></div>',
+    );
+    expect(blueskyAdapter.readMedia(card)).toMatchObject({ hasImage: true });
+    expect(blueskyAdapter.readPost(card)).toMatchObject({
+      hasImage: true,
+      images: [],
+    });
+  });
+
+  it("アバターや外部リンクカードはメディア条件にも含めない", () => {
+    const card = bskyPost(
+      '<a href="/profile/alice.test/post/3abc">時刻</a><button><img src="https://cdn.bsky.app/img/avatar/plain/avatar.jpg"><img src="https://example.com/emoji.png"></button><a href="https://example.com"><img src="https://cdn.bsky.app/img/feed_thumbnail/plain/external.jpg"></a>',
+    );
+    expect(blueskyAdapter.readMedia(card)).toMatchObject({ hasImage: false });
+    expect(blueskyAdapter.readPost(card)).toMatchObject({
+      hasImage: false,
+      images: [],
+    });
+  });
+
   it("引用のアバターが欠けても引用先URLや本文を本体として読まない", () => {
     const card = bskyPost(
       '<div data-testid="contentHider-post"><div role="link"><a href="/profile/quoted.test/post/quoted">引用</a><div data-testid="postText">引用元</div></div><a href="/profile/alice.test/post/3abc">本文時刻</a><div data-testid="postText">本人の本文</div></div>',

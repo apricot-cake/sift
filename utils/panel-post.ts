@@ -87,8 +87,8 @@ export function postImages(
   const result: { url: string; alt: string }[] = [];
   const seen = new Set<string>();
   for (const image of images) {
-    const url = image.currentSrc || image.getAttribute("src");
-    if (!isPanelImageUrl(url) || seen.has(url)) continue;
+    const url = [image.currentSrc, image.src].find(isPanelImageUrl);
+    if (!url || seen.has(url)) continue;
     seen.add(url);
     result.push({ url, alt: postText(image.getAttribute("alt"), 500) });
     if (result.length === 4) break;
