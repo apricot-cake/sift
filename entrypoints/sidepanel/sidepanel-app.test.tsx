@@ -8,6 +8,11 @@ import {
 } from "../../utils/filter-context.ts";
 import { t } from "../../utils/i18n.ts";
 import { checkPanelBuild } from "../../utils/local-build-reload.ts";
+import {
+  type LoadMoreResponse,
+  PANEL_CANCEL_LOAD,
+  PANEL_LOAD_MORE,
+} from "../../utils/panel-load-more.ts";
 import type { PanelPost } from "../../utils/panel-post.ts";
 import {
   defaults,
@@ -465,6 +470,367 @@ afterEach(async () => {
   vi.unstubAllGlobals();
   vi.useRealTimers();
 });
+describe("投稿の追加読み込み", () => {
+  function respond(load: () => Promise<LoadMoreResponse>) {
+    vi.mocked(fakeBrowser.tabs.sendMessage).mockImplementation(
+      async (id, message) => {
+        const type = (message as { type?: string }).type;
+        if (type === FILTER_CONTEXT_REQUEST) return request(id);
+        if (type === PANEL_LOAD_MORE) return load();
+        return undefined;
+      },
+    );
+  }
+  function sent(type: string) {
+    return vi
+      .mocked(fakeBrowser.tabs.sendMessage)
+      .mock.calls.filter(
+        ([, message]) => (message as { type?: string }).type === type,
+      );
+  }
+  async function clickMore() {
+    const button = container.querySelector<HTMLButtonElement>(
+      "[data-load-more-posts]",
+    );
+    expect(button).not.toBeNull();
+    await act(async () => button?.click());
+    await flush();
+  }
+  function postsPane() {
+    const pane = container.querySelector<HTMLDivElement>("[data-posts-panel]");
+    if (!pane) throw Error("投稿タブがありません");
+    Object.defineProperties(pane, {
+      scrollHeight: { configurable: true, value: 1000 },
+      clientHeight: { configurable: true, value: 300 },
+    });
+    return pane;
+  }
+  async function scroll(pane: HTMLDivElement, top: number, user = false) {
+    await act(async () => {
+      if (user) pane.dispatchEvent(new WheelEvent("wheel", { deltaY: 100 }));
+      pane.scrollTop = top;
+      pane.dispatchEvent(new Event("scroll"));
+    });
+    await flush();
+  }
+
+  it("クリック1回で所有タブへ1要求を送り、進行中のクリックとスクロールを重ねない", async () => {
+    request = async () => postsContext([post(1)]);
+    const pending = deferred<LoadMoreResponse>();
+    respond(() => pending.promise);
+    await mount(false);
+    await clickMore();
+    expect(sent(PANEL_LOAD_MORE)).toEqual([
+      [1, { type: PANEL_LOAD_MORE, pageKey: "x", timelineKey: null }],
+    ]);
+    expect(
+      container.querySelector<HTMLButtonElement>("[data-load-more-posts]")
+        ?.disabled,
+    ).toBe(true);
+    await clickMore();
+    const pane = postsPane();
+    await scroll(pane, 650, true);
+    await scroll(pane, 690, true);
+    expect(sent(PANEL_LOAD_MORE)).toHaveLength(1);
+    request = async () => postsContext([post(1), post(2)]);
+    pending.resolve({ status: "loaded", added: 1 });
+    await flush();
+    expect(container.querySelectorAll("[data-post-link]")).toHaveLength(2);
+    expect(
+      container
+        .querySelector("[data-load-more-status]")
+        ?.getAttribute("data-status"),
+    ).toBe("loaded");
+  });
+
+  it("追加取得で50件を超えても進行・完了状態を残し、取得済みの残りを展開できる", async () => {
+    let posts = Array.from({ length: 49 }, (_, index) => post(index + 1));
+    request = async () => postsContext(posts);
+    const pending = deferred<LoadMoreResponse>();
+    respond(() => pending.promise);
+    await mount(false);
+    expect(
+      container
+        .querySelector("[data-load-request-count]")
+        ?.getAttribute("data-load-request-count"),
+    ).toBe("0");
+    await clickMore();
+    posts = Array.from({ length: 60 }, (_, index) => post(index + 1));
+    await act(async () => vi.advanceTimersByTimeAsync(750));
+    expect(container.querySelectorAll("[data-post-link]")).toHaveLength(50);
+    expect(container.querySelector("[data-load-more-posts]")).toBeNull();
+    expect(container.querySelector("[data-show-more-posts]")).not.toBeNull();
+    expect(
+      container
+        .querySelector("[data-load-request-count]")
+        ?.getAttribute("data-load-request-count"),
+    ).toBe("1");
+    expect(
+      container
+        .querySelector("[data-load-more-status]")
+        ?.getAttribute("data-status"),
+    ).toBe("loading");
+    expect(
+      [...container.querySelectorAll("button")].some(
+        (button) => button.textContent === t("sidepanelLoadCancel"),
+      ),
+    ).toBe(true);
+    pending.resolve({ status: "loaded", added: 11 });
+    await flush();
+    expect(
+      container
+        .querySelector("[data-load-more-status]")
+        ?.getAttribute("data-status"),
+    ).toBe("loaded");
+    expect(
+      container
+        .querySelector("[data-load-more-status]")
+        ?.getAttribute("data-added"),
+    ).toBe("11");
+    await act(async () =>
+      container
+        .querySelector<HTMLButtonElement>("[data-show-more-posts]")
+        ?.click(),
+    );
+    expect(container.querySelectorAll("[data-post-link]")).toHaveLength(60);
+    expect(container.querySelector("[data-show-more-posts]")).toBeNull();
+    expect(container.querySelector("[data-load-more-posts]")).not.toBeNull();
+    expect(
+      container
+        .querySelector("[data-load-more-status]")
+        ?.getAttribute("data-status"),
+    ).toBe("loaded");
+    expect(sent(PANEL_LOAD_MORE)).toHaveLength(1);
+    expect(
+      container
+        .querySelector("[data-load-more-status]")
+        ?.getAttribute("data-request-count"),
+    ).toBe("1");
+  });
+
+  it("ユーザーの下スクロールが末尾へ近づいた時だけ読み込み、結果の描画では連続しない", async () => {
+    let posts = [post(1)];
+    request = async () => postsContext(posts);
+    respond(async () => {
+      posts = [...posts, post(posts.length + 1)];
+      return { status: "loaded", added: 1 };
+    });
+    await mount(false);
+    const pane = postsPane();
+    await act(async () => vi.advanceTimersByTimeAsync(2250));
+    expect(sent(PANEL_LOAD_MORE)).toHaveLength(0);
+    await scroll(pane, 600);
+    expect(sent(PANEL_LOAD_MORE)).toHaveLength(0);
+    await scroll(pane, 610, true);
+    expect(sent(PANEL_LOAD_MORE)).toHaveLength(1);
+    expect(container.querySelectorAll("[data-post-link]")).toHaveLength(2);
+    await scroll(pane, 630);
+    await act(async () => vi.advanceTimersByTimeAsync(3000));
+    expect(sent(PANEL_LOAD_MORE)).toHaveLength(1);
+    await scroll(pane, 650, true);
+    expect(sent(PANEL_LOAD_MORE)).toHaveLength(2);
+  });
+
+  it("ホイール操作から800ms経過後のプログラムスクロールでは取得しない", async () => {
+    request = async () => postsContext([post(1)]);
+    respond(async () => ({ status: "loaded", added: 1 }));
+    await mount(false);
+    const pane = postsPane();
+    await act(async () => {
+      pane.dispatchEvent(new WheelEvent("wheel", { deltaY: 100 }));
+      await vi.advanceTimersByTimeAsync(800);
+    });
+    await scroll(pane, 650);
+    expect(sent(PANEL_LOAD_MORE)).toHaveLength(0);
+    await scroll(pane, 670, true);
+    expect(sent(PANEL_LOAD_MORE)).toHaveLength(1);
+  });
+
+  it("長いスクロールバードラッグ中も操作意図を更新し、単なるマウス移動では取得しない", async () => {
+    request = async () => postsContext([post(1)]);
+    respond(async () => ({ status: "loaded", added: 1 }));
+    await mount(false);
+    const pane = postsPane();
+    await act(async () => {
+      pane.dispatchEvent(new PointerEvent("pointerdown", { buttons: 1 }));
+      await vi.advanceTimersByTimeAsync(1000);
+      pane.dispatchEvent(new PointerEvent("pointermove", { buttons: 0 }));
+    });
+    await scroll(pane, 600);
+    expect(sent(PANEL_LOAD_MORE)).toHaveLength(0);
+    await act(async () => {
+      pane.dispatchEvent(new PointerEvent("pointermove", { buttons: 1 }));
+    });
+    await scroll(pane, 650);
+    expect(sent(PANEL_LOAD_MORE)).toHaveLength(1);
+  });
+
+  it("中止後も元ページの復元が完了するまで再取得せず、旧応答後は再開できる", async () => {
+    request = async () => postsContext([post(1)]);
+    const pending = deferred<LoadMoreResponse>();
+    const load = vi
+      .fn<() => Promise<LoadMoreResponse>>()
+      .mockReturnValueOnce(pending.promise)
+      .mockResolvedValueOnce({ status: "loaded", added: 1 });
+    respond(load);
+    await mount(false);
+    await clickMore();
+    const cancel = [
+      ...container.querySelectorAll<HTMLButtonElement>("button"),
+    ].find((button) => button.textContent === t("sidepanelLoadCancel"));
+    expect(cancel).toBeDefined();
+    await act(async () => cancel?.click());
+    await flush();
+    expect(sent(PANEL_CANCEL_LOAD)).toHaveLength(1);
+    expect(
+      container.querySelector<HTMLButtonElement>("[data-load-more-posts]")
+        ?.disabled,
+    ).toBe(true);
+    await clickMore();
+    expect(sent(PANEL_LOAD_MORE)).toHaveLength(1);
+    pending.resolve({ status: "cancelled", added: 0 });
+    await flush();
+    expect(
+      container.querySelector<HTMLButtonElement>("[data-load-more-posts]")
+        ?.disabled,
+    ).toBe(false);
+    await clickMore();
+    expect(sent(PANEL_LOAD_MORE)).toHaveLength(2);
+    expect(
+      container
+        .querySelector("[data-load-more-status]")
+        ?.getAttribute("data-status"),
+    ).toBe("loaded");
+  });
+
+  it("取得中に条件タブへ切り替えると中止し、遅い応答で投稿タブを更新しない", async () => {
+    request = async () => postsContext([post(1)]);
+    const pending = deferred<LoadMoreResponse>();
+    respond(() => pending.promise);
+    await mount(false);
+    await clickMore();
+    await act(async () =>
+      container
+        .querySelector<HTMLButtonElement>("[data-panel-tab=filters]")
+        ?.click(),
+    );
+    await flush();
+    expect(sent(PANEL_CANCEL_LOAD)).toEqual([[1, { type: PANEL_CANCEL_LOAD }]]);
+    expect(
+      container.querySelector<HTMLElement>("[data-posts-panel]")?.hidden,
+    ).toBe(true);
+    pending.resolve({ status: "loaded", added: 20 });
+    await flush();
+    await act(async () =>
+      container
+        .querySelector<HTMLButtonElement>("[data-panel-tab=posts]")
+        ?.click(),
+    );
+    expect(
+      container
+        .querySelector("[data-load-more-status]")
+        ?.getAttribute("data-status"),
+    ).toBe("cancelled");
+    expect(sent(PANEL_LOAD_MORE)).toHaveLength(1);
+  });
+
+  it("追加投稿なしで止まった後はスクロールで再試行せず、ボタンで再試行する", async () => {
+    request = async () => postsContext([post(1)]);
+    const load = vi
+      .fn<() => Promise<LoadMoreResponse>>()
+      .mockResolvedValueOnce({ status: "no-progress", added: 0 })
+      .mockResolvedValueOnce({ status: "loaded", added: 1 });
+    respond(load);
+    await mount(false);
+    await clickMore();
+    expect(container.textContent).toContain(t("sidepanelLoadNoProgress"));
+    const pane = postsPane();
+    await scroll(pane, 650, true);
+    await act(async () => vi.advanceTimersByTimeAsync(3000));
+    expect(sent(PANEL_LOAD_MORE)).toHaveLength(1);
+    expect(container.querySelector("[data-load-more-posts]")?.textContent).toBe(
+      t("sidepanelLoadRetry"),
+    );
+    await clickMore();
+    expect(sent(PANEL_LOAD_MORE)).toHaveLength(2);
+    expect(
+      container
+        .querySelector("[data-load-more-status]")
+        ?.getAttribute("data-status"),
+    ).toBe("loaded");
+  });
+
+  it.each(["limited", "authentication", "restore-failed"] as const)(
+    "%sでは追加取得を停止し、スクロールやクリックで繰り返さない",
+    async (status) => {
+      request = async () => postsContext([post(1)]);
+      respond(async () => ({ status, added: 0 }));
+      await mount(false);
+      await clickMore();
+      expect(
+        container.querySelector<HTMLButtonElement>("[data-load-more-posts]")
+          ?.disabled,
+      ).toBe(true);
+      await scroll(postsPane(), 650, true);
+      await clickMore();
+      expect(sent(PANEL_LOAD_MORE)).toHaveLength(1);
+    },
+  );
+
+  it.each(["hidden", "switch", "pagehide", "unmount"])(
+    "取得中の%sで元タブへ中止を送り、遅い応答を画面へ反映しない",
+    async (change) => {
+      request = async () => postsContext([post(1)]);
+      const pending = deferred<LoadMoreResponse>();
+      respond(() => pending.promise);
+      await mount(false);
+      await clickMore();
+      await act(async () => {
+        if (change === "hidden") {
+          vi.spyOn(document, "visibilityState", "get").mockReturnValue(
+            "hidden",
+          );
+          document.dispatchEvent(new Event("visibilitychange"));
+        } else if (change === "switch") {
+          tab = { id: 2, url: "https://x.com/another" };
+          await fakeBrowser.tabs.onActivated.trigger({ tabId: 2, windowId: 1 });
+        } else if (change === "pagehide") {
+          window.dispatchEvent(new Event("pagehide"));
+        } else {
+          root.unmount();
+          root = createRoot(container);
+        }
+      });
+      await flush();
+      expect(sent(PANEL_CANCEL_LOAD)).toEqual([
+        [1, { type: PANEL_CANCEL_LOAD }],
+      ]);
+      pending.resolve({ status: "loaded", added: 20 });
+      await flush();
+      expect(
+        container.querySelector(
+          '[data-load-more-status][data-status="loaded"]',
+        ),
+      ).toBeNull();
+      expect(sent(PANEL_LOAD_MORE)).toHaveLength(1);
+    },
+  );
+
+  it("Blueskyでも所有タブから続きを取得し、対象外ページでは操作を表示しない", async () => {
+    respond(async () => ({ status: "loaded", added: 1 }));
+    request = async () => context("bluesky");
+    await mount(false);
+    await clickMore();
+    expect(sent(PANEL_LOAD_MORE)).toEqual([
+      [1, { type: PANEL_LOAD_MORE, pageKey: "bluesky", timelineKey: null }],
+    ]);
+    request = async () => ({ ...context("x"), timelineAvailable: false });
+    await act(async () => vi.advanceTimersByTimeAsync(750));
+    expect(container.querySelector("[data-load-more-posts]")).toBeNull();
+    expect(sent(PANEL_LOAD_MORE)).toHaveLength(1);
+  });
+});
+
 describe("接続先と非同期応答", () => {
   it("開くときに一度確認し、ページ情報の定期取得では確認しない", async () => {
     await mount();

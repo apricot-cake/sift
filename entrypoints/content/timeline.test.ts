@@ -8,6 +8,8 @@ import {
   type FilterContextResponse,
   isFilterContextResponse,
 } from "../../utils/filter-context.ts";
+import { PageLoadMore } from "../../utils/page-load-more.ts";
+import { PANEL_LOAD_MORE } from "../../utils/panel-load-more.ts";
 import { POST_COLLECTION_LIMIT } from "../../utils/panel-post.ts";
 import { defaults, type SiteSettings } from "../../utils/settings.ts";
 import { settingsItem } from "../../utils/settings-storage.ts";
@@ -48,6 +50,78 @@ afterEach(() => {
   runtime?.dispose();
   runtime = undefined;
   vi.restoreAllMocks();
+});
+
+describe("追加読み込みの受け付け", () => {
+  async function request(page: FilterContextResponse) {
+    const [response] = await fakeBrowser.runtime.onMessage.trigger(
+      {
+        type: PANEL_LOAD_MORE,
+        pageKey: page.pageKey,
+        timelineKey: page.timelineKey,
+      },
+      {},
+      () => {},
+    );
+    return response;
+  }
+
+  it("同じ読み込みが重なっても実行は1回で、完了直後の連続取得も止める", async () => {
+    const pending = Promise.withResolvers<{
+      status: "loaded";
+      added: number;
+    }>();
+    const load = vi
+      .spyOn(PageLoadMore.prototype, "run")
+      .mockReturnValue(pending.promise);
+    runtime = startContentRuntime(undefined, xAdapter);
+    const page = await context();
+    const first = request(page);
+    const second = request(page);
+    expect(load).toHaveBeenCalledTimes(1);
+    pending.resolve({ status: "loaded", added: 1 });
+    expect(await first).toEqual({ status: "loaded", added: 1 });
+    expect(await second).toEqual({ status: "loaded", added: 1 });
+    expect(await request(page)).toEqual({ status: "cooldown", added: 0 });
+    expect(load).toHaveBeenCalledTimes(1);
+  });
+
+  it("元の一覧から移動した後の古い追加要求ではスクロールしない", async () => {
+    const load = vi.spyOn(PageLoadMore.prototype, "run");
+    runtime = startContentRuntime(undefined, xAdapter);
+    const page = await context();
+    history.replaceState({}, "", "/i/lists/43");
+    expect(await request(page)).toEqual({ status: "unsupported", added: 0 });
+    expect(load).not.toHaveBeenCalled();
+  });
+
+  it("制限が出た一覧では、時間を待っても自動再取得しない", async () => {
+    const clock = vi.spyOn(Date, "now").mockReturnValue(10000);
+    const load = vi
+      .spyOn(PageLoadMore.prototype, "run")
+      .mockResolvedValue({ status: "limited", added: 0 });
+    runtime = startContentRuntime(undefined, xAdapter);
+    const page = await context();
+    expect(await request(page)).toEqual({ status: "limited", added: 0 });
+    clock.mockReturnValue(50000);
+    expect(await request(page)).toEqual({ status: "limited", added: 0 });
+    expect(load).toHaveBeenCalledTimes(1);
+  });
+
+  it("Blueskyでも同じ明示要求で1回分の読み込みを実行する", async () => {
+    const load = vi
+      .spyOn(PageLoadMore.prototype, "run")
+      .mockResolvedValue({ status: "loaded", added: 2 });
+    history.replaceState({}, "", "/profile/example.bsky.social");
+    document.body.innerHTML =
+      '<div data-testid="feedItem-by-example.bsky.social"><a href="/profile/example.bsky.social/post/one">時刻</a><button data-testid="likeBtn" aria-label="100 likes"></button></div>';
+    runtime = startContentRuntime(undefined, blueskyAdapter);
+    const page = await context();
+    expect(page.site).toBe("bluesky");
+    expect(await request(page)).toEqual({ status: "loaded", added: 2 });
+    expect(load).toHaveBeenCalledTimes(1);
+    expect(load.mock.calls[0]?.[0].adapter).toBe(blueskyAdapter);
+  });
 });
 
 describe("元のページを変更しない投稿の収集", () => {

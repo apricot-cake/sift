@@ -40,6 +40,7 @@ import {
 import type { LiveCase } from "./live-case.ts";
 import {
   assertPageReadOnly,
+  assertPanelLoadsOneBatch,
   assertPanelPhoto,
   assertPanelTabsPreserveState,
   assertPostOpensInNewTab,
@@ -972,6 +973,15 @@ export function createCompatibilityCases(): LiveCase[] {
             await capturePanelScreenshot(panel, target.site, "filters");
             await capturePanelScreenshot(panel, target.site);
             await assertPostOpensInNewTab(session, page, panel);
+          }
+          if (target.id === "x-profile" || target.id === "bluesky-profile") {
+            session.loadGuard.setContext(target.id, "panel-load-one-batch");
+            await evidence(task, "panel-load-one-batch", {
+              body: JSON.stringify(
+                await assertPanelLoadsOneBatch(page, panel, target.site),
+              ),
+              contentType: "application/json",
+            });
           }
           await evidence(task, "candidate", {
             body: JSON.stringify(session.candidate),

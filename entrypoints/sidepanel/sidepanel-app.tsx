@@ -43,6 +43,7 @@ import {
 } from "./components/ui/select.tsx";
 import { Switch } from "./components/ui/switch.tsx";
 import { usePanelConnection } from "./use-panel-connection.ts";
+import { usePostLoadMore } from "./use-post-load-more.ts";
 
 export function SidepanelApp(): React.JSX.Element {
   const resetDialog = useRef<HTMLDialogElement>(null);
@@ -89,6 +90,9 @@ export function SidepanelApp(): React.JSX.Element {
     onSettingsInitialized: setSettings,
     onMinimumReset: clearManualMinimums,
   });
+  const postLoading = usePostLoadMore(activeContext, () =>
+    refreshContext(captureConnection()),
+  );
 
   const saveSettings = (next: Settings): void => {
     const connection = captureConnection();
@@ -289,8 +293,10 @@ export function SidepanelApp(): React.JSX.Element {
             postCount={activeContext.posts.length}
             collectedCount={activeContext.collectedCount}
             conditionCount={conditionCount}
+            onSelectFilters={postLoading.cancel}
             posts={
               <PostList
+                load={postLoading}
                 posts={activeContext.posts}
                 collectedCount={activeContext.collectedCount}
                 truncated={activeContext.collectionTruncated}
@@ -515,6 +521,7 @@ function PanelViews({
   postCount,
   collectedCount,
   conditionCount,
+  onSelectFilters,
   posts,
   conditions,
 }: {
@@ -522,6 +529,7 @@ function PanelViews({
   postCount: number;
   collectedCount: number;
   conditionCount: number;
+  onSelectFilters: () => void;
   posts: React.ReactNode;
   conditions: React.ReactNode;
 }): React.JSX.Element {
@@ -534,6 +542,7 @@ function PanelViews({
   const positions = useRef<Record<PanelTab, number>>({ posts: 0, filters: 0 });
   const select = (tab: PanelTab): void => {
     if (selected === tab) return;
+    if (tab === "filters") onSelectFilters();
     positions.current[selected] =
       (selected === "posts" ? postsPane : filterPane).current?.scrollTop ?? 0;
     setSelected(tab);
@@ -689,19 +698,118 @@ const reactionFormatter = new Intl.NumberFormat(undefined, {
 });
 
 function PostList({
+  load,
   posts,
   collectedCount,
   truncated,
   reading,
 }: {
+  load: ReturnType<typeof usePostLoadMore>;
   posts: readonly PanelPost[];
   collectedCount: number;
   truncated: boolean;
   reading: boolean;
 }): React.JSX.Element {
   const [visibleCount, setVisibleCount] = useState(POSTS_PER_PAGE);
+  const section = useRef<HTMLElement>(null);
+  const more = useRef<() => void>(() => {});
+  const stopped =
+    load.result !== null &&
+    ["limited", "authentication", "limit", "restore-failed"].includes(
+      load.result.status,
+    );
+  more.current = () => {
+    if (posts.length > visibleCount) {
+      setVisibleCount((count) => count + POSTS_PER_PAGE);
+    } else if (
+      !load.loading &&
+      !stopped &&
+      !truncated &&
+      !reading &&
+      (load.result === null || load.result.status === "loaded")
+    ) {
+      void load.loadMore();
+    }
+  };
+  useEffect(() => {
+    const pane = section.current?.closest<HTMLElement>("[data-posts-panel]");
+    if (!pane) return;
+    let intentUntil = 0;
+    let previous = pane.scrollTop;
+    const wheel = (event: WheelEvent) => {
+      intentUntil = event.deltaY > 0 ? Date.now() + 800 : 0;
+    };
+    const touch = () => {
+      intentUntil = Date.now() + 800;
+    };
+    const drag = (event: PointerEvent) => {
+      if (event.buttons !== 0) intentUntil = Date.now() + 800;
+    };
+    const key = (event: KeyboardEvent) => {
+      intentUntil = ["ArrowDown", "PageDown", "End", " "].includes(event.key)
+        ? Date.now() + 800
+        : 0;
+    };
+    const scroll = () => {
+      const down = pane.scrollTop > previous;
+      previous = pane.scrollTop;
+      if (
+        !pane.hidden &&
+        Date.now() < intentUntil &&
+        down &&
+        pane.scrollHeight - pane.clientHeight - pane.scrollTop < 160
+      ) {
+        intentUntil = 0;
+        more.current();
+      }
+    };
+    pane.addEventListener("wheel", wheel, { passive: true });
+    pane.addEventListener("touchmove", touch, { passive: true });
+    pane.addEventListener("pointerdown", touch);
+    pane.addEventListener("pointermove", drag, { passive: true });
+    pane.addEventListener("keydown", key);
+    pane.addEventListener("scroll", scroll, { passive: true });
+    return () => {
+      pane.removeEventListener("wheel", wheel);
+      pane.removeEventListener("touchmove", touch);
+      pane.removeEventListener("pointerdown", touch);
+      pane.removeEventListener("pointermove", drag);
+      pane.removeEventListener("keydown", key);
+      pane.removeEventListener("scroll", scroll);
+    };
+  }, []);
+  const statusMessage = load.loading
+    ? t("sidepanelLoadLoading")
+    : load.result?.status === "loaded"
+      ? t("sidepanelLoadLoaded", { count: load.result.added })
+      : load.result?.status === "limited"
+        ? t("sidepanelLoadLimited")
+        : load.result?.status === "authentication"
+          ? t("sidepanelLoadAuthentication")
+          : load.result?.status === "restore-failed"
+            ? t("sidepanelLoadRestoreFailed")
+            : load.result?.status === "limit"
+              ? t("sidepanelCollectionLimit", {
+                  count: collectedCount.toLocaleString(),
+                })
+              : load.result?.status === "unsupported"
+                ? t("sidepanelLoadUnsupported")
+                : load.result?.status === "cancelled"
+                  ? t("sidepanelLoadCancelled")
+                  : load.result?.status === "cooldown"
+                    ? t("sidepanelLoadCooldown")
+                    : load.result?.status === "no-progress"
+                      ? t("sidepanelLoadNoProgress")
+                      : load.result?.status === "failed"
+                        ? t("sidepanelLoadFailed")
+                        : "";
   return (
-    <section aria-label={t("sidepanelPostsTitle")}>
+    <section
+      ref={section}
+      aria-label={t("sidepanelPostsTitle")}
+      aria-busy={load.loading}
+      data-load-request-count={load.requestCount}
+    >
       <p className="mb-3 mt-0 text-xs leading-5 text-muted-foreground">
         {t("sidepanelPostInstructions")}
       </p>
@@ -745,6 +853,42 @@ function PostList({
           {t("sidepanelShowMorePosts")}
         </Button>
       )}
+      <div className="mt-4 space-y-3">
+        {statusMessage && (
+          <p
+            role="status"
+            data-load-more-status=""
+            data-status={load.loading ? "loading" : load.result?.status}
+            data-added={load.result?.added ?? 0}
+            data-request-count={load.requestCount}
+            className="m-0 text-xs leading-5 text-muted-foreground"
+          >
+            {statusMessage}
+          </p>
+        )}
+        {posts.length <= visibleCount && !truncated && (
+          <Button
+            className="w-full"
+            variant="outline"
+            data-load-more-posts=""
+            disabled={load.loading || stopped || reading}
+            onClick={() => void load.loadMore()}
+          >
+            {load.loading
+              ? t("sidepanelLoadLoading")
+              : stopped
+                ? t("sidepanelLoadStopped")
+                : load.result !== null && load.result.status !== "loaded"
+                  ? t("sidepanelLoadRetry")
+                  : t("sidepanelLoadMore")}
+          </Button>
+        )}
+        {load.loading && (
+          <Button className="w-full" variant="ghost" onClick={load.cancel}>
+            {t("sidepanelLoadCancel")}
+          </Button>
+        )}
+      </div>
     </section>
   );
 }

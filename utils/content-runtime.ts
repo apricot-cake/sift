@@ -7,6 +7,13 @@ import {
 } from "./filter-context.ts";
 import { classifyPost } from "./filter-core.ts";
 import { PageHealthTracker } from "./page-health.ts";
+import { PageLoadMore } from "./page-load-more.ts";
+import {
+  isLoadMoreRequest,
+  type LoadMoreRequest,
+  type LoadMoreResponse,
+  PANEL_CANCEL_LOAD,
+} from "./panel-load-more.ts";
 import {
   type CollectedPost,
   type PanelPost,
@@ -15,7 +22,7 @@ import {
 import { normalizeSettings, settingsFor, thresholdsFor } from "./settings.ts";
 import { settingsItem } from "./settings-storage.ts";
 
-/** パネルからの問い合わせ時だけ一覧を読み取り、ページのDOMやスクロールは変更しない。 */
+/** パネルから問い合わせたときに収集し、明示的な追加取得時だけ一時スクロールする。 */
 export function startContentRuntime(
   _ctx: ContentScriptContext | undefined,
   adapter: ServiceAdapter | null,
@@ -28,9 +35,84 @@ export function startContentRuntime(
   let sourceTimeline: string | null = null;
   let truncated = false;
   let disposed = false;
+  const pageLoader = new PageLoadMore();
+  let loading: Promise<LoadMoreResponse> | null = null;
+  let loadController: AbortController | null = null;
+  let nextLoadAt = 0;
+  let collectionEpoch = 0;
+  let blocked: "limited" | "authentication" | null = null;
   function clearCollection(): void {
+    collectionEpoch += 1;
+    loadController?.abort();
+    pageLoader.reset();
+    blocked = null;
     collected.clear();
     truncated = false;
+  }
+  function collectCards(): number {
+    for (const card of service.getMetricPostCards(document).cards) {
+      const post = service.readPost(card);
+      if (!post) continue;
+      if (!collected.has(post.id) && collected.size >= POST_COLLECTION_LIMIT) {
+        truncated = true;
+        continue;
+      }
+      collected.set(post.id, post);
+    }
+    return collected.size;
+  }
+  function loadMore(request: LoadMoreRequest): Promise<LoadMoreResponse> {
+    if (loading !== null) return loading;
+    if (
+      disposed ||
+      request.pageKey !== sourcePage ||
+      request.timelineKey === null ||
+      request.timelineKey !== sourceTimeline ||
+      !service.isTimelineAvailable(document, location) ||
+      service.readTimelineKey?.(document, location) !== request.timelineKey
+    )
+      return Promise.resolve({ status: "unsupported", added: 0 });
+    if (blocked) return Promise.resolve({ status: blocked, added: 0 });
+    if (collected.size >= POST_COLLECTION_LIMIT)
+      return Promise.resolve({ status: "limit", added: 0 });
+    if (Date.now() < nextLoadAt)
+      return Promise.resolve({ status: "cooldown", added: 0 });
+    const controller = new AbortController();
+    const epoch = collectionEpoch;
+    loadController = controller;
+    nextLoadAt = Date.now() + 2000;
+    loading = pageLoader
+      .run({
+        adapter: service,
+        signal: controller.signal,
+        isCurrent: () => {
+          const timeline =
+            service.readTimelineKey?.(document, location) ?? null;
+          return (
+            !disposed &&
+            `${location.origin}${service.readPageKey?.(document, location) ?? `${location.pathname}${location.search}`}` ===
+              request.pageKey &&
+            sourceTimeline === request.timelineKey &&
+            (timeline === null || timeline === request.timelineKey)
+          );
+        },
+        collect: collectCards,
+      })
+      .then((response) => {
+        if (
+          epoch === collectionEpoch &&
+          (response.status === "limited" ||
+            response.status === "authentication")
+        )
+          blocked = response.status;
+        return response;
+      })
+      .finally(() => {
+        nextLoadAt = Date.now() + 2000;
+        loading = null;
+        loadController = null;
+      });
+    return loading;
   }
   async function readContext(
     reset: boolean,
@@ -138,12 +220,19 @@ export function startContentRuntime(
   }
   // 対象メッセージだけPromiseを返し、他の受信者の応答を奪わない。
   function onMessage(message: unknown) {
-    if (disposed || !isFilterContextRequest(message)) return;
+    if (disposed) return;
+    if ((message as { type?: unknown } | null)?.type === PANEL_CANCEL_LOAD) {
+      loadController?.abort();
+      return;
+    }
+    if (isLoadMoreRequest(message)) return loadMore(message);
+    if (!isFilterContextRequest(message)) return;
     return readContext(message.reset === true);
   }
   function dispose(): void {
     if (disposed) return;
     disposed = true;
+    loadController?.abort();
     collected.clear();
     window.removeEventListener("pagehide", onPageHide);
     try {

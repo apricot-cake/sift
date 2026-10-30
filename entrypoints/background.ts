@@ -8,6 +8,7 @@ import {
   CHECK_LOCAL_BUILD,
   checkLocalBuild,
 } from "../utils/local-build-reload.ts";
+import { PANEL_CANCEL_LOAD } from "../utils/panel-load-more.ts";
 import {
   hasLeftPanelPage,
   isXMediaNavigation,
@@ -398,6 +399,9 @@ export default defineBackground(() => {
     const current = panelActions.get(tabId);
     if (current && current.windowId !== panel.windowId) return;
     panelActions.set(tabId, null);
+    void browser.tabs
+      .sendMessage(tabId, { type: PANEL_CANCEL_LOAD })
+      .catch(() => {});
     const cleanup = (async () => {
       const key = panelPageKey(tabId);
       const stored = await browser.storage.session.get(key);

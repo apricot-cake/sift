@@ -247,6 +247,230 @@ export async function assertPageReadOnly(page: Page): Promise<void> {
   ).toBe(0);
 }
 
+/** 各サービスの追加取得を代表ページで1回だけ行い、閲覧位置と取得の停止を照合する。 */
+export async function assertPanelLoadsOneBatch(
+  source: Page,
+  panel: Page,
+  site: "x" | "bluesky",
+) {
+  await selectPanelTab(panel, "posts");
+  const selector =
+    site === "x"
+      ? 'article[data-testid="tweet"]'
+      : '[data-testid^="feedItem-by-"]';
+  const readAnchor = () =>
+    source.evaluate(
+      ({ selector, site }) => {
+        for (const card of document.querySelectorAll(selector)) {
+          const cell =
+            site === "x"
+              ? (card.closest('[data-testid="cellInnerDiv"]') ?? card)
+              : card;
+          const rect = cell.getBoundingClientRect();
+          const href =
+            site === "x"
+              ? card
+                  .querySelector("a:has(time[datetime])")
+                  ?.getAttribute("href")
+              : (card.getAttribute("href") ??
+                card.querySelector('a[href*="/post/"]')?.getAttribute("href"));
+          const left = Math.max(0, rect.left);
+          const right = Math.min(innerWidth, rect.right);
+          const top = Math.max(0, rect.top);
+          const bottom = Math.min(innerHeight, rect.bottom);
+          if (!href || rect.height <= 0 || left >= right || top >= bottom)
+            continue;
+          const hit = document.elementFromPoint(
+            (left + right) / 2,
+            (top + bottom) / 2,
+          );
+          if (!hit || !cell.contains(hit)) continue;
+          let scrolling: Element | null = cell.parentElement;
+          while (scrolling && scrolling !== document.scrollingElement) {
+            const style = getComputedStyle(scrolling);
+            if (
+              /(auto|scroll)/.test(style.overflowY) &&
+              scrolling.scrollHeight > scrolling.clientHeight
+            )
+              break;
+            scrolling = scrolling.parentElement;
+          }
+          return {
+            href,
+            top: rect.top,
+            scrollTop:
+              (scrolling ?? document.scrollingElement)?.scrollTop ?? scrollY,
+          };
+        }
+        return null;
+      },
+      { selector, site },
+    );
+  if (!(await readAnchor())) {
+    // プロフィールヘッダーや復帰後の位置に投稿が無ければ、実投稿1件だけを準備位置へ移す。
+    // これは追加取得の操作前に行い、この位置から戻ることを検証する。
+    const cards = await source.$$(selector);
+    let prepared = false;
+    try {
+      for (const card of cards) {
+        if (!(await card.isVisible())) continue;
+        await card.scrollIntoView();
+        prepared = true;
+        break;
+      }
+    } finally {
+      await Promise.all(cards.map((card) => card.dispose()));
+    }
+    expect(prepared, "検証準備で実投稿1件を表示位置へ移せること").toBe(true);
+  }
+  await expect.poll(readAnchor, { timeout: 5000 }).not.toBeNull();
+  const anchor = await readAnchor();
+  if (!anchor) throw Error("閲覧位置の基準投稿を取得できません");
+  await expect
+    .poll(async () =>
+      (await readPanelPosts(panel)).some(
+        (post) => postKey(post.url) === postKey(anchor.href, source.url()),
+      ),
+    )
+    .toBe(true);
+  const before = new Set(
+    (await readPanelPosts(panel)).map((post) => postKey(post.url)),
+  );
+  const originalUrl = source.url();
+  const beforeRequests = await panel.$eval(
+    "[data-load-request-count]",
+    (node) => Number(node.getAttribute("data-load-request-count")),
+  );
+  expect(beforeRequests, "明示操作前に追加取得を開始していないこと").toBe(0);
+
+  if (site === "x") {
+    // 前のクリックの操作意図を残さず、拡張パネルだけを末尾60px前へ準備する。
+    await new Promise((resolve) => setTimeout(resolve, 850));
+    const statusBefore = await panel.$$eval(
+      "[data-load-more-status]",
+      (nodes) => nodes.map((node) => node.getAttribute("data-status")),
+    );
+    const pane = await panel.$("[data-posts-panel]");
+    if (!pane) throw Error("投稿タブのスクロール領域がありません");
+    try {
+      await pane.evaluate((node) => {
+        const element = node as HTMLElement;
+        const last = element.scrollHeight - element.clientHeight;
+        if (last <= 60)
+          throw Error("実スクロールに必要な投稿の高さがありません");
+        element.scrollTop = last - 60;
+      });
+      // プログラムによる準備だけでは追加取得を開始しない。
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      expect(
+        await panel.$$eval("[data-load-more-status]", (nodes) =>
+          nodes.map((node) => node.getAttribute("data-status")),
+        ),
+      ).toEqual(statusBefore);
+      const rect = await pane.boundingBox();
+      if (!rect) throw Error("投稿タブの実スクロール位置を取得できません");
+      await panel.mouse.move(rect.x + rect.width / 2, rect.y + rect.height / 2);
+      await panel.mouse.wheel({ deltaY: 160 });
+    } finally {
+      await pane.dispose();
+    }
+  } else {
+    await panel.locator("button[data-load-more-posts]").click();
+  }
+  const result = () =>
+    panel.$eval("[data-load-more-status]", (node) => ({
+      status: node.getAttribute("data-status"),
+      added: Number(node.getAttribute("data-added")),
+      requestCount: Number(node.getAttribute("data-request-count")),
+    }));
+  await expect
+    .poll(result, {
+      timeout: 15000,
+      message: "1回の明示操作で新しい投稿を収集できること",
+    })
+    .toMatchObject({ status: "loaded" });
+  const loaded = await result();
+  expect(loaded.added).toBeGreaterThan(0);
+  expect(loaded.requestCount).toBe(beforeRequests + 1);
+  expect(source.url()).toBe(originalUrl);
+  const restoredTop = () =>
+    source.evaluate(
+      ({ href, selector, site }) => {
+        for (const card of document.querySelectorAll(selector)) {
+          const link =
+            site === "x"
+              ? card
+                  .querySelector("a:has(time[datetime])")
+                  ?.getAttribute("href")
+              : (card.getAttribute("href") ??
+                card.querySelector('a[href*="/post/"]')?.getAttribute("href"));
+          if (link !== href) continue;
+          const cell =
+            site === "x"
+              ? (card.closest('[data-testid="cellInnerDiv"]') ?? card)
+              : card;
+          return cell.getBoundingClientRect().top;
+        }
+        return null;
+      },
+      { href: anchor.href, selector, site },
+    );
+  await expect
+    .poll(
+      async () => {
+        const top = await restoredTop();
+        return top !== null && Math.abs(top - anchor.top) <= 2;
+      },
+      { timeout: 5000, message: "元の投稿が2px以内の閲覧位置へ戻ること" },
+    )
+    .toBe(true);
+
+  const after = new Set(
+    (await readPanelPosts(panel)).map((post) => postKey(post.url)),
+  );
+  expect([...before].every((key) => after.has(key))).toBe(true);
+  const newPosts = [...after].filter((key) => !before.has(key));
+  expect(
+    newPosts.length,
+    "前からある投稿の再表示だけではないこと",
+  ).toBeGreaterThan(0);
+  // 取得の完了や追加したカードのレイアウトだけでは、次の取得を始めない。
+  await new Promise((resolve) => setTimeout(resolve, 2500));
+  expect(await result()).toEqual(loaded);
+  const afterQuiet = new Set(
+    (await readPanelPosts(panel)).map((post) => postKey(post.url)),
+  );
+  // サイト自身の遅延描画は通常の収集にも反映されるため、件数固定では判定しない。
+  expect([...after].every((key) => afterQuiet.has(key))).toBe(true);
+  const quietTop = await restoredTop();
+  expect(quietTop).not.toBeNull();
+  expect(Math.abs((quietTop ?? Infinity) - anchor.top)).toBeLessThanOrEqual(2);
+  await assertPageReadOnly(source);
+  // 完了状態だけを撮るため、拡張パネル内の末尾へ移す。元ページは操作しない。
+  await panel.evaluate(() => {
+    const pane = document.querySelector<HTMLElement>("[data-posts-panel]");
+    pane?.scrollTo(0, pane.scrollHeight);
+  });
+  await panel.screenshot({
+    path: `${process.cwd()}/test-results/post-load-more-${site}.png`,
+    fullPage: false,
+  });
+  return {
+    trigger: site === "x" ? "panel-scroll" : "button",
+    status: loaded.status,
+    added: loaded.added,
+    requestCount: loaded.requestCount,
+    collectedAfterQuiet: afterQuiet.size,
+    newPosts: newPosts.length,
+    retained: before.size,
+    anchor: anchor.href,
+    originalTop: anchor.top,
+    restoredTop: await restoredTop(),
+    originalScrollTop: anchor.scrollTop,
+    continuedWithoutInput: false,
+  };
+}
+
 export async function assertPostOpensInNewTab(
   session: LiveSession,
   source: Page,
