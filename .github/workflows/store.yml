@@ -15,8 +15,6 @@ on:
         description: ZIP をアップロードするだけ（権限理由の確認用・審査提出なし）
         type: boolean
         default: false
-  release:
-    types: [published]
 
 permissions:
   contents: read
@@ -27,9 +25,7 @@ concurrency:
 
 jobs:
   package:
-    if: >-
-      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') ||
-      (github.event_name == 'release' && !github.event.release.prerelease)
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     outputs:
@@ -59,10 +55,11 @@ jobs:
           fi
           git merge-base --is-ancestor HEAD origin/main
           version=$(node -p 'JSON.parse(require("node:fs").readFileSync("package.json", "utf8")).version')
-          if [ "$GITHUB_EVENT_NAME" = release ]; then
-            test "$GITHUB_REF_NAME" = "v$version"
-          else
-            test "$REQUESTED_VERSION" = "$version"
+          test "$REQUESTED_VERSION" = "$version"
+          notes="store-assets/release-notes/$version.md"
+          if [ "$CHECK_ONLY" != true ] && { [ ! -s "$notes" ] || ! grep -q '[^[:space:]]' "$notes"; }; then
+            echo "::error::提出する版のリリースノート原稿がありません: $notes"
+            exit 1
           fi
           echo "version=$version" >> "$GITHUB_OUTPUT"
 
@@ -142,7 +139,7 @@ jobs:
           export_environment_variables: false
 
       - name: ストアへの接続を確認する
-        if: github.event_name == 'workflow_dispatch' && inputs.check_only
+        if: inputs.check_only
         env:
           CWS_ACCESS_TOKEN: ${{ steps.auth.outputs.access_token }}
           CWS_PUBLISHER_ID: ${{ vars.CWS_PUBLISHER_ID }}
@@ -163,7 +160,7 @@ jobs:
           JS
 
       - name: ZIP をアップロードする（通常モードでは審査へ提出する）
-        if: github.event_name != 'workflow_dispatch' || !inputs.check_only
+        if: ${{ !inputs.check_only }}
         env:
           CWS_ACCESS_TOKEN: ${{ steps.auth.outputs.access_token }}
           CWS_PUBLISHER_ID: ${{ vars.CWS_PUBLISHER_ID }}
