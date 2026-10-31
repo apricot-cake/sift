@@ -20,8 +20,6 @@ const response = {
   pageTitle: "X",
   pageKey: "https://x.com/home",
   timelineAvailable: true,
-  metricSampleCount: 1,
-  metricCounts: [],
   posts: [post],
   collectedCount: 1,
   collectionTruncated: false,

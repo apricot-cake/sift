@@ -69,8 +69,6 @@ export async function preparePanel(
       ? POST_COLLECTION_LIMIT
       : metricCounts.length,
     collectionTruncated,
-    metricSampleCount: 8,
-    metricCounts,
   };
   browser.tabs.sendMessage = (async (
     _tabId: number,

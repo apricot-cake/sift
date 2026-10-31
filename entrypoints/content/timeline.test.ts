@@ -159,8 +159,6 @@ describe("元のページを変更しない投稿の収集", () => {
     await settings({ minReactionsEnabled: true, minReactions: 200 });
     expect(await context()).toMatchObject({
       collectedCount: 2,
-      metricSampleCount: 2,
-      metricCounts: [100, 500],
     });
     expect((await context()).posts.map((p) => p.id)).toEqual(["2"]);
   });
@@ -335,8 +333,6 @@ describe("元のページを変更しない投稿の収集", () => {
     runtime = startContentRuntime(undefined, xAdapter);
     expect(await context()).toMatchObject({
       posts: [],
-      metricSampleCount: 1,
-      metricCounts: [],
     });
     await settings({ minReactionsEnabled: false });
     expect((await context()).posts).toMatchObject([

@@ -13,7 +13,6 @@ import {
 import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { t } from "../../utils/i18n.ts";
 import { checkPanelBuild } from "../../utils/local-build-reload.ts";
-import { metricThresholdSuggestions } from "../../utils/metric-threshold-suggestions.ts";
 import type { PanelPost } from "../../utils/panel-post.ts";
 import {
   defaults,
@@ -48,9 +47,6 @@ export function SidepanelApp(): React.JSX.Element {
   );
   const [status, setStatus] = useState(t("optionsStatusLoading"));
   const settingsRef = useRef(settings);
-  const [manualSites, setManualSites] = useState<
-    Partial<Record<SiteSettingsKey, boolean>>
-  >({});
 
   useEffect(() => {
     settingsRef.current = settings;
@@ -99,10 +95,8 @@ export function SidepanelApp(): React.JSX.Element {
     if (!resetAllSites && resetSite === null) return;
     resetDialog.current.close();
     if (resetAllSites) {
-      setManualSites({});
       saveSettings(defaults);
     } else if (resetSite !== null) {
-      setManualSites((sites) => ({ ...sites, [resetSite]: false }));
       saveSettings(
         withSiteSettings(
           settingsRef.current,
@@ -114,9 +108,6 @@ export function SidepanelApp(): React.JSX.Element {
   };
 
   const selectedSettings = settingsFor(settings, selectedSite);
-  const manualActive = manualSites[selectedSite] === true;
-  const manualMinimum =
-    selectedSettings.manualMinimum ?? selectedSettings.minReactions;
 
   const saveSiteSettings = (
     site: SiteSettingsKey,
@@ -137,23 +128,14 @@ export function SidepanelApp(): React.JSX.Element {
     });
   };
 
-  const setManualMinimum = (value: number, enabled: boolean): void => {
-    setManualSites((sites) => ({ ...sites, [selectedSite]: true }));
-    saveSiteSettings(selectedSite, {
-      ...settingsFor(settingsRef.current, selectedSite),
-      manualMinimum: value,
-      ...(enabled ? { minReactions: value, minReactionsEnabled: true } : {}),
-    });
-  };
-
-  const toggleManualMinimum = (enabled: boolean): void => {
-    setManualSites((sites) => ({ ...sites, [selectedSite]: enabled }));
-    if (enabled) setManualMinimum(manualMinimum, true);
-    else
+  const setMinimum = (value: number | null): void => {
+    runPanelAction(() => {
       saveSiteSettings(selectedSite, {
         ...settingsFor(settingsRef.current, selectedSite),
-        minReactionsEnabled: false,
+        minReactionsEnabled: value !== null,
+        ...(value !== null ? { minReactions: value } : {}),
       });
+    });
   };
 
   const currentPageIsEditable = activeSite === selectedSite;
@@ -309,54 +291,31 @@ export function SidepanelApp(): React.JSX.Element {
                             {t("optionsMinLikes")}
                           </ItemLabel>
                         </h2>
-                        <ReactionThresholdSuggestions
-                          truncated={
-                            activeContext?.metricContextTruncated === true
-                          }
-                          minimumEnabled={selectedSettings.minReactionsEnabled}
-                          onManual={() =>
-                            runPanelAction(() => toggleManualMinimum(true))
-                          }
-                          onClear={() =>
-                            runPanelAction(() => toggleManualMinimum(false))
-                          }
-                          selectionEnabled={
-                            !manualActive &&
-                            selectedSettings.minReactionsEnabled
-                          }
-                          currentMinimum={selectedSettings.minReactions}
-                          metricCounts={activeContext?.metricCounts ?? []}
-                          sampleCount={activeContext?.metricSampleCount ?? 0}
-                          onSelect={(minimum) =>
-                            runPanelAction(() => {
-                              setManualSites((sites) => ({
-                                ...sites,
-                                [selectedSite]: false,
-                              }));
-                              saveSiteSettings(selectedSite, {
-                                ...settingsFor(
-                                  settingsRef.current,
-                                  selectedSite,
-                                ),
-                                manualMinimum,
-                                minReactions: minimum,
-                                minReactionsEnabled: true,
-                              });
-                            })
-                          }
-                        >
-                          <ThresholdSetting
-                            label={t("optionsManualMinimum")}
+                        <div className="flex items-center gap-2">
+                          <EditableNumberInput
+                            key={selectedSite}
+                            ariaLabel={t("optionsMinLikes")}
+                            className="min-w-0 flex-1 text-left"
                             min={0}
-                            onValueChange={(value) =>
-                              runPanelAction(() =>
-                                setManualMinimum(value, true),
-                              )
+                            max={1_000_000_000}
+                            placeholder={t("optionsMinimumNone")}
+                            value={
+                              selectedSettings.minReactionsEnabled
+                                ? selectedSettings.minReactions
+                                : null
                             }
-                            suffix={t("sidepanelLikeSuggestionMinimumSuffix")}
-                            value={manualMinimum}
+                            onValueChange={setMinimum}
                           />
-                        </ReactionThresholdSuggestions>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            className="h-10"
+                            onClick={() => setMinimum(null)}
+                            disabled={!selectedSettings.minReactionsEnabled}
+                          >
+                            {t("optionsMinimumNone")}
+                          </Button>
+                        </div>
                       </section>
                       <MediaSetting
                         enabled={selectedSettings.mediaEnabled}
@@ -1073,132 +1032,11 @@ function SettingRow({
   );
 }
 
-function ReactionThresholdSuggestions({
-  minimumEnabled,
-  onManual,
-  onClear,
-  children,
-  selectionEnabled,
-  currentMinimum,
-  metricCounts,
-  sampleCount,
-  truncated = false,
-  onSelect,
-}: {
-  minimumEnabled: boolean;
-  onManual: () => void;
-  onClear: () => void;
-  children: React.ReactNode;
-  selectionEnabled: boolean;
-  currentMinimum: number;
-  truncated?: boolean;
-  metricCounts: readonly number[];
-  sampleCount: number;
-  onSelect: (minimum: number) => void;
-}): React.JSX.Element {
-  const suggestions = metricThresholdSuggestions(metricCounts, currentMinimum);
-  const pickerRef = useRef<HTMLDivElement>(null);
-  const [pickerWidth, setPickerWidth] = useState<number>();
-  useEffect(() => {
-    const picker = pickerRef.current;
-    if (!picker) return;
-    const updateWidth = () =>
-      setPickerWidth(picker.getBoundingClientRect().width);
-    updateWidth();
-    const observer = new ResizeObserver(updateWidth);
-    observer.observe(picker);
-    return () => observer.disconnect();
-  }, []);
-
-  const formatter = new Intl.NumberFormat(undefined, {
-    notation: "compact",
-    maximumFractionDigits: 1,
-  });
-  const scopeText = truncated
-    ? t("sidepanelSampleScope", { count: metricCounts.length })
-    : t("sidepanelLikeSuggestionScope", {
-        count: formatter.format(metricCounts.length),
-      });
-
-  return (
-    <div data-threshold-suggestions="">
-      <Select
-        onOpenChange={(open) => {
-          if (open) void checkPanelBuild();
-        }}
-        value={
-          !minimumEnabled
-            ? "none"
-            : selectionEnabled
-              ? String(currentMinimum)
-              : "custom"
-        }
-        onValueChange={(value) => {
-          if (value === "none") onClear();
-          else if (value === "custom") onManual();
-          else onSelect(Number(value));
-        }}
-      >
-        <div
-          data-minimum-picker=""
-          ref={pickerRef}
-          data-custom={minimumEnabled && !selectionEnabled}
-        >
-          {minimumEnabled && !selectionEnabled && children}
-          <SelectTrigger aria-label={t("optionsMinLikes")}>
-            {(!minimumEnabled || selectionEnabled) && <SelectValue />}
-          </SelectTrigger>
-        </div>
-        <SelectContent
-          data-minimum-menu=""
-          align="end"
-          style={{ width: pickerWidth }}
-          className="max-h-[var(--radix-select-content-available-height)] overflow-y-auto"
-          onCloseAutoFocus={(event) => {
-            const input = document.querySelector<HTMLInputElement>(
-              "[data-custom-minimum] input",
-            );
-            if (input) {
-              event.preventDefault();
-              input.focus();
-            }
-          }}
-        >
-          <SelectItem value="none">
-            {t("optionsMinimumNone")}
-            <span data-choice-count="">
-              {sampleCount.toLocaleString()}
-              {t("sidepanelLikeSuggestionCountSuffix")}
-            </span>
-          </SelectItem>
-          {suggestions.map((suggestion) => (
-            <SelectItem
-              key={suggestion.minimum}
-              value={String(suggestion.minimum)}
-            >
-              {formatter.format(suggestion.minimum)}
-              <span data-choice-count="">
-                {suggestion.count.toLocaleString()}
-                {t("sidepanelLikeSuggestionCountSuffix")}
-              </span>
-            </SelectItem>
-          ))}
-          <SelectItem value="custom">{t("optionsManualMinimum")}</SelectItem>
-        </SelectContent>
-      </Select>
-      {(truncated || suggestions.length > 0) && (
-        <p className="mb-0 mt-3 text-xs leading-5 text-muted-foreground">
-          {scopeText}
-        </p>
-      )}
-    </div>
-  );
-}
-
 function EditableNumberInput({
   ariaLabel,
   className = "w-24",
   disabled = false,
+  placeholder,
   min,
   max = Number.MAX_SAFE_INTEGER,
   onValueChange,
@@ -1207,29 +1045,30 @@ function EditableNumberInput({
   ariaLabel?: string;
   className?: string;
   disabled?: boolean;
+  placeholder?: string;
   min: number;
   max?: number;
-  onValueChange: (value: number) => void;
-  value: number;
+  onValueChange: (value: number | null) => void;
+  value: number | null;
 }): React.JSX.Element {
-  const [draft, setDraft] = useState(String(value));
+  const [draft, setDraft] = useState(value === null ? "" : String(value));
   const editing = useRef(false);
 
   useEffect(() => {
     if (!editing.current) {
-      setDraft(String(value));
+      setDraft(value === null ? "" : String(value));
     }
   }, [value]);
 
   const commit = (): void => {
     editing.current = false;
     if (draft.trim() === "") {
-      setDraft(String(value));
+      if (value !== null) onValueChange(null);
       return;
     }
     const parsed = Number(draft);
     if (!Number.isSafeInteger(parsed)) {
-      setDraft(String(value));
+      setDraft(value === null ? "" : String(value));
       return;
     }
     const nextValue = Math.min(max, Math.max(min, parsed));
@@ -1242,8 +1081,9 @@ function EditableNumberInput({
   return (
     <Input
       aria-label={ariaLabel}
-      className={`${className} text-right tabular-nums`}
+      className={`${className} tabular-nums`}
       disabled={disabled}
+      placeholder={placeholder}
       type="number"
       inputMode="numeric"
       min={min}
@@ -1257,6 +1097,10 @@ function EditableNumberInput({
       onChange={(event) => {
         const rawValue = event.currentTarget.value;
         setDraft(rawValue);
+        if (rawValue === "" && !event.currentTarget.validity.badInput) {
+          onValueChange(null);
+          return;
+        }
         const nextValue = event.currentTarget.valueAsNumber;
         if (
           Number.isSafeInteger(nextValue) &&
@@ -1315,33 +1159,5 @@ function MediaSetting({
         </SelectContent>
       </Select>
     </section>
-  );
-}
-
-function ThresholdSetting({
-  label,
-  min,
-  onValueChange,
-  suffix,
-  value,
-}: {
-  label: string;
-  min: number;
-  onValueChange: (value: number) => void;
-  suffix?: string;
-  value: number;
-}): React.JSX.Element {
-  return (
-    <div data-custom-minimum="">
-      <EditableNumberInput
-        ariaLabel={label}
-        min={min}
-        value={value}
-        onValueChange={onValueChange}
-      />
-      {suffix && (
-        <span className="text-sm text-muted-foreground">{suffix}</span>
-      )}
-    </div>
   );
 }

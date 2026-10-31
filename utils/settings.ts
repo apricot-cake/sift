@@ -5,7 +5,6 @@ export type MediaMode = "any" | "images" | "video";
 export type SiteSettingsKey = "x" | "bluesky";
 
 export interface ReactionSiteSettings {
-  readonly manualMinimum?: number;
   readonly mediaEnabled: boolean;
   readonly mediaMode: MediaMode;
   readonly minReactionsEnabled: boolean;
@@ -80,16 +79,6 @@ function normalizeReactionSiteSettings(
   const source = objectSource(value);
   const mediaMode = normalizeMediaMode(source.mediaMode, fallback.mediaMode);
   return {
-    ...(source.manualMinimum === undefined
-      ? {}
-      : {
-          manualMinimum: clampInteger(
-            source.manualMinimum,
-            fallback.minReactions,
-            0,
-            1000000000,
-          ),
-        }),
     mediaEnabled:
       typeof source.mediaEnabled === "boolean"
         ? source.mediaEnabled

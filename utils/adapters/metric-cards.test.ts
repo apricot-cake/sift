@@ -72,7 +72,7 @@ describe("上限付きの集計対象", () => {
       ).cards,
     ).toHaveLength(0);
   });
-  it("上限を超える応答や不正な範囲フラグを受け入れない", () => {
+  it("一覧の識別子がない応答を受け入れ、不正な識別子を拒否する", () => {
     const response = {
       site: "x",
       pageTitle: "x",
@@ -81,9 +81,6 @@ describe("上限付きの集計対象", () => {
       posts: [],
       collectedCount: 1,
       collectionTruncated: false,
-      metricSampleCount: 1,
-      metricCounts: [1],
-      metricContextTruncated: true,
     };
     expect(isFilterContextResponse(response)).toBe(true);
     expect(
@@ -101,27 +98,5 @@ describe("上限付きの集計対象", () => {
     expect(isFilterContextResponse({ ...response, timelineKey: {} })).toBe(
       false,
     );
-    expect(
-      isFilterContextResponse({ ...response, metricContextTruncated: "false" }),
-    ).toBe(false);
-    expect(
-      isFilterContextResponse({
-        ...response,
-        metricSampleCount: 1001,
-      }),
-    ).toBe(false);
-    expect(
-      isFilterContextResponse({
-        ...response,
-        metricSampleCount: 0,
-      }),
-    ).toBe(false);
-    expect(
-      isFilterContextResponse({
-        ...response,
-        metricSampleCount: 1000,
-        metricCounts: Array(1001).fill(1),
-      }),
-    ).toBe(false);
   });
 });

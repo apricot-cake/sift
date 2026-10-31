@@ -18,7 +18,6 @@ import {
   element,
   evidence,
   fillNumber,
-  text,
   visible,
 } from "./browser-queries.ts";
 import {
@@ -534,94 +533,32 @@ async function inclusionFilter(
       { message: "操作前の実投稿が条件なしのパネルへ収集されること" },
     )
     .toBe(true);
-  const combo = `[data-minimum-picker] >>> ${aria("combobox")}`;
-  await panelClick(await element(panel, combo));
-  const options = aria("option");
-  await expect.poll(() => visible(panel, options)).toBe(true);
-  const available = await panel.$$eval(options, (elements) =>
-    elements.map((e, index) => ({
-      index,
-      label: [...(e.querySelector("[id]") ?? e).childNodes]
-        .filter((n) => n.nodeType === Node.TEXT_NODE)
-        .map((n) => n.textContent)
-        .join("")
-        .trim(),
-      count: Number(
-        e
-          .querySelector("[data-choice-count]")
-          ?.textContent?.replace(/[^\d]/g, ""),
-      ),
+  const input = `[data-minimum-group] >>> ${aria("spinbutton", "最低いいね数")}`;
+  const counts = before.map((row) => row.count).filter(Number.isFinite);
+  expect(
+    counts.length,
+    "最低値の入力に必要な実投稿の指標があること",
+  ).toBeGreaterThan(0);
+  const available = [...new Set(counts)].sort((a, b) => a - b);
+  const choice = selectPartialChoice(
+    available.map((minimum, index) => ({
+      index: index + 1,
+      minimum,
+      count: counts.filter((count) => count >= minimum).length,
     })),
+    before.length,
   );
-  const total = available[0]?.count ?? 0;
-  await evidence(task, "filter-options", {
-    body: JSON.stringify(available),
+  // 同値しかない場合は誤除外と解除だけを確認し、除外効果は別の代表ページで確認する。
+  const threshold = choice?.minimum ?? Math.min(...counts);
+  await evidence(task, "filter-choice", {
+    body: JSON.stringify({
+      threshold,
+      sampleCount: before.length,
+      retained: choice?.count ?? counts.length,
+    }),
     contentType: "application/json",
   });
-  const choice = selectPartialChoice(
-    available.filter((o) => Number.isFinite(parseMetric(o.label))),
-    total,
-  );
-  let threshold: number;
-  if (choice) {
-    threshold = parseMetric(choice.label);
-    // 投稿の追加取得で候補値と順序が変わるため、観測時のindexを操作に使わない。
-    // ラベルが厳密に一致する実要素を保持し、消失・重複は失敗として扱う。
-    const currentOptions = await panel.$$(options);
-    try {
-      const labels = await Promise.all(
-        currentOptions.map((option) =>
-          option.evaluate((node) =>
-            [...(node.querySelector("[id]") ?? node).childNodes]
-              .filter((child) => child.nodeType === Node.TEXT_NODE)
-              .map((child) => child.textContent)
-              .join("")
-              .trim(),
-          ),
-        ),
-      );
-      const matches = currentOptions.filter(
-        (_, index) => labels[index] === choice.label,
-      );
-      expect(
-        matches,
-        "観測した条件と同じラベルの選択肢が一意であること",
-      ).toHaveLength(1);
-      const selected = matches[0];
-      if (!selected) throw new Error(`選択肢がありません: ${choice.label}`);
-      await evidence(task, "filter-choice", {
-        body: JSON.stringify({
-          label: choice.label,
-          threshold,
-          observedIndex: choice.index,
-          currentIndex: currentOptions.indexOf(selected),
-        }),
-        contentType: "application/json",
-      });
-      await panelClick(selected);
-    } finally {
-      await Promise.all(currentOptions.map((option) => option.dispose()));
-    }
-  } else {
-    const counts = before.map((row) => row.count).filter(Number.isFinite);
-    expect(
-      counts.length,
-      "数値入力の確認に必要な指標がありません",
-    ).toBeGreaterThan(0);
-    // 同値の投稿しかない場合は、全件が条件を満たす値で操作・誤除外・解除を確認する。
-    // 除外効果は0件として記録し、別の代表ページでの確認を配備条件に残す。
-    threshold = Math.min(...counts);
-    await panelClick(
-      await element(panel, `${options} >>> ${text("数値を入力")}`),
-    );
-    const input = aria("spinbutton", "数値を入力");
-    await fillNumber(panel, input, threshold);
-    await expect
-      .poll(() =>
-        panel.$eval(input, (node) => (node as HTMLInputElement).value),
-      )
-      .toBe(String(threshold));
-  }
+  await fillNumber(panel, input, threshold);
   // UI操作だけでなく、選んだ条件の保存完了を待つ。非同期の初期化との競合を検出する。
   const storageClient = await panel.createCDPSession();
   try {
@@ -692,8 +629,17 @@ async function inclusionFilter(
     contentType: "application/json",
   });
   session.loadGuard.setContext(target.id, "minimum-clear");
-  await panelClick(await element(panel, combo));
-  await panelClick(await element(panel, aria("option")));
+  await panelClick(await element(panel, aria("button", "指定なし")));
+  await expect
+    .poll(() => panel.$eval(input, (node) => (node as HTMLInputElement).value))
+    .toBe("");
+  await expect
+    .poll(() =>
+      session.api.evaluate(
+        `(async () => (await chrome.storage.sync.get('settings')).settings.siteSettings[${JSON.stringify(target.site)}])()`,
+      ),
+    )
+    .toMatchObject({ minReactionsEnabled: false, minReactions: threshold });
   await expect
     .poll(async () => {
       const posts = new Set(
@@ -704,6 +650,26 @@ async function inclusionFilter(
       );
     })
     .toBe(true);
+  if (target.id === "x-profile" || target.id === "bluesky-profile") {
+    await fillNumber(panel, input, threshold);
+    await expect.poll(matched).toBe(true);
+    await panelClick(await element(panel, aria("button", "指定なし")));
+    await expect
+      .poll(() =>
+        panel.$eval(input, (node) => (node as HTMLInputElement).value),
+      )
+      .toBe("");
+    await expect
+      .poll(async () => {
+        const posts = new Set(
+          (await readPanelPosts(panel)).map((post) => postKey(post.url)),
+        );
+        return before.every(
+          (row) => row.id && posts.has(postKey(row.id, page.url())),
+        );
+      })
+      .toBe(true);
+  }
   await assertPageReadOnly(page);
   return {
     applied: true,
@@ -925,9 +891,14 @@ export function createCompatibilityCases(): LiveCase[] {
               await panelClick(await element(panel, aria("option", "すべて")));
             }
           }
-          const minimum = `[data-minimum-picker] >>> ${aria("combobox")}`;
-          await panelClick(await element(panel, minimum));
-          await panelClick(await element(panel, aria("option")));
+          await expect
+            .poll(() =>
+              panel.$eval(
+                '[data-minimum-group] input[type="number"]',
+                (node) => (node as HTMLInputElement).value,
+              ),
+            )
+            .toBe("");
           await expect
             .poll(async () => {
               const rows = await observations(page, target);

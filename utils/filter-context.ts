@@ -24,11 +24,6 @@ export interface FilterContextResponse {
   readonly posts: readonly PanelPost[];
   readonly collectedCount: number;
   readonly collectionTruncated: boolean;
-  readonly metricContextTruncated?: boolean;
-  /** 最低いいね数の条件を除いた現在の条件に合う、パネル集計用サンプルの投稿数。 */
-  readonly metricSampleCount: number;
-  /** 上記サンプルのうち、X / Bluesky の反応数を読めた投稿の反応数。 */
-  readonly metricCounts: readonly number[];
 }
 
 export function isFilterContextRequest(
@@ -67,18 +62,6 @@ export function isFilterContextResponse(
     typeof response.collectionTruncated === "boolean" &&
     Array.isArray(response.posts) &&
     response.posts.length <= (response.collectedCount ?? -1) &&
-    response.posts.every(isPanelPost) &&
-    (response.metricContextTruncated === undefined ||
-      typeof response.metricContextTruncated === "boolean") &&
-    typeof response.metricSampleCount === "number" &&
-    Number.isSafeInteger(response.metricSampleCount) &&
-    response.metricSampleCount >= 0 &&
-    response.metricSampleCount <= FILTER_CONTEXT_METRIC_LIMIT &&
-    Array.isArray(response.metricCounts) &&
-    response.metricCounts.length <= response.metricSampleCount &&
-    response.metricCounts.length <= FILTER_CONTEXT_METRIC_LIMIT &&
-    response.metricCounts.every(
-      (count) => Number.isSafeInteger(count) && count >= 0,
-    )
+    response.posts.every(isPanelPost)
   );
 }

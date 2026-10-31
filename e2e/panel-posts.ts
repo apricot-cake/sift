@@ -101,20 +101,14 @@ export async function assertPanelTabsPreserveState(panel: Page): Promise<void> {
     panel.$$eval(
       '[data-filter-controls] [role="combobox"], [data-filter-controls] [role="switch"], [data-filter-controls] input',
       (nodes) =>
-        nodes.map((node) => {
-          const copy = node.cloneNode(true) as Element;
-          copy.querySelectorAll("[data-choice-count]").forEach((count) => {
-            count.remove();
-          });
-          return {
-            label: node.getAttribute("aria-label"),
-            checked: node.getAttribute("aria-checked"),
-            value:
-              node instanceof HTMLInputElement
-                ? node.value
-                : copy.textContent?.trim(),
-          };
-        }),
+        nodes.map((node) => ({
+          label: node.getAttribute("aria-label"),
+          checked: node.getAttribute("aria-checked"),
+          value:
+            node instanceof HTMLInputElement
+              ? node.value
+              : node.textContent?.trim(),
+        })),
     );
   const beforeSettings = await settings();
   const beforePosts = await readPanelPosts(panel);
@@ -408,6 +402,7 @@ export async function assertPanelLoadsOneBatch(
   );
   expect(beforeRequests, "明示操作前に追加取得を開始していないこと").toBe(0);
 
+  let wheelInput: unknown = null;
   {
     // 前の操作意図を残さず、拡張パネルだけを取得開始直前の位置へ準備する。
     await new Promise((resolve) => setTimeout(resolve, 850));
@@ -439,7 +434,57 @@ export async function assertPanelLoadsOneBatch(
       const y = rect.y + rect.height / 2;
       if (trigger === "panel-scroll") {
         await panel.mouse.move(x, y);
-        await panel.mouse.wheel({ deltaY: 160 });
+        const prepared = await pane.evaluate((node) => {
+          const element = node as HTMLElement & {
+            __siftWheelInput?: unknown;
+          };
+          const record = (event: WheelEvent) => {
+            element.__siftWheelInput = {
+              trusted: event.isTrusted,
+              deltaY: event.deltaY,
+              targetTag:
+                event.target instanceof Element ? event.target.tagName : null,
+              scrollTop: element.scrollTop,
+              scrollHeight: element.scrollHeight,
+              clientHeight: element.clientHeight,
+            };
+          };
+          element.addEventListener("wheel", record, {
+            once: true,
+            passive: true,
+          });
+          return {
+            scrollTop: element.scrollTop,
+            scrollHeight: element.scrollHeight,
+            clientHeight: element.clientHeight,
+            hidden: element.hidden,
+          };
+        });
+        // 画像の遅延描画で準備後の高さが変わるため、入力直前の末尾距離を使う。
+        const deltaY = Math.max(
+          160,
+          prepared.scrollHeight -
+            prepared.clientHeight -
+            prepared.scrollTop +
+            prepared.clientHeight,
+        );
+        await panel.mouse.wheel({ deltaY });
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        const observed = await pane.evaluate((node) => {
+          const element = node as HTMLElement & {
+            __siftWheelInput?: unknown;
+          };
+          const event = element.__siftWheelInput ?? null;
+          delete element.__siftWheelInput;
+          return {
+            event,
+            scrollTop: element.scrollTop,
+            scrollHeight: element.scrollHeight,
+            clientHeight: element.clientHeight,
+            hidden: element.hidden,
+          };
+        });
+        wheelInput = { prepared, deltaY, observed };
       } else if (trigger === "panel-key") {
         await pane.focus();
         await panel.keyboard.press("PageDown");
@@ -478,12 +523,19 @@ export async function assertPanelLoadsOneBatch(
       added: Number(node.getAttribute("data-added")),
       requestCount: Number(node.getAttribute("data-request-count")),
     }));
-  await expect
-    .poll(result, {
-      timeout: 15000,
-      message: "1回の明示操作で新しい投稿を収集できること",
-    })
-    .toMatchObject({ status: "loaded" });
+  try {
+    await expect
+      .poll(result, {
+        timeout: 15000,
+        message: "1回の明示操作で新しい投稿を収集できること",
+      })
+      .toMatchObject({ status: "loaded" });
+  } catch (cause) {
+    throw new Error(
+      `追加読み込みの入力確認に失敗しました: ${JSON.stringify({ trigger, wheelInput, result: await result() })}`,
+      { cause },
+    );
+  }
   const loaded = await result();
   expect(loaded.added).toBeGreaterThan(0);
   expect(loaded.requestCount).toBe(beforeRequests + 1);
@@ -591,6 +643,7 @@ export async function assertPanelLoadsOneBatch(
     quietScrollTop: quietPosition.scrollTop,
     reachedVisiblePosts: reachedPosition.visiblePostIds,
     quietVisiblePosts: quietPosition.visiblePostIds,
+    wheelInput,
     continuedWithoutInput: false,
   };
 }

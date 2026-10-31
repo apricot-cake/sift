@@ -47,8 +47,6 @@ function context(site: FilterContextResponse["site"]): FilterContextResponse {
     posts: [],
     collectedCount: 0,
     collectionTruncated: false,
-    metricSampleCount: 1,
-    metricCounts: [10],
   };
 }
 function post(id: number, text = "投稿の本文"): PanelPost {
@@ -268,7 +266,6 @@ describe("パネルの投稿一覧", () => {
     });
     request = async () => ({
       ...postsContext([], 1),
-      metricCounts: [],
       health: {
         state: "unreadable",
         issue: "metrics",
@@ -1059,6 +1056,81 @@ describe("投稿の追加読み込み", () => {
   });
 });
 
+describe("最低いいね数の直接入力", () => {
+  function input() {
+    const node = container.querySelector<HTMLInputElement>(
+      "[data-minimum-group] input",
+    );
+    if (!node) throw Error("最低いいね数の入力欄がありません");
+    return node;
+  }
+  async function enter(value: string) {
+    await act(async () => {
+      input().focus();
+      Object.getOwnPropertyDescriptor(
+        HTMLInputElement.prototype,
+        "value",
+      )?.set?.call(input(), value);
+      input().dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    await flush();
+  }
+  it("候補やモード切替を挟まず入力し、解除しても保存値を残す", async () => {
+    await mount();
+    expect(input().value).toBe("1000");
+    expect(container.querySelector("[data-threshold-suggestions]")).toBeNull();
+    await enter("234");
+    expect(writes.at(-1)?.siteSettings.x).toMatchObject({
+      minReactions: 234,
+      minReactionsEnabled: true,
+    });
+    await act(async () => input().blur());
+    await act(async () =>
+      container
+        .querySelector<HTMLButtonElement>("[data-minimum-group] button")
+        ?.click(),
+    );
+    await flush();
+    expect(input().value).toBe("");
+    expect(input().placeholder).toBe(t("optionsMinimumNone"));
+    expect(writes.at(-1)?.siteSettings.x).toMatchObject({
+      minReactions: 234,
+      minReactionsEnabled: false,
+    });
+    await enter("234");
+    expect(writes.at(-1)?.siteSettings.x).toMatchObject({
+      minReactions: 234,
+      minReactionsEnabled: true,
+    });
+  });
+  it("空欄で解除し、0は有効な最低値として扱う", async () => {
+    await mount();
+    await enter("");
+    expect(writes.at(-1)?.siteSettings.x).toMatchObject({
+      minReactions: 1000,
+      minReactionsEnabled: false,
+    });
+    await enter("0");
+    expect(writes.at(-1)?.siteSettings.x).toMatchObject({
+      minReactions: 0,
+      minReactionsEnabled: true,
+    });
+  });
+  it("整数以外を保存せず、範囲外の数値は確定時に範囲内へ収める", async () => {
+    await mount();
+    writes.length = 0;
+    await enter("1.5");
+    expect(writes).toHaveLength(0);
+    await act(async () => input().blur());
+    expect(input().value).toBe("1000");
+    await enter("1000000001");
+    expect(writes).toHaveLength(0);
+    await act(async () => input().blur());
+    expect(input().value).toBe("1000000000");
+    expect(writes.at(-1)?.siteSettings.x.minReactions).toBe(1_000_000_000);
+  });
+});
+
 describe("サイト別条件の記憶", () => {
   const saved: Settings = {
     siteSettings: {
@@ -1066,7 +1138,6 @@ describe("サイト別条件の記憶", () => {
         ...defaults.siteSettings.x,
         minReactionsEnabled: true,
         minReactions: 321,
-        manualMinimum: 321,
         mediaEnabled: true,
         mediaMode: "images",
         hideReplies: true,
@@ -1088,9 +1159,9 @@ describe("サイト別条件の記憶", () => {
   function expectSavedConditions(site: "x" | "bluesky") {
     const conditions = saved.siteSettings[site];
     expect(
-      container.querySelector('[data-minimum-picker] [role="combobox"]')
-        ?.textContent,
-    ).toContain(String(conditions.minReactions));
+      container.querySelector<HTMLInputElement>("[data-minimum-group] input")
+        ?.value,
+    ).toBe(String(conditions.minReactions));
     expect(
       container.querySelector(
         `[role="combobox"][aria-label="${t("optionsMedia")}"]`,

@@ -4,14 +4,7 @@ import { rethrowWithDiagnostics } from "../scripts/compatibility/failure-diagnos
 import { selectPartialChoice } from "../scripts/compatibility/filter-choice.ts";
 import { parseMetric } from "../utils/filter-core.ts";
 import type { ReactionSiteSettings } from "../utils/settings.ts";
-import {
-  aria,
-  element,
-  evidence,
-  fillNumber,
-  text,
-  visible,
-} from "./browser-queries.ts";
+import { aria, evidence, fillNumber, visible } from "./browser-queries.ts";
 import { lifecycleCases } from "./cases.ts";
 import {
   acquireCasePage,
@@ -108,98 +101,63 @@ export function createLifecycleCases(): LiveCase[] {
           const originalPageKey = (await readContext(session, page)).pageKey;
           await openFilterControls(panel);
           const unfilteredPosts = await readPanelPosts(panel);
-          const picker = `[data-minimum-picker] >>> ${aria("combobox")}`;
-          await expect.poll(() => visible(panel, picker)).toBe(true);
-          await panel
-            .locator(picker)
-            .setWaitForStableBoundingBox(false)
-            .click();
-          const options = aria("option");
-          await expect.poll(() => visible(panel, options)).toBe(true);
-          const readCounts = () =>
-            panel.$$eval(options, (nodes) =>
-              nodes.map((node) =>
-                Number(
-                  node
-                    .querySelector("[data-choice-count]")
-                    ?.textContent?.replace(/[^\d]/g, ""),
-                ),
-              ),
-            );
-          const partialIndex = (counts: number[]) =>
-            selectPartialChoice(
-              counts.map((count, index) => ({ count, index })),
-              counts[0] ?? 0,
-            )?.index ?? -1;
-          // 一覧の取得と候補件数の更新は、パネルの表示より後に完了する。
+          const input = `[data-minimum-group] >>> ${aria("spinbutton", "最低いいね数")}`;
+          await expect.poll(() => visible(panel, input)).toBe(true);
           await expect
-            .poll(async () => (await readCounts())[0])
-            .toBeGreaterThan(0);
-          if (target.site !== "x") {
-            await expect
-              .poll(async () => partialIndex(await readCounts()), {
-                message: "遷移前に投稿を除外できる条件が必要です",
-              })
-              .toBeGreaterThan(0);
-          }
+            .poll(() =>
+              panel.$eval(input, (node) => (node as HTMLInputElement).value),
+            )
+            .toBe("");
+          // Siftの集計値ではなく、サイト自身のいいね表示から部分除外する値を選ぶ。
+          const readCounts = async () => {
+            const labels = await page.$$eval(
+              target.site === "x"
+                ? 'article[data-testid="tweet"]'
+                : '[data-testid^="feedItem-by-"]',
+              (cards, metric) =>
+                cards.flatMap((card) => {
+                  const node = card.querySelector(metric);
+                  return node
+                    ? [
+                        node.getAttribute("aria-label") ||
+                          node.textContent ||
+                          "",
+                      ]
+                    : [];
+                }),
+              target.site === "x"
+                ? '[data-testid="like"], [data-testid="unlike"]'
+                : '[data-testid="likeBtn"]',
+            );
+            return labels.map(parseMetric).filter(Number.isFinite);
+          };
+          const selectThreshold = (counts: number[]) =>
+            selectPartialChoice(
+              [...new Set(counts)].map((minimum, index) => ({
+                index: index + 1,
+                minimum,
+                count: counts.filter((count) => count >= minimum).length,
+              })),
+              counts.length,
+            );
+          await expect
+            .poll(async () => Boolean(selectThreshold(await readCounts())), {
+              message: "遷移前に投稿を除外できる条件が必要です",
+            })
+            .toBe(true);
           const counts = await readCounts();
+          const choice = selectThreshold(counts);
+          if (!choice) throw Error("部分除外する最低値を選べません");
           await completeInitialLoad(session, page, task, "ready");
-          const index = partialIndex(counts);
-          await evidence(task, "lifecycle-filter-counts", {
-            body: JSON.stringify({ counts, index }),
+          await fillNumber(panel, input, choice.minimum);
+          await evidence(task, "lifecycle-minimum", {
+            body: JSON.stringify({
+              threshold: choice.minimum,
+              sampleCount: counts.length,
+              retained: choice.count,
+            }),
             contentType: "application/json",
           });
-          if (index > 0) await (await element(panel, options, index)).click();
-          else {
-            expect(
-              target.site,
-              "数値入力への切り替えはXの最低いいね数だけに使う",
-            ).toBe("x");
-            // 既定候補の間に実投稿の指標が集まる場合も、一部を除外する条件を使う。
-            // Siftの集計値ではなく、サイト自身のいいね表示から数値を選ぶ。
-            const labels = await page.$$eval(
-              'article[data-testid="tweet"]',
-              (cards) =>
-                cards.map(
-                  (card) =>
-                    card
-                      .querySelector(
-                        '[data-testid="like"], [data-testid="unlike"]',
-                      )
-                      ?.getAttribute("aria-label") ?? "",
-                ),
-            );
-            const values = [
-              ...new Set(
-                labels
-                  .filter((label) => /^\d/.test(label))
-                  .map(parseMetric)
-                  .filter(Number.isFinite),
-              ),
-            ].sort((a, b) => a - b);
-            expect(
-              values.length,
-              "部分除外の検証に必要な異なるいいね数がありません",
-            ).toBeGreaterThan(1);
-            const threshold = values[Math.floor(values.length / 2)];
-            if (threshold === undefined) throw Error("除外条件を選べません");
-            await (
-              await element(panel, `${options} >>> ${text("数値を入力")}`)
-            ).click();
-            await fillNumber(
-              panel,
-              aria("spinbutton", "数値を入力"),
-              threshold,
-            );
-            await evidence(task, "lifecycle-custom-minimum", {
-              body: JSON.stringify({
-                threshold,
-                sampleCount: labels.length,
-                distinctCounts: values.length,
-              }),
-              contentType: "application/json",
-            });
-          }
           await expect
             .poll(async () => {
               const posts = await readPanelPosts(panel);
@@ -331,25 +289,9 @@ export function createLifecycleCases(): LiveCase[] {
                 "[data-minimum-group]",
                 (node, expected) => {
                   const input = node.querySelector<HTMLInputElement>(
-                    "[data-custom-minimum] input",
+                    'input[type="number"]',
                   );
-                  if (input) return Number(input.value) === expected;
-                  const picker = node
-                    .querySelector('[role="combobox"]')
-                    ?.cloneNode(true) as Element | undefined;
-                  picker
-                    ?.querySelectorAll("[data-choice-count]")
-                    .forEach((count) => {
-                      count.remove();
-                    });
-                  const label = picker?.textContent?.trim() ?? "";
-                  return (
-                    label ===
-                    new Intl.NumberFormat(undefined, {
-                      notation: "compact",
-                      maximumFractionDigits: 1,
-                    }).format(expected)
-                  );
+                  return input?.value === String(expected);
                 },
                 savedConditions.minReactions,
               ),

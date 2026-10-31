@@ -21,57 +21,46 @@ afterEach(() => {
   vi.unstubAllGlobals();
   vi.useRealTimers();
 });
-describe("集計が一部の場合の表示", () => {
-  it.each([
-    ["x", [10]],
-    ["x", []],
-  ] as const)(
-    "%sでも件数を全体の合計と表示しない",
-    async (site, metricCounts) => {
-      vi.useFakeTimers();
-      vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
-      const response: FilterContextResponse = {
-        site,
-        pageTitle: site,
-        pageKey: site,
-        timelineAvailable: true,
-        posts: [],
-        collectedCount: 1_000,
-        collectionTruncated: true,
-        metricSampleCount: metricCounts.length,
-        metricCounts,
-        metricContextTruncated: true,
-      };
-      vi.spyOn(fakeBrowser.tabs, "query").mockResolvedValue([
-        { id: 1, url: "https://x.com/example" },
-      ] as never);
-      vi.spyOn(fakeBrowser.tabs, "sendMessage").mockImplementation(
-        async (_id, message) =>
-          (message as { type: string }).type === FILTER_CONTEXT_REQUEST
-            ? response
-            : undefined,
+describe("収集上限の表示", () => {
+  it("候補集計を表示せず収集上限を案内する", async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+    const response: FilterContextResponse = {
+      site: "x",
+      pageTitle: "x",
+      pageKey: "x",
+      timelineAvailable: true,
+      posts: [],
+      collectedCount: 1_000,
+      collectionTruncated: true,
+    };
+    vi.spyOn(fakeBrowser.tabs, "query").mockResolvedValue([
+      { id: 1, url: "https://x.com/example" },
+    ] as never);
+    vi.spyOn(fakeBrowser.tabs, "sendMessage").mockImplementation(
+      async (_id, message) =>
+        (message as { type: string }).type === FILTER_CONTEXT_REQUEST
+          ? response
+          : undefined,
+    );
+    vi.spyOn(settingsItem, "getValue").mockResolvedValue(defaults);
+    vi.spyOn(settingsItem, "setValue").mockResolvedValue();
+    vi.spyOn(settingsItem, "watch").mockReturnValue(() => {});
+    const element = document.createElement("div");
+    document.body.append(element);
+    const root = createRoot(element);
+    try {
+      await act(async () => {
+        root.render(<SidepanelApp />);
+        for (let i = 0; i < 40; i++) await Promise.resolve();
+      });
+      expect(element.querySelector("[data-threshold-suggestions]")).toBeNull();
+      expect(element.textContent).toContain(
+        t("sidepanelCollectionLimit", { count: "1,000" }),
       );
-      vi.spyOn(settingsItem, "getValue").mockResolvedValue(defaults);
-      vi.spyOn(settingsItem, "setValue").mockResolvedValue();
-      vi.spyOn(settingsItem, "watch").mockReturnValue(() => {});
-      const element = document.createElement("div");
-      document.body.append(element);
-      const root = createRoot(element);
-      try {
-        await act(async () => {
-          root.render(<SidepanelApp />);
-          for (let i = 0; i < 40; i++) await Promise.resolve();
-        });
-        expect(element.textContent).toContain(
-          t("sidepanelSampleScope", { count: metricCounts.length }),
-        );
-        expect(element.textContent).toContain(
-          t("sidepanelCollectionLimit", { count: "1,000" }),
-        );
-      } finally {
-        await act(async () => root.unmount());
-        element.remove();
-      }
-    },
-  );
+    } finally {
+      await act(async () => root.unmount());
+      element.remove();
+    }
+  });
 });

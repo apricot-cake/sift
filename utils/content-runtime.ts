@@ -161,10 +161,7 @@ export function startContentRuntime(
     }
     truncated ||= sample.truncated;
     const thresholds = thresholdsFor(settings);
-    const withoutMinimum = { ...thresholds, inclusion: { minimum: null } };
     const posts: PanelPost[] = [];
-    const metricCounts: number[] = [];
-    let metricSampleCount = 0;
     if (available) {
       for (const post of collected.values()) {
         const mediaMatches =
@@ -179,10 +176,6 @@ export function startContentRuntime(
           mediaMatches,
           metricCount: post.metricCount ?? Number.NaN,
         };
-        if (classifyPost(input, withoutMinimum).state !== "hidden") {
-          metricSampleCount += 1;
-          if (post.metricCount !== null) metricCounts.push(post.metricCount);
-        }
         if (classifyPost(input, thresholds).state !== "hidden") {
           // 判定用の属性をメッセージに混ぜず、描画用の情報だけを渡す。
           const { id, url, author, handle, text, images, metricCount } = post;
@@ -208,9 +201,6 @@ export function startContentRuntime(
       posts,
       collectedCount: available ? collected.size : 0,
       collectionTruncated: available && truncated,
-      metricCounts,
-      metricSampleCount,
-      metricContextTruncated: available && truncated,
     };
   }
   // 対象メッセージだけPromiseを返し、他の受信者の応答を奪わない。

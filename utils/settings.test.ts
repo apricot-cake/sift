@@ -20,7 +20,6 @@ describe("normalizeSettings", () => {
     });
     expect(Object.keys(settings.siteSettings)).toEqual(["x", "bluesky"]);
     expect(settings.siteSettings.x).toMatchObject({
-      manualMinimum: 234,
       minReactions: 123,
     });
     expect(settings.siteSettings.bluesky).toMatchObject({
@@ -30,26 +29,13 @@ describe("normalizeSettings", () => {
     });
     expect(normalizeSettings(settings)).toEqual(settings);
   });
-  it.each(["x", "bluesky"] as const)(
-    "%s の手動値を候補の適用値と別に保持する",
-    (site) => {
-      const settings = normalizeSettings({
-        siteSettings: {
-          [site]: {
-            manualMinimum: 12345,
-            minCount: 50000,
-            minReactions: 50000,
-          },
-        },
-      });
-      const stored = settingsFor(settings, site);
-      expect(stored.manualMinimum).toBe(12345);
-      expect(stored.minReactions).toBe(50000);
-      expect(settingsFor(normalizeSettings(settings), site).manualMinimum).toBe(
-        12345,
-      );
-    },
-  );
+  it("候補選択用の旧手動値を除外し、適用中の最低値を維持する", () => {
+    const settings = normalizeSettings({
+      siteSettings: { x: { manualMinimum: 234, minReactions: 123 } },
+    });
+    expect(settings.siteSettings.x.minReactions).toBe(123);
+    expect(settings.siteSettings.x).not.toHaveProperty("manualMinimum");
+  });
   it("サイト別の値を自分の範囲へ収める", () => {
     const settings = normalizeSettings({
       siteSettings: {

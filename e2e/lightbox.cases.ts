@@ -90,7 +90,7 @@ export function createLightboxCases(): LiveCase[] {
           const before = await readContext(session, page);
           expect(before.timelineAvailable).toBe(true);
           await assertPageReadOnly(page);
-          expect(before.metricSampleCount).toBeGreaterThan(0);
+          expect(before.collectedCount).toBeGreaterThan(0);
           const photoHref = await photoLink.evaluate((node) =>
             node.getAttribute("href"),
           );
