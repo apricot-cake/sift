@@ -17,7 +17,7 @@ X・Blueskyでイラストを探すための Chrome 拡張機能です。いつ�
 
 [Chrome ウェブストア](https://chromewebstore.google.com/detail/sift/jglehalaegleehefcefnfmmbblgkomeh)からインストールします。
 
-バージョンごとの変更内容は [GitHub Releases](https://github.com/apricot-cake/sift/releases) を参照してください。
+バージョンごとの変更内容は [Releases](https://github.com/apricot-cake/sift/releases) を参照してください。
 
 ## 使い方
 
@@ -36,10 +36,6 @@ X・Blueskyでイラストを探すための Chrome 拡張機能です。いつ�
 
 開発環境の準備、テスト、画面の確認方法は[開発ガイド](docs/CONTRIBUTING.md)を参照してください。
 
-不具合の報告、機能の提案、質問は [GitHub Issues](https://github.com/apricot-cake/sift/issues) で受け付けます。修正はプルリクエストで送れます。
+不具合の報告、機能の提案、質問は [Issues](https://github.com/apricot-cake/sift/issues) で受け付けます。
 
 脆弱性は [非公開フォーム](https://github.com/apricot-cake/sift/security/advisories/new) から報告してください。
-
-## ライセンス
-
-[MIT License](LICENSE)
