@@ -810,9 +810,6 @@ function PostList({
       aria-busy={load.loading}
       data-load-request-count={load.requestCount}
     >
-      <p className="mb-3 mt-0 text-xs leading-5 text-muted-foreground">
-        {t("sidepanelPostInstructions")}
-      </p>
       {truncated && (
         <p
           className="mb-4 text-xs leading-5 text-muted-foreground"

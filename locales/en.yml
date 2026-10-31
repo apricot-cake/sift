@@ -51,7 +51,6 @@ sidepanelSampleScope: "Based on {count} matching posts from the collected posts.
 sidepanelFilterConditions: "Filter conditions"
 sidepanelPostsTitle: "Posts"
 sidepanelPostCount: "{count} matching / {total} collected"
-sidepanelPostInstructions: "Scroll down to load more. The original feed moves during loading and returns afterward."
 sidepanelCollectionLimit: "The collection limit of {count} posts has been reached. Close and reopen the panel to start again from the current list."
 sidepanelNoCollectedPosts: "No posts collected yet. Scroll the original list to load posts."
 sidepanelNoMatchingPosts: "No posts match your filters. Change the filter conditions or scroll the original list to collect more posts."
