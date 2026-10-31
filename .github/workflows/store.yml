@@ -89,7 +89,7 @@ jobs:
     timeout-minutes: 10
     environment:
       name: chrome-web-store
-      url: https://chromewebstore.google.com/detail/sift/jglehalaegleehefcefnfmmbblgkomeh
+      deployment: false
     permissions:
       contents: read
       id-token: write
