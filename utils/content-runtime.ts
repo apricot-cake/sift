@@ -38,7 +38,6 @@ export function startContentRuntime(
   const pageLoader = new PageLoadMore();
   let loading: Promise<LoadMoreResponse> | null = null;
   let loadController: AbortController | null = null;
-  let nextLoadAt = 0;
   let collectionEpoch = 0;
   let blocked: "limited" | "authentication" | null = null;
   function clearCollection(): void {
@@ -75,12 +74,9 @@ export function startContentRuntime(
     if (blocked) return Promise.resolve({ status: blocked, added: 0 });
     if (collected.size >= POST_COLLECTION_LIMIT)
       return Promise.resolve({ status: "limit", added: 0 });
-    if (Date.now() < nextLoadAt)
-      return Promise.resolve({ status: "cooldown", added: 0 });
     const controller = new AbortController();
     const epoch = collectionEpoch;
     loadController = controller;
-    nextLoadAt = Date.now() + 2000;
     loading = pageLoader
       .run({
         adapter: service,
@@ -108,7 +104,6 @@ export function startContentRuntime(
         return response;
       })
       .finally(() => {
-        nextLoadAt = Date.now() + 2000;
         loading = null;
         loadController = null;
       });

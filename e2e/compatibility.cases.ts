@@ -722,7 +722,32 @@ async function categoricalFilter(
   kind: "media" | "reply" | "quote" | "repost",
   task: RunnerTask,
 ) {
-  const before = await observations(page, target);
+  let before = await observations(page, target);
+  if (target.id === "x-pinned-list" && kind === "repost") {
+    session.loadGuard.setContext(target.id, "repost-representative");
+    let steps = 0;
+    while (!before.some((row) => row.repost) && steps < 6) {
+      await assertLivePage(session, page);
+      const viewport = await page.evaluate(() => ({
+        width: innerWidth,
+        height: innerHeight,
+      }));
+      await page.mouse.move(viewport.width / 2, viewport.height / 2);
+      await page.mouse.wheel({ deltaY: viewport.height * 0.8 });
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      before = await observations(page, target);
+      steps += 1;
+    }
+    await assertLivePage(session, page);
+    await evidence(task, "repost-representative", {
+      body: JSON.stringify({ steps, found: before.some((row) => row.repost) }),
+      contentType: "application/json",
+    });
+    expect(
+      before.some((row) => row.repost),
+      "実投稿でリポストの除外効果を確認する",
+    ).toBe(true);
+  }
   expect(before.length, "操作前の投稿が必要です").toBeGreaterThan(0);
   await expect
     .poll(
@@ -1010,11 +1035,20 @@ export function createCompatibilityCases(): LiveCase[] {
             await capturePanelScreenshot(panel, target.site);
             await assertPostOpensInNewTab(session, page, panel);
           }
-          if (target.id === "x-profile" || target.id === "bluesky-profile") {
+          if (
+            target.id === "x-profile" ||
+            target.id === "bluesky-profile" ||
+            target.id === "x-pinned-list"
+          ) {
             session.loadGuard.setContext(target.id, "panel-load-one-batch");
             await evidence(task, "panel-load-one-batch", {
               body: JSON.stringify(
-                await assertPanelLoadsOneBatch(page, panel, target.site),
+                await assertPanelLoadsOneBatch(
+                  page,
+                  panel,
+                  target.site,
+                  target.id === "x-pinned-list" ? "button" : undefined,
+                ),
               ),
               contentType: "application/json",
             });

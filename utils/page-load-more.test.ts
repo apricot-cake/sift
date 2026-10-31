@@ -1,7 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { blueskyAdapter } from "./adapters/bluesky.ts";
 import { xAdapter } from "./adapters/x.ts";
-import { PageLoadMore, pageLoadBlockReason } from "./page-load-more.ts";
+import {
+  PageLoadMore,
+  pageLoadBlockReason,
+  postScrollElement,
+} from "./page-load-more.ts";
 import {
   isLoadMoreRequest,
   isLoadMoreResponse,
@@ -75,7 +79,194 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+describe("投稿のスクロール領域", () => {
+  it("高さが内容に追従するauto祖先を飛ばし、外側のスクロール領域を使う", () => {
+    document.body.innerHTML = `<div id="feed-scroll" style="overflow-y:auto"><div id="layout" style="overflow-y:auto">${post("1")}</div></div>`;
+    const scroller = document.querySelector<HTMLElement>("#feed-scroll");
+    const layout = document.querySelector<HTMLElement>("#layout");
+    const card = xAdapter.getPostCards(document)[0];
+    if (!scroller || !layout || !card) throw Error("投稿の祖先がありません");
+    Object.defineProperties(scroller, {
+      clientHeight: { value: 400 },
+      scrollHeight: { value: 2000 },
+    });
+    Object.defineProperties(layout, {
+      clientHeight: { value: 2000 },
+      scrollHeight: { value: 2000 },
+    });
+    expect(postScrollElement(card)).toBe(scroller);
+  });
+
+  it("スクロールできる内側領域がなければ、文書のスクロールへ戻す", () => {
+    document.body.innerHTML = `<div id="layout" style="overflow-y:auto">${post("1")}</div>`;
+    const layout = document.querySelector<HTMLElement>("#layout");
+    const card = xAdapter.getPostCards(document)[0];
+    if (!layout || !card) throw Error("投稿の祖先がありません");
+    Object.defineProperties(layout, {
+      clientHeight: { value: 2000 },
+      scrollHeight: { value: 2000 },
+    });
+    expect(postScrollElement(card)).toBeNull();
+  });
+});
+
 describe("一覧の1回分の追加読み込み", () => {
+  it("初回移動後にサイトが位置を戻しても、実到達位置から続きを収集する", async () => {
+    vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(
+      function (this: Element) {
+        const top = this.matches('[data-testid="cellInnerDiv"]') ? 120 - y : 20;
+        return {
+          top,
+          bottom: top + 8000,
+          height: 8000,
+          width: 500,
+          left: 0,
+          right: 500,
+          x: 0,
+          y: top,
+          toJSON() {},
+        };
+      },
+    );
+    let first = true;
+    scroll.mockImplementation((options) => {
+      if (first) {
+        first = false;
+        y = Math.min(options.top ?? y, 5000);
+        setTimeout(() => {
+          y = 100;
+        }, 50);
+        return;
+      }
+      y = options.top ?? y;
+      document.body.innerHTML =
+        y > 5000
+          ? Array.from({ length: 21 }, (_, index) =>
+              post(String(index + 1)),
+            ).join("")
+          : post("1");
+    });
+    const result = run();
+    await vi.runAllTimersAsync();
+    expect(await result).toEqual({ status: "loaded", added: 20 });
+    expect(scroll.mock.calls[1]?.[0].top).toBeGreaterThan(5000);
+    expect(scroll.mock.calls[1]?.[0].top).toBeLessThan(
+      scroll.mock.calls[0]?.[0].top ?? 0,
+    );
+    expect(y).toBe(100);
+  });
+
+  it("新規1件では戻らず、段階的なスクロールで次の20件を収集する", async () => {
+    let nextId = 2;
+    const advance = () => {
+      document.body.innerHTML = post("1") + post(String(nextId++));
+    };
+    scroll.mockImplementation((options) => {
+      y = options.top ?? y;
+      if (y > 100) advance();
+      else document.body.innerHTML = post("1");
+    });
+    const result = run();
+    await vi.runAllTimersAsync();
+    expect(await result).toEqual({ status: "loaded", added: 20 });
+    expect(collected.size).toBe(21);
+    expect(nextId).toBe(22);
+    expect(y).toBe(100);
+  });
+
+  it("収集上限まで残り5件なら、20件を待たず上限で止める", async () => {
+    collected = new Set(
+      Array.from({ length: 995 }, (_, index) => String(index + 1)),
+    );
+    let nextId = 996;
+    const advance = () => {
+      document.body.innerHTML = post("1") + post(String(nextId++));
+    };
+    scroll.mockImplementation((options) => {
+      y = options.top ?? y;
+      if (y > 100) advance();
+      else document.body.innerHTML = post("1");
+    });
+    const result = run();
+    await vi.runAllTimersAsync();
+    expect(await result).toEqual({ status: "loaded", added: 5 });
+    expect(collected.size).toBe(1000);
+    expect(nextId).toBe(1001);
+    expect(y).toBe(100);
+  });
+
+  it("終端ではスクロールを連打せず、遅れて描画された投稿を待つ", async () => {
+    scroll.mockImplementation((options) => {
+      y = Math.min(options.top ?? y, 200);
+      document.body.innerHTML = y > 100 ? post("1") + post("2") : post("1");
+    });
+    const result = run();
+    setTimeout(() => {
+      document.body.innerHTML = Array.from({ length: 21 }, (_, index) =>
+        post(String(index + 1)),
+      ).join("");
+    }, 1400);
+    await vi.runAllTimersAsync();
+    expect(await result).toEqual({ status: "loaded", added: 20 });
+    expect(scroll).toHaveBeenCalledTimes(3);
+    expect(y).toBe(100);
+  });
+
+  it("少数だけ増えた後に進捗がなければ、時間内で戻る", async () => {
+    scroll.mockImplementation((options) => {
+      y = options.top ?? y;
+      document.body.innerHTML = y > 100 ? post("1") + post("2") : post("1");
+    });
+    const started = Date.now();
+    const result = run();
+    await vi.runAllTimersAsync();
+    expect(await result).toEqual({ status: "loaded", added: 1 });
+    expect(Date.now() - started).toBeLessThan(6000);
+    expect(y).toBe(100);
+  });
+
+  it("増え続けても時間上限で収集を止め、部分結果を保持する", async () => {
+    let nextId = 2;
+    let nextAt = Date.now();
+    const advance = () => {
+      if (Date.now() < nextAt) return;
+      nextAt = Date.now() + 600;
+      document.body.innerHTML = post("1") + post(String(nextId++));
+    };
+    scroll.mockImplementation((options) => {
+      y = options.top ?? y;
+      if (y > 100) advance();
+      else document.body.innerHTML = post("1");
+    });
+    const started = Date.now();
+    const result = run();
+    await vi.runAllTimersAsync();
+    const response = await result;
+    expect(response.status).toBe("loaded");
+    expect(response.added).toBeGreaterThan(1);
+    expect(response.added).toBeLessThan(20);
+    expect(Date.now() - started).toBeLessThanOrEqual(7400);
+    expect(y).toBe(100);
+  });
+
+  it("20件が揃った後は、位置が安定すれば復元の上限時間を待たない", async () => {
+    scroll.mockImplementation((options) => {
+      y = options.top ?? y;
+      document.body.innerHTML =
+        y > 100
+          ? Array.from({ length: 21 }, (_, index) =>
+              post(String(index + 1)),
+            ).join("")
+          : post("1");
+    });
+    const started = Date.now();
+    const result = run();
+    await vi.runAllTimersAsync();
+    expect(await result).toEqual({ status: "loaded", added: 20 });
+    expect(Date.now() - started).toBeLessThan(1400);
+    expect(y).toBe(100);
+  });
+
   it("戻す前に収集し、仮想DOMから消えても追加投稿を保持する", async () => {
     scroll.mockImplementation((options) => {
       y = typeof options === "object" ? (options.top ?? y) : y;
@@ -87,14 +278,16 @@ describe("一覧の1回分の追加読み込み", () => {
     expect([...collected]).toEqual(["1", "2"]);
     expect(document.querySelectorAll("article")).toHaveLength(1);
     expect(y).toBe(100);
-    expect(scroll).toHaveBeenCalledTimes(2);
+    expect(scroll.mock.calls.at(-1)?.[0].top).toBe(100);
   });
 
-  it("新しい投稿がなくても追加スクロールを繰り返さず、時間上限で戻る", async () => {
+  it("新しい投稿がなければ時間上限で元位置へ戻る", async () => {
+    const started = Date.now();
     const result = run();
     await vi.runAllTimersAsync();
     expect(await result).toEqual({ status: "no-progress", added: 0 });
-    expect(scroll).toHaveBeenCalledTimes(2);
+    expect(Date.now() - started).toBeLessThanOrEqual(7400);
+    expect(scroll.mock.calls.at(-1)?.[0].top).toBe(100);
     expect(y).toBe(100);
   });
 
@@ -136,15 +329,16 @@ describe("一覧の1回分の追加読み込み", () => {
     expect(await result).toEqual({ status: "restore-failed", added: 1 });
   });
 
-  it("一度復元できても、最後の待機中に基準投稿が消えたら成功にしない", async () => {
+  it("復元の安定確認中に基準投稿が消えたら成功にしない", async () => {
     scroll.mockImplementation((options) => {
       y = options.top ?? y;
       document.body.innerHTML = y > 100 ? post("1") + post("2") : post("1");
+      if (y === 100)
+        setTimeout(() => {
+          document.body.innerHTML = "";
+        }, 100);
     });
     const result = run();
-    setTimeout(() => {
-      document.body.innerHTML = "";
-    }, 1300);
     await vi.runAllTimersAsync();
     expect(await result).toEqual({ status: "restore-failed", added: 1 });
   });
@@ -267,7 +461,10 @@ describe("一覧の1回分の追加読み込み", () => {
     document.body.innerHTML = `<div id="feed-scroll" style="overflow-y:auto">${bluePost("one")}</div>`;
     const scroller = document.querySelector<HTMLElement>("#feed-scroll");
     if (!scroller) throw Error("スクロール領域がありません");
-    Object.defineProperty(scroller, "clientHeight", { value: 400 });
+    Object.defineProperties(scroller, {
+      clientHeight: { value: 400 },
+      scrollHeight: { value: 1200 },
+    });
     scroller.scrollTop = 50;
     vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(
       function (this: Element) {
@@ -311,7 +508,7 @@ describe("一覧の1回分の追加読み込み", () => {
     });
     await vi.runAllTimersAsync();
     expect(await result).toEqual({ status: "loaded", added: 1 });
-    expect(innerScroll).toHaveBeenCalledTimes(2);
+    expect(innerScroll.mock.calls.at(-1)?.[0].top).toBe(50);
     expect(scroller.scrollTop).toBe(50);
     expect(scroll).not.toHaveBeenCalled();
   });

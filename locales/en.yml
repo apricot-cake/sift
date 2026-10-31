@@ -72,7 +72,6 @@ sidepanelLoadAuthentication: "Loading stopped because sign-in or verification is
 sidepanelLoadRestoreFailed: "Loading stopped because the original reading position could not be confirmed."
 sidepanelLoadUnsupported: "Loading more is unavailable on this page."
 sidepanelLoadCancelled: "Loading cancelled."
-sidepanelLoadCooldown: "Wait a moment before trying again."
 sidepanelLoadNoProgress: "No new posts were collected. Try loading again to check for more."
 sidepanelLoadRetry: "Try loading again"
 sidepanelLoadCancel: "Cancel loading"

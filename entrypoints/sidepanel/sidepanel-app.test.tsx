@@ -543,6 +543,20 @@ describe("投稿の追加読み込み", () => {
     ).toBe("loaded");
   });
 
+  it("読み込みが完了した直後でも、次のクリックで続きを要求できる", async () => {
+    request = async () => postsContext([post(1)]);
+    respond(async () => ({ status: "loaded", added: 2 }));
+    await mount(false);
+    await clickMore();
+    expect(sent(PANEL_LOAD_MORE)).toHaveLength(1);
+    expect(
+      container.querySelector<HTMLButtonElement>("[data-load-more-posts]")
+        ?.disabled,
+    ).toBe(false);
+    await clickMore();
+    expect(sent(PANEL_LOAD_MORE)).toHaveLength(2);
+  });
+
   it("追加取得で50件を超えても進行・完了状態を残し、取得済みの残りを展開できる", async () => {
     let posts = Array.from({ length: 49 }, (_, index) => post(index + 1));
     request = async () => postsContext(posts);

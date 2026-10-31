@@ -68,7 +68,6 @@ sidepanelLoadAuthentication: "ログインまたは認証が必要なため、�
 sidepanelLoadRestoreFailed: "元の閲覧位置を確認できなかったため、追加読み込みを停止しました。"
 sidepanelLoadUnsupported: "この画面では追加読み込みを利用できません。"
 sidepanelLoadCancelled: "読み込みを中止しました。"
-sidepanelLoadCooldown: "少し待ってから、もう一度お試しください。"
 sidepanelLoadNoProgress: "新しい投稿を取得できませんでした。続きを確認するには、もう一度読み込んでください。"
 sidepanelLoadRetry: "もう一度読み込む"
 sidepanelLoadCancel: "読み込みを中止"

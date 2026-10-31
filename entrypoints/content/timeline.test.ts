@@ -66,14 +66,16 @@ describe("追加読み込みの受け付け", () => {
     return response;
   }
 
-  it("同じ読み込みが重なっても実行は1回で、完了直後の連続取得も止める", async () => {
+  it("同時要求は1回にまとめ、完了直後の次の明示要求を受け付ける", async () => {
+    vi.spyOn(Date, "now").mockReturnValue(10000);
     const pending = Promise.withResolvers<{
       status: "loaded";
       added: number;
     }>();
     const load = vi
       .spyOn(PageLoadMore.prototype, "run")
-      .mockReturnValue(pending.promise);
+      .mockReturnValueOnce(pending.promise)
+      .mockResolvedValue({ status: "loaded", added: 2 });
     runtime = startContentRuntime(undefined, xAdapter);
     const page = await context();
     const first = request(page);
@@ -82,8 +84,8 @@ describe("追加読み込みの受け付け", () => {
     pending.resolve({ status: "loaded", added: 1 });
     expect(await first).toEqual({ status: "loaded", added: 1 });
     expect(await second).toEqual({ status: "loaded", added: 1 });
-    expect(await request(page)).toEqual({ status: "cooldown", added: 0 });
-    expect(load).toHaveBeenCalledTimes(1);
+    expect(await request(page)).toEqual({ status: "loaded", added: 2 });
+    expect(load).toHaveBeenCalledTimes(2);
   });
 
   it("元の一覧から移動した後の古い追加要求ではスクロールしない", async () => {

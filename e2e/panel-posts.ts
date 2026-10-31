@@ -252,6 +252,7 @@ export async function assertPanelLoadsOneBatch(
   source: Page,
   panel: Page,
   site: "x" | "bluesky",
+  trigger: "panel-scroll" | "button" = site === "x" ? "panel-scroll" : "button",
 ) {
   await selectPanelTab(panel, "posts");
   const selector =
@@ -343,7 +344,7 @@ export async function assertPanelLoadsOneBatch(
   );
   expect(beforeRequests, "明示操作前に追加取得を開始していないこと").toBe(0);
 
-  if (site === "x") {
+  if (trigger === "panel-scroll") {
     // 前のクリックの操作意図を残さず、拡張パネルだけを末尾60px前へ準備する。
     await new Promise((resolve) => setTimeout(resolve, 850));
     const statusBefore = await panel.$$eval(
@@ -456,7 +457,7 @@ export async function assertPanelLoadsOneBatch(
     fullPage: false,
   });
   return {
-    trigger: site === "x" ? "panel-scroll" : "button",
+    trigger,
     status: loaded.status,
     added: loaded.added,
     requestCount: loaded.requestCount,

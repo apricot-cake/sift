@@ -796,13 +796,11 @@ function PostList({
                 ? t("sidepanelLoadUnsupported")
                 : load.result?.status === "cancelled"
                   ? t("sidepanelLoadCancelled")
-                  : load.result?.status === "cooldown"
-                    ? t("sidepanelLoadCooldown")
-                    : load.result?.status === "no-progress"
-                      ? t("sidepanelLoadNoProgress")
-                      : load.result?.status === "failed"
-                        ? t("sidepanelLoadFailed")
-                        : "";
+                  : load.result?.status === "no-progress"
+                    ? t("sidepanelLoadNoProgress")
+                    : load.result?.status === "failed"
+                      ? t("sidepanelLoadFailed")
+                      : "";
   return (
     <section
       ref={section}

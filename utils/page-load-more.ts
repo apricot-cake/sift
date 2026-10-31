@@ -1,9 +1,13 @@
 import type { ServiceAdapter } from "./adapters/types.ts";
 import type { LoadMoreResponse, LoadMoreStatus } from "./panel-load-more.ts";
+import { POST_COLLECTION_LIMIT } from "./panel-post.ts";
 
 const POLL_MS = 200;
 export const PAGE_LOAD_TIMEOUT_MS = 6000;
+const TARGET_ADDED_POSTS = 20;
+const NO_PROGRESS_MS = 2000;
 const RESTORE_TIMEOUT_MS = 1400;
+const RESTORE_STABLE_SAMPLES = 3;
 
 function wait(ms: number, signal: AbortSignal): Promise<void> {
   if (signal.aborted) return Promise.resolve();
@@ -86,7 +90,8 @@ export function postScrollElement(card: Element): HTMLElement | null {
   ) {
     if (
       /^(auto|scroll)$/.test(getComputedStyle(parent).overflowY) &&
-      parent.clientHeight > 0
+      parent.clientHeight > 0 &&
+      parent.scrollHeight > parent.clientHeight
     )
       return parent;
     parent = parent.parentElement;
@@ -102,7 +107,7 @@ interface PageLoadOptions {
   readonly collect: () => number;
 }
 
-/** 1回の明示操作につき1回だけ先へ進み、通常の閲覧位置へ戻す。 */
+/** 明示操作ごとに次のまとまりを時間内で収集し、通常の閲覧位置へ戻す。 */
 export class PageLoadMore {
   private furthest = 0;
   private scrollElement: HTMLElement | null = null;
@@ -125,6 +130,7 @@ export class PageLoadMore {
     const block = pageLoadBlockReason(document, adapter.settingsKey);
     if (block) return { status: block, added: 0 };
     const before = collect();
+    if (before >= POST_COLLECTION_LIMIT) return { status: "limit", added: 0 };
     const cards = adapter.getPostCards(document);
     if (!cards.length) return { status: "unsupported", added: 0 };
     const element = postScrollElement(cards[0] as Element);
@@ -198,17 +204,43 @@ export class PageLoadMore {
       // 下端でスクロールが制限されたとき、未到達の目標値を蓄積しない。
       this.furthest = getY();
       const deadline = Date.now() + PAGE_LOAD_TIMEOUT_MS;
+      const goal = Math.min(before + TARGET_ADDED_POSTS, POST_COLLECTION_LIMIT);
+      const contentHeight = () =>
+        (element ?? document.scrollingElement ?? document.documentElement)
+          .scrollHeight;
+      let heightAtStep = contentHeight();
+      let canAdvance = getY() > originalY + 1;
+      let nextStepAt = Date.now() + POLL_MS;
+      let lastProgressAt = Date.now();
       while (Date.now() < deadline && !stop()) {
         const reason = pageLoadBlockReason(document, adapter.settingsKey);
         if (reason) {
           status = reason;
           break;
         }
-        total = collect();
-        if (total > before) {
+        const current = collect();
+        if (current > total) lastProgressAt = Date.now();
+        total = current;
+        if (total >= goal) {
           status = "loaded";
           break;
         }
+        if (total > before && Date.now() - lastProgressAt >= NO_PROGRESS_MS)
+          break;
+        if (
+          Date.now() >= nextStepAt &&
+          (canAdvance ||
+            getY() + 1 < this.furthest ||
+            contentHeight() > heightAtStep + 1)
+        ) {
+          const previousY = getY();
+          scrollTo(Math.max(previousY, this.furthest) + viewportHeight * 0.8);
+          canAdvance = getY() > previousY + 1;
+          heightAtStep = contentHeight();
+          this.furthest = Math.max(this.furthest, getY());
+          nextStepAt = Date.now() + POLL_MS;
+        }
+        // 終端では同じスクロールを繰り返さず、サイトの遅延描画を待つ。
         await wait(POLL_MS, signal);
       }
       if (!isCurrent() || interaction.signal.aborted)
@@ -248,12 +280,14 @@ export class PageLoadMore {
         !interaction.signal.aborted
       ) {
         stableSamples = checkRestored(true) ? stableSamples + 1 : 0;
+        if (stableSamples >= RESTORE_STABLE_SAMPLES) break;
         await wait(POLL_MS, interaction.signal);
       }
       if (stop())
         return { status: "cancelled", added: Math.max(0, total - before) };
       // 待機の最終フレームで基準投稿が消えた場合も、以前の成功を流用しない。
-      const restored = stableSamples >= 2 && checkRestored(false);
+      const restored =
+        stableSamples >= RESTORE_STABLE_SAMPLES && checkRestored(false);
       return {
         status:
           !restored && (status === "loaded" || status === "no-progress")

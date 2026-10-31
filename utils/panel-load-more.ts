@@ -14,7 +14,6 @@ export type LoadMoreStatus =
   | "authentication"
   | "cancelled"
   | "unsupported"
-  | "cooldown"
   | "limit"
   | "failed"
   | "restore-failed";
@@ -48,7 +47,6 @@ export function isLoadMoreResponse(value: unknown): value is LoadMoreResponse {
       "authentication",
       "cancelled",
       "unsupported",
-      "cooldown",
       "limit",
       "failed",
       "restore-failed",
