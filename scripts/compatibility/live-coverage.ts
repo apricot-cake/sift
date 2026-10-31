@@ -92,7 +92,7 @@ export function assertLiveCoverage(
         "filtered",
         "navigation-closed-cleared",
         "returned-inactive",
-        "reopened-reset",
+        "reopened-conditions-restored",
       ])
     )
       throw new Error(

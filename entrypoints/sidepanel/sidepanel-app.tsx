@@ -10,14 +10,7 @@ import {
   Quote,
   Repeat2,
 } from "lucide-react";
-import {
-  useCallback,
-  useEffect,
-  useId,
-  useLayoutEffect,
-  useRef,
-  useState,
-} from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { t } from "../../utils/i18n.ts";
 import { checkPanelBuild } from "../../utils/local-build-reload.ts";
 import { metricThresholdSuggestions } from "../../utils/metric-threshold-suggestions.ts";
@@ -77,7 +70,6 @@ export function SidepanelApp(): React.JSX.Element {
     return settingsItem.watch(updateSettings);
   }, []);
 
-  const clearManualMinimums = useCallback(() => setManualSites({}), []);
   const {
     activeContext,
     activeSite,
@@ -86,10 +78,7 @@ export function SidepanelApp(): React.JSX.Element {
     runPanelAction,
     captureConnection,
     refreshContext,
-  } = usePanelConnection({
-    onSettingsInitialized: setSettings,
-    onMinimumReset: clearManualMinimums,
-  });
+  } = usePanelConnection();
   const postLoading = usePostLoadMore(activeContext, () =>
     refreshContext(captureConnection()),
   );

@@ -299,12 +299,6 @@ it("開いているパネルで開いた通知が再発しなくてもアクシ�
   expect(api.runtime.sendMessage).toHaveBeenCalledWith({
     type: "sift:sidepanel-set-panel-tab",
     tabId: 7,
-    resetMinimum: false,
-  });
-  expect(api.runtime.sendMessage).not.toHaveBeenCalledWith({
-    type: "sift:sidepanel-set-panel-tab",
-    tabId: 7,
-    resetMinimum: true,
   });
   expect(stored["sift:sidepanel-page:7"]).toMatchObject({
     url: "https://x.com/NASA",
@@ -398,7 +392,6 @@ it("worker再起動でメモリが空でも保存した所有記録からアク�
   expect(api.runtime.sendMessage).toHaveBeenCalledWith({
     type: "sift:sidepanel-set-panel-tab",
     tabId: 7,
-    resetMinimum: false,
   });
   expect(stored["sift:sidepanel-page:7"]).toMatchObject({
     windowId: 1,
@@ -549,36 +542,32 @@ it.each([
   "/sidepanel.html",
   "sidepanel.html?tabId=7",
   "/sidepanel.html?tabId=7",
-])(
-  "開いた通知のパス %s で対象タブを保存し復帰時の最低値は初期化しない",
-  async (path) => {
-    trackedPage();
-    api.sidePanel.onOpened.addListener.mock.calls[0]?.[0]({
-      path,
+])("開いた通知のパス %s で対象タブを保存して接続先を通知する", async (path) => {
+  trackedPage();
+  api.sidePanel.onOpened.addListener.mock.calls[0]?.[0]({
+    path,
+    tabId: 7,
+    windowId: 1,
+  });
+  await vi.waitFor(() =>
+    expect(api.runtime.sendMessage).toHaveBeenCalledWith({
+      type: "sift:sidepanel-set-panel-tab",
       tabId: 7,
+    }),
+  );
+  expect(api.storage.session.set).toHaveBeenCalledWith({
+    "sift:sidepanel-page:7": expect.objectContaining({
+      url: "https://x.com/NASA",
       windowId: 1,
-    });
-    await vi.waitFor(() =>
-      expect(api.runtime.sendMessage).toHaveBeenCalledWith({
-        type: "sift:sidepanel-set-panel-tab",
-        tabId: 7,
-        resetMinimum: false,
-      }),
-    );
-    expect(api.storage.session.set).toHaveBeenCalledWith({
-      "sift:sidepanel-page:7": expect.objectContaining({
-        url: "https://x.com/NASA",
-        windowId: 1,
-      }),
-    });
-  },
-);
+    }),
+  });
+});
 
 it.each([
   { path: "/other.html", tabId: 7 },
   { path: "/nested/sidepanel.html", tabId: 7 },
   { path: "/sidepanel.html" },
-])("別パネルやタブのない通知は初期化しない: %j", (panel) => {
+])("別パネルやタブのない通知では所有記録を変更しない: %j", (panel) => {
   api.sidePanel.onOpened.addListener.mock.calls[0]?.[0](panel);
   expect(api.storage.session.set).not.toHaveBeenCalled();
   expect(api.runtime.sendMessage).not.toHaveBeenCalled();
@@ -614,7 +603,6 @@ it("対応サイトは開いてから注入する", async () => {
   expect(api.runtime.sendMessage).toHaveBeenCalledWith({
     type: "sift:sidepanel-set-panel-tab",
     tabId: 7,
-    resetMinimum: false,
   });
 });
 
@@ -686,7 +674,6 @@ it("閉じた記録の削除完了を待ってから新しい所有記録を保�
   expect(api.runtime.sendMessage).toHaveBeenCalledWith({
     type: "sift:sidepanel-set-panel-tab",
     tabId: 7,
-    resetMinimum: true,
   });
   expect(
     api.runtime.sendMessage.mock.invocationCallOrder[0] ?? Infinity,
@@ -918,7 +905,7 @@ it("更新確認を待つ間もユーザー操作内でパネルを開き、注�
   );
 });
 
-it("パネル起動時に更新を検知したら旧ビルドの注入と初期化通知を行わない", async () => {
+it("パネル起動時に更新を検知したら旧ビルドの注入と接続通知を行わない", async () => {
   vi.stubGlobal("__SIFT_LOCAL_DEPLOY__", true);
   vi.stubGlobal("__SIFT_BUILD_ID__", "running-build");
   checkLocalBuild.mockResolvedValue(false);
@@ -977,7 +964,7 @@ it("開いた通知の更新確認中にタブが閉じた場合も通知を破�
 });
 
 it.each([{ tabId: 7, windowId: 1 }])(
-  "アクションの更新確認中に閉じたら注入と初期化通知を再開しない: %j",
+  "アクションの更新確認中に閉じたら注入と接続通知を再開しない: %j",
   async (closedPanel) => {
     vi.stubGlobal("__SIFT_LOCAL_DEPLOY__", true);
     vi.stubGlobal("__SIFT_BUILD_ID__", "running-build");
@@ -1084,7 +1071,6 @@ it("遅れた別サイト遷移の判定で、再接続して開いたパネル�
     expect(api.runtime.sendMessage).toHaveBeenCalledWith({
       type: "sift:sidepanel-set-panel-tab",
       tabId: 7,
-      resetMinimum: true,
     }),
   );
   pending.resolve(nextTab);

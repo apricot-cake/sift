@@ -50,14 +50,6 @@ describe("抽出の操作入口", () => {
       );
     }
   });
-  it("アクションで開き直した場合は最低値の選択を初期化する", () => {
-    const panel = readPanelSource();
-    const background = readEntrypoint("entrypoints/background.ts");
-    expect(background).toContain("resetMinimum: !restore");
-    expect(panel).toMatch(
-      /if \(message.resetMinimum === true\) \{\s*initializedMinimums.current.clear\(\);\s*onMinimumReset\(\)/,
-    );
-  });
   it("候補の選択は値と最低値トグルを同時に更新する", () => {
     const sidepanel = readPanelSource();
     expect(sidepanel).toMatch(

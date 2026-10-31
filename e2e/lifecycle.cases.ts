@@ -3,6 +3,7 @@ import { expect } from "vitest";
 import { rethrowWithDiagnostics } from "../scripts/compatibility/failure-diagnostics.ts";
 import { selectPartialChoice } from "../scripts/compatibility/filter-choice.ts";
 import { parseMetric } from "../utils/filter-core.ts";
+import type { ReactionSiteSettings } from "../utils/settings.ts";
 import {
   aria,
   element,
@@ -15,6 +16,7 @@ import { lifecycleCases } from "./cases.ts";
 import {
   acquireCasePage,
   assertLivePage,
+  clearSiteConditions,
   closePanel,
   completeInitialLoad,
   observeAutomaticPanelClose,
@@ -59,6 +61,7 @@ export function createLifecycleCases(): LiveCase[] {
         let healthy = false;
         let cleanupError: unknown;
         try {
+          await clearSiteConditions(session, target.site);
           await page.bringToFront();
           session.loadGuard.setContext(target.id, "navigate");
           if (!reused)
@@ -204,6 +207,15 @@ export function createLifecycleCases(): LiveCase[] {
             })
             .toBe(true);
           await assertPageReadOnly(page);
+          const readConditions = () =>
+            session.api.evaluate(
+              `(async () => (await chrome.storage.sync.get('settings')).settings.siteSettings[${JSON.stringify(target.site)}])()`,
+            );
+          await expect
+            .poll(readConditions)
+            .toMatchObject({ minReactionsEnabled: true });
+          const savedConditions =
+            (await readConditions()) as ReactionSiteSettings;
           const closedWidth = await page.evaluate(() => innerWidth);
           const assertAutomaticClose = await observeAutomaticPanelClose(
             session,
@@ -316,18 +328,41 @@ export function createLifecycleCases(): LiveCase[] {
           await expect
             .poll(() =>
               panel.$eval(
-                `[data-minimum-picker] >>> ${aria("combobox")}`,
-                (node) => (node.textContent ?? "").trim(),
+                "[data-minimum-group]",
+                (node, expected) => {
+                  const input = node.querySelector<HTMLInputElement>(
+                    "[data-custom-minimum] input",
+                  );
+                  if (input) return Number(input.value) === expected;
+                  const picker = node
+                    .querySelector('[role="combobox"]')
+                    ?.cloneNode(true) as Element | undefined;
+                  picker
+                    ?.querySelectorAll("[data-choice-count]")
+                    .forEach((count) => {
+                      count.remove();
+                    });
+                  const label = picker?.textContent?.trim() ?? "";
+                  return (
+                    label ===
+                    new Intl.NumberFormat(undefined, {
+                      notation: "compact",
+                      maximumFractionDigits: 1,
+                    }).format(expected)
+                  );
+                },
+                savedConditions.minReactions,
               ),
             )
-            .toContain("指定なし");
+            .toBe(true);
+          await expect.poll(readConditions).toEqual(savedConditions);
           await evidence(task, "lifecycle", {
             body: JSON.stringify({
               stages: [
                 "filtered",
                 "navigation-closed-cleared",
                 "returned-inactive",
-                "reopened-reset",
+                "reopened-conditions-restored",
               ],
             }),
             contentType: "application/json",

@@ -14,6 +14,7 @@ import {
 import { launchDevBrowser } from "../scripts/managed-dev-browser.ts";
 import { isOwnedPanelEvent, isOwnedPanelUrl } from "../scripts/panel-target.ts";
 import type { FilterContextResponse } from "../utils/filter-context.ts";
+import type { Settings } from "../utils/settings.ts";
 import { evidence } from "./browser-queries.ts";
 
 // 関数本体は拡張機能のrendererで評価される。Node側にはグローバルを追加しない。
@@ -97,6 +98,36 @@ export async function connectLive(): Promise<LiveSession> {
     await browser.close();
     throw error;
   }
+}
+
+/** 条件解除は検証準備として明示し、製品の起動動作には依存しない。 */
+export async function clearSiteConditions(
+  session: LiveSession,
+  site: "x" | "bluesky",
+) {
+  await session.api.evaluate(async (site) => {
+    const stored = await chrome.storage.sync.get("settings");
+    const settings = (stored.settings ?? {
+      siteSettings: {},
+    }) as Partial<Settings>;
+    const previous = settings.siteSettings?.[site] ?? {};
+    const cleared = {
+      ...previous,
+      minReactionsEnabled: false,
+      mediaEnabled: false,
+      mediaMode: "any",
+      hideReplies: false,
+      hideQuotes: false,
+      hideReposts: false,
+    };
+    if (JSON.stringify(previous) !== JSON.stringify(cleared))
+      await chrome.storage.sync.set({
+        settings: {
+          ...settings,
+          siteSettings: { ...settings.siteSettings, [site]: cleared },
+        },
+      });
+  }, site);
 }
 
 export async function finishLive(session: LiveSession) {

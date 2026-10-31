@@ -157,7 +157,7 @@ export default defineBackground(() => {
     ]);
     if (!isCurrent()) return;
 
-    // 復帰時には元の一覧と条件を保つ。閉じた後の再起動だけを初期化する。
+    // 復帰時には元の一覧を引き継ぐ。保存済みの絞り込み条件は変更しない。
     const previous = restore
       ? (stored[panelPageKey(tabId)] as PanelPage | undefined)
       : undefined;
@@ -171,13 +171,11 @@ export default defineBackground(() => {
       [panelPageKey(tabId)]: opening,
     });
     if (!isCurrent()) return;
-    // 新しいパネル自身が初期値を設定する。既存ビューを閉じて再開した場合だけ、
-    // 注入や応答待ちより先に初期化を通知する。復帰や遅い応答で選択値を戻さない。
+    // 注入や応答待ちより先に、パネルへ接続先を通知する。
     await browser.runtime
       .sendMessage({
         type: SIDE_PANEL_CONTROL.setPanelTab,
         tabId,
-        resetMinimum: !restore,
       })
       .catch(() => {});
     if (!isCurrent()) return;

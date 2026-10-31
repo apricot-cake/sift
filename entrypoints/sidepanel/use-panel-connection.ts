@@ -7,14 +7,7 @@ import {
 } from "../../utils/filter-context.ts";
 import { checkPanelBuild } from "../../utils/local-build-reload.ts";
 import { isKnownUnsupportedSite } from "../../utils/panel-connection.ts";
-import {
-  normalizeSettings,
-  type Settings,
-  type SiteSettingsKey,
-  settingsFor,
-  withSiteSettings,
-} from "../../utils/settings.ts";
-import { settingsItem } from "../../utils/settings-storage.ts";
+import type { SiteSettingsKey } from "../../utils/settings.ts";
 import {
   isSidePanelTabRequest,
   SIDE_PANEL_CONTROL,
@@ -32,11 +25,6 @@ interface ConnectionSnapshot {
   page: ConnectedPage | null;
 }
 
-interface PanelConnectionOptions {
-  onSettingsInitialized: (settings: Settings) => void;
-  onMinimumReset: () => void;
-}
-
 async function readFilterContext(
   tabId: number,
 ): Promise<FilterContextResponse | null> {
@@ -47,10 +35,7 @@ async function readFilterContext(
 }
 
 /** 所有タブへの接続、更新の購読、遅れた応答の破棄を管理する。 */
-export function usePanelConnection({
-  onSettingsInitialized,
-  onMinimumReset,
-}: PanelConnectionOptions) {
+export function usePanelConnection() {
   const [activeContext, setActiveContext] =
     useState<FilterContextResponse | null>(null);
   const [knownUnsupportedSite, setKnownUnsupportedSite] = useState(false);
@@ -59,7 +44,6 @@ export function usePanelConnection({
   const connectionEpoch = useRef(0);
   const panelMounted = useRef(true);
   const panelTabId = useRef(sidePanelTabIdFromUrl(location.href));
-  const initializedMinimums = useRef(new Set<SiteSettingsKey>());
   const refresh = useRef<() => Promise<void>>(async () => {});
 
   const runPanelAction = (action: () => void): void => {
@@ -84,7 +68,6 @@ export function usePanelConnection({
   }, []);
 
   useEffect(() => {
-    // 初回の設定初期化も、更新確認が終わるまで待つ。
     // 定期的なページ情報取得では Native Host へ問い合わせない。
     const openingBuild = checkPanelBuild();
     let refreshGeneration = 0;
@@ -168,27 +151,6 @@ export function usePanelConnection({
           tab?.id !== undefined && context?.timelineAvailable
             ? { tabId: tab.id, pageKey: context.pageKey, url: tab.url }
             : null;
-        if (
-          context !== null &&
-          !initializedMinimums.current.has(context.site)
-        ) {
-          try {
-            const stored = normalizeSettings(await settingsItem.getValue());
-            if (!(await isCurrentTab())) return;
-            const siteSettings = settingsFor(stored, context.site);
-            const next = withSiteSettings(stored, context.site, {
-              ...siteSettings,
-              minReactionsEnabled: false,
-            });
-            initializedMinimums.current.add(context.site);
-            await settingsItem.setValue(next);
-            if (!(await isCurrentTab())) return;
-            onSettingsInitialized(next);
-          } catch (error) {
-            if (isCurrent()) initializedMinimums.current.delete(context.site);
-            throw error;
-          }
-        }
         activePageRef.current = nextPage;
         setActiveContext(context);
         const site = context?.site ?? null;
@@ -221,10 +183,6 @@ export function usePanelConnection({
       ) {
         return;
       }
-      if (message.resetMinimum === true) {
-        initializedMinimums.current.clear();
-        onMinimumReset();
-      }
       void refreshActiveHost(true);
     };
     void refreshActiveHost(true);
@@ -246,7 +204,7 @@ export function usePanelConnection({
       document.removeEventListener("visibilitychange", handleVisibility);
       window.clearInterval(contextTimer);
     };
-  }, [onSettingsInitialized, onMinimumReset]);
+  }, []);
 
   const captureConnection = (): ConnectionSnapshot => ({
     epoch: connectionEpoch.current,

@@ -30,6 +30,7 @@ import {
 import {
   acquireCasePage,
   assertLivePage,
+  clearSiteConditions,
   closePanel,
   completeInitialLoad,
   type LiveSession,
@@ -874,16 +875,8 @@ export function createCompatibilityCases(): LiveCase[] {
         let healthy = false;
         try {
           // ケース間で条件を解除し、最初のパネル一覧を実投稿と照合する。
-          // UIからの適用・解除と起動後の「指定なし」確認は、この後で個別に行う。
-          await session.api.evaluate(`(async (site) => {
-          const stored = await chrome.storage.sync.get('settings');
-          const settings = stored.settings ?? {siteSettings:{}};
-          const previous = settings.siteSettings?.[site] ?? {};
-          const cleared = {...previous,minReactionsEnabled:false,mediaEnabled:false,mediaMode:'any',hideReplies:false,hideQuotes:false,hideReposts:false};
-          if(JSON.stringify(previous) !== JSON.stringify(cleared)) {
-            await chrome.storage.sync.set({settings:{...settings,siteSettings:{...settings.siteSettings,[site]:cleared}}});
-          }
-        })(${JSON.stringify(target.site)})`);
+          // UIからの適用・解除は、この後で個別に行う。
+          await clearSiteConditions(session, target.site);
           await page.bringToFront();
           session.loadGuard.setContext(target.id, "navigate");
           await navigate(session, page, target, task, reused);

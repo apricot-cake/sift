@@ -1059,6 +1059,139 @@ describe("投稿の追加読み込み", () => {
   });
 });
 
+describe("サイト別条件の記憶", () => {
+  const saved: Settings = {
+    siteSettings: {
+      x: {
+        ...defaults.siteSettings.x,
+        minReactionsEnabled: true,
+        minReactions: 321,
+        manualMinimum: 321,
+        mediaEnabled: true,
+        mediaMode: "images",
+        hideReplies: true,
+        hideQuotes: false,
+        hideReposts: false,
+      },
+      bluesky: {
+        ...defaults.siteSettings.bluesky,
+        minReactionsEnabled: true,
+        minReactions: 654,
+        mediaEnabled: true,
+        mediaMode: "video",
+        hideReplies: false,
+        hideQuotes: true,
+        hideReposts: true,
+      },
+    },
+  };
+  function expectSavedConditions(site: "x" | "bluesky") {
+    const conditions = saved.siteSettings[site];
+    expect(
+      container.querySelector('[data-minimum-picker] [role="combobox"]')
+        ?.textContent,
+    ).toContain(String(conditions.minReactions));
+    expect(
+      container.querySelector(
+        `[role="combobox"][aria-label="${t("optionsMedia")}"]`,
+      )?.textContent,
+    ).toBe(t(site === "x" ? "optionsMediaImages" : "optionsMediaVideo"));
+    for (const [label, enabled] of [
+      ["optionsHideReplies", conditions.hideReplies],
+      ["optionsHideQuotes", conditions.hideQuotes],
+      ["optionsHideReposts", conditions.hideReposts],
+    ] as const)
+      expect(
+        container
+          .querySelector(`[role="switch"][aria-label="${t(label)}"]`)
+          ?.getAttribute("aria-checked"),
+      ).toBe(String(enabled));
+    expect(writes).toHaveLength(0);
+  }
+
+  it("保存済みの最低いいね数・種別・除外条件を開き直しや別タブ起動でも維持する", async () => {
+    vi.mocked(settingsItem.getValue).mockResolvedValue(saved);
+    await mount();
+    expectSavedConditions("x");
+    await act(async () => root.unmount());
+    root = createRoot(container);
+    await mount();
+    expectSavedConditions("x");
+    await act(async () => {
+      await fakeBrowser.runtime.onMessage.trigger(
+        { type: SIDE_PANEL_CONTROL.setPanelTab, tabId: 1 },
+        {},
+        () => {},
+      );
+    });
+    await flush();
+    expectSavedConditions("x");
+    await act(async () => root.unmount());
+    root = createRoot(container);
+    history.replaceState(null, "", "/sidepanel.html?tabId=2");
+    tab = { id: 2, url: "https://x.com/another" };
+    await mount();
+    expectSavedConditions("x");
+  });
+
+  it("同じタブでサイトを往復しても、それぞれの保存条件を独立して復元する", async () => {
+    vi.mocked(settingsItem.getValue).mockResolvedValue(saved);
+    await mount();
+    expectSavedConditions("x");
+    for (const site of ["bluesky", "x"] as const) {
+      tab.url =
+        site === "x"
+          ? "https://x.com/another"
+          : "https://bsky.app/profile/example.test";
+      request = async () => context(site);
+      await act(async () => {
+        await fakeBrowser.tabs.onUpdated.trigger(1, { url: tab.url }, {
+          ...tab,
+        } as never);
+      });
+      await flush();
+      expectSavedConditions(site);
+    }
+  });
+
+  it("コンテンツ処理への再接続後も保存済み条件を維持する", async () => {
+    vi.mocked(settingsItem.getValue).mockResolvedValue(saved);
+    request = async () => null;
+    const reconnect = vi
+      .spyOn(fakeBrowser.runtime, "sendMessage")
+      .mockImplementation(async (message) => {
+        if (
+          (message as { type?: string }).type === SIDE_PANEL_CONTROL.connectTab
+        )
+          request = async () => context("x");
+        return undefined;
+      });
+    await mount();
+    expect(reconnect).toHaveBeenCalledWith({
+      type: SIDE_PANEL_CONTROL.connectTab,
+      tabId: 1,
+    });
+    expectSavedConditions("x");
+  });
+
+  it("明示的なリセットは現在のサイトだけを既定値に戻す", async () => {
+    vi.mocked(settingsItem.getValue).mockResolvedValue(saved);
+    await mount();
+    await act(async () =>
+      container.querySelector<HTMLButtonElement>("footer button")?.click(),
+    );
+    const dialog = container.querySelector<HTMLDialogElement>("dialog");
+    expect(dialog?.open).toBe(true);
+    await act(async () =>
+      dialog?.querySelector<HTMLButtonElement>("button:last-child")?.click(),
+    );
+    await flush();
+    expect(writes).toHaveLength(1);
+    expect(writes[0]?.siteSettings.x).toEqual(defaults.siteSettings.x);
+    expect(writes[0]?.siteSettings.bluesky).toEqual(saved.siteSettings.bluesky);
+  });
+});
+
 describe("接続先と非同期応答", () => {
   it("開くときに一度確認し、ページ情報の定期取得では確認しない", async () => {
     await mount();
@@ -1067,7 +1200,7 @@ describe("接続先と非同期応答", () => {
     expect(checkPanelBuild).toHaveBeenCalledOnce();
   });
 
-  it("起動時に新版を検知したら投稿の取得や設定の初期化をしない", async () => {
+  it("起動時に新版を検知したら設定を書き換えない", async () => {
     vi.mocked(checkPanelBuild).mockResolvedValue(false);
     await mount();
     expect(writes).toHaveLength(0);
@@ -1105,9 +1238,9 @@ describe("接続先と非同期応答", () => {
     expect(checkPanelBuild).toHaveBeenCalledTimes(3);
   });
 
-  it("別タブへ引き継がず、元のタブへ戻っても最低値を初期化し直さない", async () => {
+  it("別タブへ引き継がず、元のタブへ戻っても保存済みの条件を書き換えない", async () => {
     await mount();
-    expect(writes).toHaveLength(1);
+    expect(writes).toHaveLength(0);
     vi.mocked(fakeBrowser.tabs.sendMessage).mockClear();
     tab = { id: 2, url: "https://x.com/example" };
     await fakeBrowser.tabs.onActivated.trigger({ tabId: 2, windowId: 1 });
@@ -1119,21 +1252,21 @@ describe("接続先と非同期応答", () => {
     tab = { id: 1, url: "https://x.com/a" };
     await fakeBrowser.tabs.onActivated.trigger({ tabId: 1, windowId: 1 });
     await flush();
-    expect(writes).toHaveLength(1);
+    expect(writes).toHaveLength(0);
     expect(fakeBrowser.tabs.sendMessage).toHaveBeenCalledWith(1, {
       type: FILTER_CONTEXT_REQUEST,
     });
   });
 
-  it("別タブのパネル起動通知で接続先や最低値を変更しない", async () => {
+  it("別タブのパネル起動通知で接続先や保存条件を変更しない", async () => {
     await mount();
     await fakeBrowser.runtime.onMessage.trigger(
-      { type: "sift:sidepanel-set-panel-tab", tabId: 2, resetMinimum: true },
+      { type: "sift:sidepanel-set-panel-tab", tabId: 2 },
       {},
       () => {},
     );
     await flush();
-    expect(writes).toHaveLength(1);
+    expect(writes).toHaveLength(0);
     expect(container.querySelector("[data-minimum-group]")).not.toBeNull();
   });
   it.each(["x", "bluesky"] as const)(
@@ -1184,14 +1317,14 @@ describe("接続先と非同期応答", () => {
     expect(read).toHaveBeenCalledTimes(1);
     slow.resolve(context("x"));
     await flush();
-    expect(writes).toHaveLength(1);
+    expect(writes).toHaveLength(0);
     expect(
       container
         .querySelector("[data-sift-site]")
         ?.getAttribute("data-sift-site"),
     ).toBe("x");
   });
-  it("タブ変更後の古い応答は投稿表示や設定の初期化に使わない", async () => {
+  it("タブ変更後の古い応答は投稿表示に使わず、設定を書き換えない", async () => {
     const old = deferred<FilterContextResponse>();
     request = (id) => (id === 1 ? old.promise : Promise.resolve(context("x")));
     await mount();
@@ -1211,20 +1344,6 @@ describe("接続先と非同期応答", () => {
     await mount();
     tab.url = "https://x.com/example";
     old.resolve(context("x"));
-    await flush();
-    expect(writes).toHaveLength(0);
-  });
-  it("設定の取得中に接続先が変わっても古いサイトを初期化しない", async () => {
-    const oldSettings = deferred<Settings>();
-    vi.mocked(settingsItem.getValue)
-      .mockResolvedValueOnce(defaults)
-      .mockImplementationOnce(() => oldSettings.promise);
-    await mount();
-    tab = { id: 2, url: "https://x.com/example" };
-    request = async () => context("x");
-    await fakeBrowser.tabs.onActivated.trigger({ tabId: 2, windowId: 1 });
-    await flush();
-    oldSettings.resolve(defaults);
     await flush();
     expect(writes).toHaveLength(0);
   });
@@ -1254,10 +1373,7 @@ describe("接続先と非同期応答", () => {
     await flush();
     old.resolve(context("bluesky"));
     await flush();
-    expect(writes).toHaveLength(1);
-    expect(writes[0]?.siteSettings.bluesky).toEqual(
-      defaults.siteSettings.bluesky,
-    );
+    expect(writes).toHaveLength(0);
   });
   it("非表示になる前の応答を破棄し、復帰時は所有タブへ接続する", async () => {
     const old = deferred<FilterContextResponse>();
@@ -1282,29 +1398,12 @@ describe("接続先と非同期応答", () => {
     old.resolve(context("bluesky"));
     await flush();
     expect(read).toHaveBeenCalledTimes(2);
-    expect(writes).toHaveLength(1);
-    expect(writes[0]?.siteSettings.bluesky).toEqual(
-      defaults.siteSettings.bluesky,
-    );
+    expect(writes).toHaveLength(0);
     expect(
       container
         .querySelector("[data-sift-site]")
         ?.getAttribute("data-sift-site"),
     ).toBe("x");
-  });
-  it("非表示中のタブ変更でも保存待ちの初期化を無効にする", async () => {
-    const write = deferred<void>();
-    vi.mocked(settingsItem.setValue).mockImplementationOnce(
-      () => write.promise,
-    );
-    await mount();
-    const visibility = vi.spyOn(document, "visibilityState", "get");
-    visibility.mockReturnValue("hidden");
-    tab = { id: 2, url: "https://x.com/example" };
-    await fakeBrowser.tabs.onActivated.trigger({ tabId: 2, windowId: 1 });
-    visibility.mockReturnValue("visible");
-    write.resolve(undefined);
-    await flush();
   });
   it.each(["unmount", "switch"])(
     "ユーザー設定の保存待ちで%sしても投稿を再取得しない",

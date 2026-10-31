@@ -194,10 +194,15 @@ test.each([
     "filtered",
     "navigation-closed-cleared",
     "returned-inactive",
-    "reopened-reset",
+    "reopened-conditions-restored",
   ],
-  ["filtered", "returned-inactive", "reopened-reset"],
-  ["filtered", "unsupported-cleared", "supported", "reopened-reset"],
+  ["filtered", "returned-inactive", "reopened-conditions-restored"],
+  [
+    "filtered",
+    "unsupported-cleared",
+    "supported",
+    "reopened-conditions-restored",
+  ],
 ])("遷移記録の全段階を照合する: %j", (...stages) => {
   const value = report(["lifecycle"]);
   specOf(value).title = "transition";

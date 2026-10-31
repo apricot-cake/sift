@@ -39,7 +39,6 @@ export function isSidePanelTabId(value: unknown): value is number {
 export interface SidePanelTabRequest {
   readonly type: typeof SIDE_PANEL_CONTROL.setPanelTab;
   readonly tabId: number;
-  readonly resetMinimum?: boolean;
 }
 
 export function isSidePanelTabRequest(
