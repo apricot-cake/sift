@@ -15,8 +15,7 @@ export type LoadMoreStatus =
   | "cancelled"
   | "unsupported"
   | "limit"
-  | "failed"
-  | "restore-failed";
+  | "failed";
 
 export interface LoadMoreResponse {
   readonly status: LoadMoreStatus;
@@ -49,7 +48,6 @@ export function isLoadMoreResponse(value: unknown): value is LoadMoreResponse {
       "unsupported",
       "limit",
       "failed",
-      "restore-failed",
     ].includes(response.status ?? "") &&
     Number.isSafeInteger(response.added) &&
     (response.added ?? -1) >= 0 &&

@@ -273,7 +273,7 @@ export async function assertPageReadOnly(page: Page): Promise<void> {
   ).toBe(0);
 }
 
-/** 各サービスの追加取得を代表ページで1回だけ行い、閲覧位置と取得の停止を照合する。 */
+/** 各サービスの追加取得を代表ページで1回だけ行い、到達位置の保持と取得の停止を照合する。 */
 export async function assertPanelLoadsOneBatch(
   source: Page,
   panel: Page,
@@ -287,9 +287,18 @@ export async function assertPanelLoadsOneBatch(
     site === "x"
       ? 'article[data-testid="tweet"]'
       : '[data-testid^="feedItem-by-"]';
-  const readAnchor = () =>
+  const readPosition = () =>
     source.evaluate(
       ({ selector, site }) => {
+        const visiblePostIds: string[] = [];
+        let scrollTop: number | null = null;
+        let scrollElement: {
+          tag: string;
+          testId: string | null;
+          scrollTop: number;
+          scrollHeight: number;
+          clientHeight: number;
+        } | null = null;
         for (const card of document.querySelectorAll(selector)) {
           const cell =
             site === "x"
@@ -314,30 +323,55 @@ export async function assertPanelLoadsOneBatch(
             (top + bottom) / 2,
           );
           if (!hit || !cell.contains(hit)) continue;
-          let scrolling: Element | null = cell.parentElement;
-          while (scrolling && scrolling !== document.scrollingElement) {
-            const style = getComputedStyle(scrolling);
-            if (
-              /(auto|scroll)/.test(style.overflowY) &&
-              scrolling.scrollHeight > scrolling.clientHeight
-            )
-              break;
-            scrolling = scrolling.parentElement;
+          visiblePostIds.push(href);
+          if (scrollTop === null) {
+            let scrolling: Element | null = cell.parentElement;
+            while (
+              scrolling &&
+              scrolling !== document.body &&
+              scrolling !== document.documentElement
+            ) {
+              const style = getComputedStyle(scrolling);
+              if (
+                /(auto|scroll)/.test(style.overflowY) &&
+                scrolling.clientHeight > 0 &&
+                scrolling.scrollHeight > scrolling.clientHeight
+              )
+                break;
+              scrolling = scrolling.parentElement;
+            }
+            const selected =
+              scrolling &&
+              scrolling !== document.body &&
+              scrolling !== document.documentElement
+                ? scrolling
+                : document.scrollingElement;
+            scrollTop = selected?.scrollTop ?? scrollY;
+            if (selected)
+              scrollElement = {
+                tag: selected.tagName,
+                testId: selected.getAttribute("data-testid"),
+                scrollTop: selected.scrollTop,
+                scrollHeight: selected.scrollHeight,
+                clientHeight: selected.clientHeight,
+              };
           }
-          return {
-            href,
-            top: rect.top,
-            scrollTop:
-              (scrolling ?? document.scrollingElement)?.scrollTop ?? scrollY,
-          };
         }
-        return null;
+        return scrollTop === null
+          ? null
+          : {
+              scrollTop,
+              visiblePostIds,
+              windowY: scrollY,
+              documentY: document.scrollingElement?.scrollTop ?? null,
+              scrollElement,
+            };
       },
       { selector, site },
     );
-  if (!(await readAnchor())) {
+  if (!(await readPosition())) {
     // プロフィールヘッダーや復帰後の位置に投稿が無ければ、実投稿1件だけを準備位置へ移す。
-    // これは追加取得の操作前に行い、この位置から戻ることを検証する。
+    // 追加取得の操作前に、ここから先へ進むことを検証する開始位置を定める。
     const cards = await source.$$(selector);
     let prepared = false;
     try {
@@ -352,13 +386,15 @@ export async function assertPanelLoadsOneBatch(
     }
     expect(prepared, "検証準備で実投稿1件を表示位置へ移せること").toBe(true);
   }
-  await expect.poll(readAnchor, { timeout: 5000 }).not.toBeNull();
-  const anchor = await readAnchor();
-  if (!anchor) throw Error("閲覧位置の基準投稿を取得できません");
+  await expect.poll(readPosition, { timeout: 5000 }).not.toBeNull();
+  const originalPosition = await readPosition();
+  if (!originalPosition) throw Error("開始位置の可視投稿を取得できません");
+  const originalPost = originalPosition.visiblePostIds[0];
+  if (!originalPost) throw Error("開始位置の投稿IDを取得できません");
   await expect
     .poll(async () =>
       (await readPanelPosts(panel)).some(
-        (post) => postKey(post.url) === postKey(anchor.href, source.url()),
+        (post) => postKey(post.url) === postKey(originalPost, source.url()),
       ),
     )
     .toBe(true);
@@ -373,7 +409,7 @@ export async function assertPanelLoadsOneBatch(
   expect(beforeRequests, "明示操作前に追加取得を開始していないこと").toBe(0);
 
   {
-    // 前のクリックの操作意図を残さず、拡張パネルだけを末尾60px前へ準備する。
+    // 前の操作意図を残さず、拡張パネルだけを取得開始直前の位置へ準備する。
     await new Promise((resolve) => setTimeout(resolve, 850));
     const statusBefore = await panel.$$eval(
       "[data-load-more-status]",
@@ -452,38 +488,6 @@ export async function assertPanelLoadsOneBatch(
   expect(loaded.added).toBeGreaterThan(0);
   expect(loaded.requestCount).toBe(beforeRequests + 1);
   expect(source.url()).toBe(originalUrl);
-  const restoredTop = () =>
-    source.evaluate(
-      ({ href, selector, site }) => {
-        for (const card of document.querySelectorAll(selector)) {
-          const link =
-            site === "x"
-              ? card
-                  .querySelector("a:has(time[datetime])")
-                  ?.getAttribute("href")
-              : (card.getAttribute("href") ??
-                card.querySelector('a[href*="/post/"]')?.getAttribute("href"));
-          if (link !== href) continue;
-          const cell =
-            site === "x"
-              ? (card.closest('[data-testid="cellInnerDiv"]') ?? card)
-              : card;
-          return cell.getBoundingClientRect().top;
-        }
-        return null;
-      },
-      { href: anchor.href, selector, site },
-    );
-  await expect
-    .poll(
-      async () => {
-        const top = await restoredTop();
-        return top !== null && Math.abs(top - anchor.top) <= 2;
-      },
-      { timeout: 5000, message: "元の投稿が2px以内の閲覧位置へ戻ること" },
-    )
-    .toBe(true);
-
   const after = new Set(
     (await readPanelPosts(panel)).map((post) => postKey(post.url)),
   );
@@ -493,6 +497,44 @@ export async function assertPanelLoadsOneBatch(
     newPosts.length,
     "前からある投稿の再表示だけではないこと",
   ).toBeGreaterThan(0);
+  const newPostKeys = new Set(newPosts);
+  const visibleNewPosts = (
+    position: Awaited<ReturnType<typeof readPosition>>,
+  ) =>
+    position?.visiblePostIds.filter((id) =>
+      newPostKeys.has(postKey(id, originalUrl)),
+    ) ?? [];
+  let lastPosition: Awaited<ReturnType<typeof readPosition>> = null;
+  try {
+    await expect
+      .poll(
+        async () => {
+          lastPosition = await readPosition();
+          return (
+            lastPosition !== null &&
+            lastPosition.scrollTop > originalPosition.scrollTop + 1 &&
+            visibleNewPosts(lastPosition).length > 0
+          );
+        },
+        {
+          timeout: 5000,
+          message: "元ページが読み進めた位置にあり、新しい投稿が見えること",
+        },
+      )
+      .toBe(true);
+  } catch (cause) {
+    throw new Error(
+      `追加取得後の位置確認に失敗しました: ${JSON.stringify({
+        originalPosition,
+        lastPosition,
+        newPostCount: newPosts.length,
+        visibleNewPostCount: visibleNewPosts(lastPosition).length,
+      })}`,
+      { cause },
+    );
+  }
+  const reachedPosition = await readPosition();
+  if (!reachedPosition) throw Error("追加取得後の到達位置を取得できません");
   // 取得の完了や追加したカードのレイアウトだけでは、次の取得を始めない。
   await new Promise((resolve) => setTimeout(resolve, 2500));
   expect(await result()).toEqual(loaded);
@@ -501,9 +543,22 @@ export async function assertPanelLoadsOneBatch(
   );
   // サイト自身の遅延描画は通常の収集にも反映されるため、件数固定では判定しない。
   expect([...after].every((key) => afterQuiet.has(key))).toBe(true);
-  const quietTop = await restoredTop();
-  expect(quietTop).not.toBeNull();
-  expect(Math.abs((quietTop ?? Infinity) - anchor.top)).toBeLessThanOrEqual(2);
+  const quietPosition = await readPosition();
+  expect(quietPosition, "操作しない間も実投稿が見えること").not.toBeNull();
+  if (!quietPosition) throw Error("待機後の到達位置を取得できません");
+  expect(
+    quietPosition.scrollTop,
+    "操作しない間に開始位置へ巻き戻されないこと",
+  ).toBeGreaterThan(originalPosition.scrollTop + 1);
+  expect(visibleNewPosts(quietPosition).length).toBeGreaterThan(0);
+  const sameVisiblePost = visibleNewPosts(quietPosition).some((id) =>
+    reachedPosition.visiblePostIds.includes(id),
+  );
+  expect(
+    Math.abs(quietPosition.scrollTop - reachedPosition.scrollTop) <= 2 ||
+      sameVisiblePost,
+    "到達座標か、同じ新しい可視投稿が維持されること",
+  ).toBe(true);
   await assertPageReadOnly(source);
   // 完了状態だけを撮るため、拡張パネル内の末尾へ移す。元ページは操作しない。
   await panel.evaluate(() => {
@@ -531,10 +586,11 @@ export async function assertPanelLoadsOneBatch(
     collectedAfterQuiet: afterQuiet.size,
     newPosts: newPosts.length,
     retained: before.size,
-    anchor: anchor.href,
-    originalTop: anchor.top,
-    restoredTop: await restoredTop(),
-    originalScrollTop: anchor.scrollTop,
+    originalScrollTop: originalPosition.scrollTop,
+    reachedScrollTop: reachedPosition.scrollTop,
+    quietScrollTop: quietPosition.scrollTop,
+    reachedVisiblePosts: reachedPosition.visiblePostIds,
+    quietVisiblePosts: quietPosition.visiblePostIds,
     continuedWithoutInput: false,
   };
 }

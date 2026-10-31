@@ -705,9 +705,7 @@ function PostList({
   const more = useRef<() => void>(() => {});
   const stopped =
     load.result !== null &&
-    ["limited", "authentication", "limit", "restore-failed"].includes(
-      load.result.status,
-    );
+    ["limited", "authentication", "limit"].includes(load.result.status);
   more.current = () => {
     if (posts.length > visibleCount) {
       setVisibleCount((count) => count + POSTS_PER_PAGE);
@@ -863,21 +861,19 @@ function PostList({
         ? t("sidepanelLoadLimited")
         : load.result?.status === "authentication"
           ? t("sidepanelLoadAuthentication")
-          : load.result?.status === "restore-failed"
-            ? t("sidepanelLoadRestoreFailed")
-            : load.result?.status === "limit"
-              ? t("sidepanelCollectionLimit", {
-                  count: collectedCount.toLocaleString(),
-                })
-              : load.result?.status === "unsupported"
-                ? t("sidepanelLoadUnsupported")
-                : load.result?.status === "cancelled"
-                  ? t("sidepanelLoadCancelled")
-                  : load.result?.status === "no-progress"
-                    ? t("sidepanelLoadNoProgress")
-                    : load.result?.status === "failed"
-                      ? t("sidepanelLoadFailed")
-                      : "";
+          : load.result?.status === "limit"
+            ? t("sidepanelCollectionLimit", {
+                count: collectedCount.toLocaleString(),
+              })
+            : load.result?.status === "unsupported"
+              ? t("sidepanelLoadUnsupported")
+              : load.result?.status === "cancelled"
+                ? t("sidepanelLoadCancelled")
+                : load.result?.status === "no-progress"
+                  ? t("sidepanelLoadNoProgress")
+                  : load.result?.status === "failed"
+                    ? t("sidepanelLoadFailed")
+                    : "";
   const hasMoreCollected = posts.length > visibleCount;
   const retry =
     !load.loading &&

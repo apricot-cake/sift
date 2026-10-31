@@ -808,7 +808,7 @@ describe("投稿の追加読み込み", () => {
     expect(sent(PANEL_LOAD_MORE)).toHaveLength(1);
   });
 
-  it("中止後も元ページの復元が完了するまで再取得せず、旧応答後は再開できる", async () => {
+  it("中止後も処理が完了するまで再取得せず、旧応答後は再開できる", async () => {
     request = async () => postsContext([post(1)]);
     const pending = deferred<LoadMoreResponse>();
     const load = vi
@@ -945,7 +945,7 @@ describe("投稿の追加読み込み", () => {
     },
   );
 
-  it.each(["limited", "authentication", "restore-failed", "limit"] as const)(
+  it.each(["limited", "authentication", "limit"] as const)(
     "%sでは再試行ボタンを表示せず、スクロールで繰り返さない",
     async (status) => {
       request = async () => postsContext([post(1)]);

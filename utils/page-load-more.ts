@@ -6,8 +6,6 @@ const POLL_MS = 200;
 export const PAGE_LOAD_TIMEOUT_MS = 6000;
 const TARGET_ADDED_POSTS = 20;
 const NO_PROGRESS_MS = 2000;
-const RESTORE_TIMEOUT_MS = 1400;
-const RESTORE_STABLE_SAMPLES = 3;
 
 function wait(ms: number, signal: AbortSignal): Promise<void> {
   if (signal.aborted) return Promise.resolve();
@@ -107,7 +105,7 @@ interface PageLoadOptions {
   readonly collect: () => number;
 }
 
-/** 明示操作ごとに次のまとまりを時間内で収集し、通常の閲覧位置へ戻す。 */
+/** 明示操作ごとに次のまとまりを時間内で収集し、読み進めた位置を残す。 */
 export class PageLoadMore {
   private furthest = 0;
   private scrollElement: HTMLElement | null = null;
@@ -153,25 +151,6 @@ export class PageLoadMore {
       if (element) element.scrollTo(options);
       else view.scrollTo(options);
     };
-    const scrollBy = (top: number) => {
-      if (element) element.scrollBy({ top, behavior: "instant" });
-      else view.scrollBy({ top, behavior: "instant" });
-    };
-    const anchors = cards.flatMap((card) => {
-      const cell = adapter.findPostCell(card);
-      const rect = cell.getBoundingClientRect();
-      const id = adapter.readPostId?.(card);
-      return id &&
-        rect.height > 0 &&
-        rect.bottom > viewportTop &&
-        rect.top < viewportBottom
-        ? [{ id, top: rect.top }]
-        : [];
-    });
-    // プロフィール先頭ではヘッダーだけが見えていて投稿は下にある場合がある。
-    // 先頭座標は投稿IDなしでも確定できる。途中の位置で基準投稿がなければ動かさない。
-    if (!anchors.length && originalY > 2)
-      return { status: "unsupported", added: 0 };
     const lastBottom = Math.max(
       ...cards.map(
         (card) =>
@@ -183,7 +162,7 @@ export class PageLoadMore {
     const target =
       Math.max(originalY, this.furthest, lastBottom - viewportHeight) +
       viewportHeight * 0.8;
-    // 元ページで操作が始まった後は、古い座標への復元を行わない。
+    // 元ページで操作が始まったら、自動の追加読み込みを止める。
     const interaction = new AbortController();
     const userActed = (event: Event) => {
       if (event.isTrusted) interaction.abort();
@@ -243,71 +222,16 @@ export class PageLoadMore {
         // 終端では同じスクロールを繰り返さず、サイトの遅延描画を待つ。
         await wait(POLL_MS, signal);
       }
-      if (!isCurrent() || interaction.signal.aborted)
+      if (stop())
         return { status: "cancelled", added: Math.max(0, total - before) };
-      if (signal.aborted) status = "cancelled";
       total = collect();
       this.furthest = Math.max(this.furthest, getY());
       if (total > before && status === "no-progress") status = "loaded";
-      // まず元の座標へ戻し、仮想リストが再描画した投稿IDで位置を補正する。
-      scrollTo(originalY);
-      const restoreDeadline = Date.now() + RESTORE_TIMEOUT_MS;
-      let stableSamples = 0;
-      const checkRestored = (correct: boolean): boolean => {
-        if (!anchors.length) {
-          const restored = originalY <= 2 && Math.abs(getY() - originalY) <= 2;
-          if (!restored && correct) scrollTo(originalY);
-          return restored;
-        }
-        const visibleCards = adapter.getPostCards(document);
-        const anchor = anchors.find((saved) =>
-          visibleCards.some((card) => adapter.readPostId?.(card) === saved.id),
-        );
-        const card =
-          anchor &&
-          visibleCards.find((item) => adapter.readPostId?.(item) === anchor.id);
-        if (!anchor || !card) return false;
-        const rect = adapter.findPostCell(card).getBoundingClientRect();
-        if (rect.height <= 0) return false;
-        const offset = rect.top - anchor.top;
-        const restored = Math.abs(offset) <= 2;
-        if (!restored && correct) scrollBy(offset);
-        return restored;
-      };
-      while (
-        Date.now() < restoreDeadline &&
-        isCurrent() &&
-        !interaction.signal.aborted
-      ) {
-        stableSamples = checkRestored(true) ? stableSamples + 1 : 0;
-        if (stableSamples >= RESTORE_STABLE_SAMPLES) break;
-        await wait(POLL_MS, interaction.signal);
-      }
-      if (stop())
-        return { status: "cancelled", added: Math.max(0, total - before) };
-      // 待機の最終フレームで基準投稿が消えた場合も、以前の成功を流用しない。
-      const restored =
-        stableSamples >= RESTORE_STABLE_SAMPLES && checkRestored(false);
       return {
-        status:
-          !restored && (status === "loaded" || status === "no-progress")
-            ? "restore-failed"
-            : status,
+        status,
         added: Math.max(0, total - before),
       };
     } catch {
-      // DOMの差し替えや抽出の例外でも、同じ一覧で利用者の操作がなければ戻す。
-      // 例外時にさらに読み進めたり、自動で再試行したりしない。
-      if (isCurrent() && !interaction.signal.aborted) {
-        try {
-          scrollTo(originalY);
-        } catch {
-          return {
-            status: "restore-failed",
-            added: Math.max(0, total - before),
-          };
-        }
-      }
       return { status: "failed", added: Math.max(0, total - before) };
     } finally {
       for (const type of eventTypes)
