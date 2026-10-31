@@ -32,7 +32,7 @@ X・Blueskyでイラストを探すための Chrome 拡張機能です。いつ�
 
 ## 更新履歴
 
-ストア提出ごとの変更点は [GitHub Releases](https://github.com/apricot-cake/sift/releases) に記録しています。
+[リリースノート](https://github.com/apricot-cake/sift/releases)
 
 ## 開発者向け
 
