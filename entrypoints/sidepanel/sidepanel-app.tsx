@@ -260,7 +260,6 @@ export function SidepanelApp(): React.JSX.Element {
         {!pageIsUnsupported && activeContext !== null && (
           <PanelViews
             key={`${activeContext.site}:${activeContext.pageKey}`}
-            site={activeContext.site === "x" ? "X" : "Bluesky"}
             postCount={activeContext.posts.length}
             collectedCount={activeContext.collectedCount}
             conditionCount={conditionCount}
@@ -465,7 +464,6 @@ export function SidepanelApp(): React.JSX.Element {
 type PanelTab = "posts" | "filters";
 
 function PanelViews({
-  site,
   postCount,
   collectedCount,
   conditionCount,
@@ -473,7 +471,6 @@ function PanelViews({
   posts,
   conditions,
 }: {
-  site: string;
   postCount: number;
   collectedCount: number;
   conditionCount: number;
@@ -516,8 +513,7 @@ function PanelViews({
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <header className="shrink-0 border-b border-border">
-        <div className="flex items-center justify-between gap-3 px-4 pb-1 pt-3 text-xs text-muted-foreground">
-          <span className="font-medium text-foreground">{site}</span>
+        <div className="flex justify-end px-4 pb-1 pt-3 text-xs text-muted-foreground">
           <span data-post-count="" aria-live="polite">
             {t("sidepanelPostCount", {
               count: postCount.toLocaleString(),
