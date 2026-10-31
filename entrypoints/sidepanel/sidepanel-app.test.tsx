@@ -527,6 +527,12 @@ describe("投稿の追加読み込み", () => {
       container.querySelector<HTMLButtonElement>("[data-load-more-posts]")
         ?.disabled,
     ).toBe(true);
+    const loadingButton = container.querySelector("[data-load-more-posts]");
+    const status = container.querySelector("[data-load-more-status]");
+    expect(loadingButton?.textContent).toBe(t("sidepanelLoadLoading"));
+    expect(loadingButton?.querySelector("[data-load-more-summary]")).toBeNull();
+    expect(status?.classList.contains("sr-only")).toBe(true);
+    expect(loadingButton?.getAttribute("aria-describedby")).toBe(status?.id);
     await clickMore();
     const pane = postsPane();
     await scroll(pane, 650, true);
@@ -541,6 +547,14 @@ describe("投稿の追加読み込み", () => {
         .querySelector("[data-load-more-status]")
         ?.getAttribute("data-status"),
     ).toBe("loaded");
+    const completedButton = container.querySelector("[data-load-more-posts]");
+    const summary = completedButton?.querySelector("[data-load-more-summary]");
+    expect(completedButton?.textContent).toContain(t("sidepanelLoadMore"));
+    expect(summary?.textContent).toBe(t("sidepanelLoadLoaded", { count: 1 }));
+    expect(summary?.getAttribute("aria-hidden")).toBe("true");
+    expect(container.querySelector("[data-load-more-status]")).toBe(status);
+    expect(status?.textContent).toBe(t("sidepanelLoadLoaded", { count: 1 }));
+    expect(completedButton?.getAttribute("aria-describedby")).toBe(status?.id);
   });
 
   it("読み込みが完了した直後でも、次のクリックで続きを要求できる", async () => {
@@ -601,6 +615,11 @@ describe("投稿の追加読み込み", () => {
         .querySelector("[data-load-more-status]")
         ?.getAttribute("data-added"),
     ).toBe("11");
+    const showMoreButton = container.querySelector("[data-show-more-posts]");
+    expect(showMoreButton?.textContent).toContain(t("sidepanelShowMorePosts"));
+    expect(
+      showMoreButton?.querySelector("[data-load-more-summary]")?.textContent,
+    ).toBe(t("sidepanelLoadLoaded", { count: 11 }));
     await act(async () =>
       container
         .querySelector<HTMLButtonElement>("[data-show-more-posts]")
@@ -758,6 +777,12 @@ describe("投稿の追加読み込み", () => {
     await mount(false);
     await clickMore();
     expect(container.textContent).toContain(t("sidepanelLoadNoProgress"));
+    const retryButton = container.querySelector("[data-load-more-posts]");
+    const explanation = container.querySelector("[data-load-more-status]");
+    expect(explanation?.classList.contains("sr-only")).toBe(false);
+    expect(explanation?.closest("button")).toBeNull();
+    expect(retryButton?.getAttribute("aria-describedby")).toBe(explanation?.id);
+    expect(retryButton?.querySelector("[data-load-more-summary]")).toBeNull();
     const pane = postsPane();
     await scroll(pane, 650, true);
     await act(async () => vi.advanceTimersByTimeAsync(3000));

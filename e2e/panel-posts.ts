@@ -456,6 +456,18 @@ export async function assertPanelLoadsOneBatch(
     path: `${process.cwd()}/test-results/post-load-more-${site}.png`,
     fullPage: false,
   });
+  const loadControl = await panel.$(
+    "button[data-load-more-posts], button[data-show-more-posts]",
+  );
+  if (!loadControl)
+    throw Error("取得完了後の追加表示・読み込み操作がありません");
+  try {
+    await loadControl.screenshot({
+      path: `${process.cwd()}/test-results/post-load-more-control-${site}.png`,
+    });
+  } finally {
+    await loadControl.dispose();
+  }
   return {
     trigger,
     status: loaded.status,

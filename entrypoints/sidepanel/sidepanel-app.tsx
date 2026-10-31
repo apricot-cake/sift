@@ -711,6 +711,7 @@ function PostList({
   reading: boolean;
 }): React.JSX.Element {
   const [visibleCount, setVisibleCount] = useState(POSTS_PER_PAGE);
+  const statusId = useId();
   const section = useRef<HTMLElement>(null);
   const more = useRef<() => void>(() => {});
   const stopped =
@@ -801,6 +802,17 @@ function PostList({
                     : load.result?.status === "failed"
                       ? t("sidepanelLoadFailed")
                       : "";
+  const hasMoreCollected = posts.length > visibleCount;
+  const inlineStatus = load.loading || load.result?.status === "loaded";
+  const actionLabel = hasMoreCollected
+    ? t("sidepanelShowMorePosts")
+    : load.loading
+      ? t("sidepanelLoadLoading")
+      : stopped
+        ? t("sidepanelLoadStopped")
+        : load.result !== null && load.result.status !== "loaded"
+          ? t("sidepanelLoadRetry")
+          : t("sidepanelLoadMore");
   return (
     <section
       ref={section}
@@ -838,44 +850,46 @@ function PostList({
           ))}
         </ul>
       )}
-      {posts.length > visibleCount && (
-        <Button
-          className="mt-4 w-full"
-          variant="outline"
-          data-show-more-posts=""
-          onClick={() => setVisibleCount((count) => count + POSTS_PER_PAGE)}
-        >
-          {t("sidepanelShowMorePosts")}
-        </Button>
-      )}
       <div className="mt-4 space-y-3">
-        {statusMessage && (
-          <p
-            role="status"
-            data-load-more-status=""
-            data-status={load.loading ? "loading" : load.result?.status}
-            data-added={load.result?.added ?? 0}
-            data-request-count={load.requestCount}
-            className="m-0 text-xs leading-5 text-muted-foreground"
-          >
-            {statusMessage}
-          </p>
-        )}
-        {posts.length <= visibleCount && !truncated && (
+        <p
+          id={statusId}
+          role="status"
+          data-load-more-status=""
+          data-status={load.loading ? "loading" : load.result?.status}
+          data-added={load.result?.added ?? 0}
+          data-request-count={load.requestCount}
+          className={
+            inlineStatus || !statusMessage
+              ? "sr-only"
+              : "m-0 text-xs leading-5 text-muted-foreground"
+          }
+        >
+          {statusMessage}
+        </p>
+        {(hasMoreCollected || !truncated) && (
           <Button
-            className="w-full"
+            className="h-auto min-h-9 w-full flex-col gap-0.5 whitespace-normal py-2"
             variant="outline"
-            data-load-more-posts=""
-            disabled={load.loading || stopped || reading}
-            onClick={() => void load.loadMore()}
+            data-show-more-posts={hasMoreCollected ? "" : undefined}
+            data-load-more-posts={hasMoreCollected ? undefined : ""}
+            aria-describedby={statusMessage ? statusId : undefined}
+            disabled={!hasMoreCollected && (load.loading || stopped || reading)}
+            onClick={() =>
+              hasMoreCollected
+                ? setVisibleCount((count) => count + POSTS_PER_PAGE)
+                : void load.loadMore()
+            }
           >
-            {load.loading
-              ? t("sidepanelLoadLoading")
-              : stopped
-                ? t("sidepanelLoadStopped")
-                : load.result !== null && load.result.status !== "loaded"
-                  ? t("sidepanelLoadRetry")
-                  : t("sidepanelLoadMore")}
+            {actionLabel}
+            {inlineStatus && statusMessage !== actionLabel && (
+              <span
+                aria-hidden="true"
+                data-load-more-summary=""
+                className="text-xs font-normal leading-5 text-muted-foreground"
+              >
+                {statusMessage}
+              </span>
+            )}
           </Button>
         )}
         {load.loading && (
