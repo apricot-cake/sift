@@ -162,9 +162,25 @@ export async function assertPanelTabsPreserveState(panel: Page): Promise<void> {
   const fixedCounts = () =>
     panel.$eval("[data-panel-counts]", (node) => {
       const rect = node.getBoundingClientRect();
+      const header = node.previousElementSibling;
+      const panes = [
+        ...(node.parentElement?.querySelectorAll('[role="tabpanel"]') ?? []),
+      ];
+      const activePane = panes.find((pane) => !(pane as HTMLElement).hidden);
       return {
         top: rect.top,
         bottom: rect.bottom,
+        belowHeader: header?.matches("header") === true,
+        headerBottom: header?.getBoundingClientRect().bottom ?? null,
+        beforeBothPanes:
+          panes.length === 2 &&
+          panes.every((pane) =>
+            Boolean(
+              node.compareDocumentPosition(pane) &
+                Node.DOCUMENT_POSITION_FOLLOWING,
+            ),
+          ),
+        activePaneTop: activePane?.getBoundingClientRect().top ?? null,
         visible: node.checkVisibility({
           checkVisibilityCSS: true,
           checkOpacity: true,
@@ -172,6 +188,10 @@ export async function assertPanelTabsPreserveState(panel: Page): Promise<void> {
       };
     });
   const beforeScroll = await fixedCounts();
+  expect(beforeScroll.belowHeader).toBe(true);
+  expect(beforeScroll.headerBottom).toBeCloseTo(beforeScroll.top, 0);
+  expect(beforeScroll.beforeBothPanes).toBe(true);
+  expect(beforeScroll.activePaneTop).toBeCloseTo(beforeScroll.bottom, 0);
   // パネル内の位置だけを変え、追加取得の操作意図は発生させない。
   await panel.$eval("[data-posts-panel]", (node) => {
     (node as HTMLElement).scrollTop = node.scrollHeight;
@@ -191,6 +211,8 @@ export async function assertPanelTabsPreserveState(panel: Page): Promise<void> {
   expect(inFilters.visible).toBe(true);
   expect(inFilters.top).toBeCloseTo(beforeScroll.top, 0);
   expect(inFilters.bottom).toBeCloseTo(beforeScroll.bottom, 0);
+  expect(inFilters.headerBottom).toBeCloseTo(inFilters.top, 0);
+  expect(inFilters.activePaneTop).toBeCloseTo(inFilters.bottom, 0);
   expect(await settings()).toEqual(beforeSettings);
 }
 

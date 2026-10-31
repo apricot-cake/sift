@@ -336,11 +336,12 @@ describe("パネルの投稿一覧", () => {
     expect(counts?.closest('[role="tabpanel"]')).toBeNull();
     expect(counts?.parentElement).toBe(pane?.parentElement);
     expect(counts?.parentElement).toBe(filters?.parentElement);
+    expect(counts?.previousElementSibling?.tagName).toBe("HEADER");
     expect(
       pane &&
         counts &&
         Boolean(
-          pane.compareDocumentPosition(counts) &
+          counts.compareDocumentPosition(pane) &
             Node.DOCUMENT_POSITION_FOLLOWING,
         ),
     ).toBe(true);
@@ -348,7 +349,7 @@ describe("パネルの投稿一覧", () => {
       filters &&
         counts &&
         Boolean(
-          filters.compareDocumentPosition(counts) &
+          counts.compareDocumentPosition(filters) &
             Node.DOCUMENT_POSITION_FOLLOWING,
         ),
     ).toBe(true);
