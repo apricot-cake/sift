@@ -95,7 +95,7 @@ function readablePostCards(root: ParentNode): Element[] {
 }
 
 function isOwnPostNode(postCard: Element, node: Element): boolean {
-  let parent = node.parentElement;
+  let parent: Element | null = node;
   while (parent && parent !== postCard) {
     if (
       parent.matches(BLUESKY_SELECTORS.postCard) ||
@@ -311,15 +311,12 @@ export const blueskyAdapter = Object.freeze({
   // このサービスの作りの話ではない。
   readMedia(postCard: Element) {
     return {
-      // メディア条件は従来どおり引用内の写真も含め、パネルへ転載する画像とは分ける。
-      hasImage:
-        postImages(
-          postCard.querySelectorAll<HTMLImageElement>(BLUESKY_SELECTORS.image),
-        ).length > 0,
-      hasVideo: Boolean(
-        postCard.querySelector(BLUESKY_SELECTORS.video) ||
-          postCard.querySelector(BLUESKY_SELECTORS.animatedImage),
-      ),
+      hasImage: readImages(postCard).length > 0,
+      hasVideo: Array.from(
+        postCard.querySelectorAll(
+          `${BLUESKY_SELECTORS.video}, ${BLUESKY_SELECTORS.animatedImage}`,
+        ),
+      ).some((video) => isOwnPostNode(postCard, video)),
     };
   },
 

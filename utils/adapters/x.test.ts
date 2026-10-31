@@ -290,6 +290,67 @@ describe("投稿IDを読む", () => {
 // 画像と動画は分けたままにする＝1つの答えにまとめるのは利用者のメディア設定の
 // 仕事で、このアダプターが当てるものではない。
 describe("メディアを読む", () => {
+  const ownTimestamp =
+    '<a href="/author/status/100"><time datetime="2026-10-25"></time></a>';
+  const photo =
+    '<div data-testid="tweetPhoto"><img src="https://pbs.twimg.com/media/photo.jpg"></div>';
+  const video = '<div data-testid="videoPlayer"><video></video></div>';
+
+  it.each([
+    [
+      "作者アバター付きの引用カード",
+      `<div role="link"><div data-testid="Tweet-User-Avatar"></div>${photo}${video}</div>`,
+    ],
+    [
+      "アバターがない引用カード",
+      `<div role="link"><a href="/quoted/status/200"><time datetime="2026-10-24"></time></a>${photo}${video}</div>`,
+    ],
+    [
+      "引用元への写真・動画リンク",
+      '<a href="/quoted/status/200/photo/1"><img src="https://pbs.twimg.com/media/quote.jpg"></a><a href="/quoted/status/200/video/1"><video></video></a>',
+    ],
+    ["入れ子の投稿", `<article data-testid="tweet">${photo}${video}</article>`],
+    [
+      "メディア要素自体が引用カード",
+      '<div data-testid="videoPlayer" role="link"><div data-testid="Tweet-User-Avatar"></div><video></video></div>',
+    ],
+  ])("%sの画像・動画を本体のメディアと数えない", (_name, quote) => {
+    expect(xAdapter.readMedia(renderPost(ownTimestamp + quote))).toEqual({
+      hasImage: false,
+      hasVideo: false,
+    });
+  });
+
+  it("本人の写真と引用の動画を混ぜない", () => {
+    const card = renderPost(
+      `${ownTimestamp}${photo}<div role="link"><div data-testid="Tweet-User-Avatar"></div>${video}</div>`,
+    );
+    expect(xAdapter.readMedia(card)).toEqual({
+      hasImage: true,
+      hasVideo: false,
+    });
+  });
+
+  it("本人の動画と引用の写真を混ぜない", () => {
+    const card = renderPost(
+      `${ownTimestamp}${video}<div role="link"><div data-testid="Tweet-User-Avatar"></div>${photo}</div>`,
+    );
+    expect(xAdapter.readMedia(card)).toEqual({
+      hasImage: false,
+      hasVideo: true,
+    });
+  });
+
+  it("本人のGIFの動画プレーヤーは画像として数えない", () => {
+    const card = renderPost(
+      `${ownTimestamp}<div data-testid="tweetPhoto"><div data-testid="videoPlayer"><video loop autoplay></video></div></div>`,
+    );
+    expect(xAdapter.readMedia(card)).toEqual({
+      hasImage: false,
+      hasVideo: true,
+    });
+  });
+
   it("添付された画像を読む", () => {
     const card = renderPost(
       '<div data-testid="tweetPhoto"><img src="/media/1.jpg"></div>',

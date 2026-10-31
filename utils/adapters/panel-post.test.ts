@@ -82,7 +82,37 @@ describe("Xのパネル表示用投稿", () => {
       text: "本人の本文",
       author: "Alice",
       images: [],
+      hasImage: false,
+      hasVideo: false,
       metricCount: null,
+      isQuote: true,
+    });
+  });
+
+  it("引用元のアバターがなくても本人のID・本文・メディアを取り違えない", () => {
+    const card = xPost(
+      '<div role="link"><a href="/quoted/status/456"><time datetime="2026-10-24"></time></a><div data-testid="tweetText">引用元</div><div data-testid="tweetPhoto"><img src="https://pbs.twimg.com/media/quote.jpg"></div><div data-testid="videoPlayer"><video></video></div></div><a href="/alice/status/123"><time datetime="2026-10-25"></time></a><div data-testid="tweetText">本人の本文</div><button data-testid="like" aria-label="10 likes"></button>',
+    );
+    expect(xAdapter.readPostId(card)).toBe("123");
+    expect(xAdapter.readPost(card)).toMatchObject({
+      id: "123",
+      text: "本人の本文",
+      hasImage: false,
+      hasVideo: false,
+      images: [],
+      isQuote: true,
+    });
+  });
+
+  it("本人の写真は残して引用元の動画だけを除く", () => {
+    const card = xPost(
+      '<a href="/alice/status/123"><time datetime="2026-10-25"></time></a><div data-testid="tweetPhoto"><img src="https://pbs.twimg.com/media/own.jpg"></div><div role="link"><a href="/quoted/status/456"><time datetime="2026-10-24"></time></a><div data-testid="videoPlayer"><video></video></div></div><button data-testid="like" aria-label="10 likes"></button>',
+    );
+    expect(xAdapter.readPost(card)).toMatchObject({
+      id: "123",
+      hasImage: true,
+      hasVideo: false,
+      images: [{ url: "https://pbs.twimg.com/media/own.jpg", alt: "" }],
       isQuote: true,
     });
   });
@@ -166,13 +196,13 @@ describe("Blueskyのパネル表示用投稿", () => {
     });
   });
 
-  it("引用写真だけの投稿もメディア条件では画像ありとし、表示画像には混ぜない", () => {
+  it("引用写真だけの投稿は画像条件に含めず、表示画像にも混ぜない", () => {
     const card = bskyPost(
       '<a href="/profile/alice.test/post/3abc">時刻</a><div data-testid="contentHider-post"><div role="link"><img data-testid="userAvatarImage"><button><img src="https://cdn.bsky.app/img/feed_thumbnail/plain/quote.jpg"></button></div></div>',
     );
-    expect(blueskyAdapter.readMedia(card)).toMatchObject({ hasImage: true });
+    expect(blueskyAdapter.readMedia(card)).toMatchObject({ hasImage: false });
     expect(blueskyAdapter.readPost(card)).toMatchObject({
-      hasImage: true,
+      hasImage: false,
       images: [],
     });
   });

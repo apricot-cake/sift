@@ -119,13 +119,44 @@ function isTimelinePostCard(card: Element): boolean {
   );
 }
 
+function ownStatusId(postCard: Element): string | null {
+  for (const timestamp of postCard.querySelectorAll(X_SELECTORS.statusTime)) {
+    if (timestamp.closest(X_SELECTORS.postCard) !== postCard) continue;
+    // 引用カードの時刻は投稿本体の識別子に使わない。
+    const quote = timestamp.closest('div[role="link"]');
+    if (quote && postCard.contains(quote)) continue;
+    const href = timestamp.closest("a")?.getAttribute("href") ?? "";
+    if (canonicalPostUrl(href, "x")) return X_STATUS_ID.exec(href)?.[1] ?? null;
+  }
+  return null;
+}
+
 function isOwnPostNode(postCard: Element, node: Element): boolean {
   if (node.closest(X_SELECTORS.postCard) !== postCard) return false;
-  let parent = node.parentElement;
+  const ownId = ownStatusId(postCard);
+  let parent: Element | null = node;
   while (parent && parent !== postCard) {
+    if (parent.matches('a[href*="/status/"]') && ownId) {
+      const linkedId = X_STATUS_ID.exec(parent.getAttribute("href") ?? "")?.[1];
+      if (linkedId && linkedId !== ownId) return false;
+    }
     if (
       parent.matches('div[role="link"]') &&
-      parent.querySelector(X_SELECTORS.avatar)
+      (parent.querySelector(X_SELECTORS.avatar) ||
+        parent.querySelector(X_SELECTORS.userName) ||
+        Array.from(parent.querySelectorAll('a[href*="/status/"]')).some(
+          (link) => {
+            const linkedId = X_STATUS_ID.exec(
+              link.getAttribute("href") ?? "",
+            )?.[1];
+            return (
+              linkedId &&
+              (ownId
+                ? linkedId !== ownId
+                : Boolean(link.querySelector(X_SELECTORS.statusTime)))
+            );
+          },
+        ))
     )
       return false;
     parent = parent.parentElement;
@@ -305,11 +336,7 @@ export const xAdapter = Object.freeze({
   },
 
   readPostId(postCard: Element) {
-    const statusTime = postCard.querySelector(X_SELECTORS.statusTime);
-    const href = statusTime
-      ?.closest('a[href*="/status/"]')
-      ?.getAttribute("href");
-    return X_STATUS_ID.exec(href ?? "")?.[1] ?? null;
+    return ownStatusId(postCard);
   },
 
   readMetricCount(postCard: Element) {
@@ -329,10 +356,15 @@ export const xAdapter = Object.freeze({
     return {
       hasImage: Array.from(postCard.querySelectorAll(X_SELECTORS.image)).some(
         (image) =>
+          isOwnPostNode(postCard, image) &&
           !image.matches(X_SELECTORS.video) &&
-          !image.querySelector(X_SELECTORS.video),
+          !Array.from(image.querySelectorAll(X_SELECTORS.video)).some((video) =>
+            isOwnPostNode(postCard, video),
+          ),
       ),
-      hasVideo: Boolean(postCard.querySelector(X_SELECTORS.video)),
+      hasVideo: Array.from(postCard.querySelectorAll(X_SELECTORS.video)).some(
+        (video) => isOwnPostNode(postCard, video),
+      ),
     };
   },
 

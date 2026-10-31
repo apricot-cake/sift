@@ -196,6 +196,56 @@ describe("いいね数を読む", () => {
 });
 
 describe("メディアを読む", () => {
+  const photo =
+    '<button><img src="https://cdn.bsky.app/img/feed_thumbnail/plain/did/own@jpeg"></button>';
+  const video =
+    '<div style="background-image: url(https://video.bsky.app/watch/did/cid/thumbnail.jpg)"></div>';
+  const quote = (content: string) =>
+    `<div data-testid="contentHider-post"><div role="link"><a href="/profile/quoted.test/post/other">引用元</a>${content}</div></div>`;
+
+  it("引用元の写真・動画は本体のメディアとして数えない", () => {
+    expect(blueskyAdapter.readMedia(renderPost(quote(photo + video)))).toEqual({
+      hasImage: false,
+      hasVideo: false,
+    });
+  });
+
+  it("本人の写真と引用元の動画を区別する", () => {
+    expect(blueskyAdapter.readMedia(renderPost(photo + quote(video)))).toEqual({
+      hasImage: true,
+      hasVideo: false,
+    });
+  });
+
+  it("本人の動画と引用元の写真を区別する", () => {
+    expect(blueskyAdapter.readMedia(renderPost(video + quote(photo)))).toEqual({
+      hasImage: false,
+      hasVideo: true,
+    });
+  });
+
+  it("引用カードの要素自体が動画サムネイルでも除外する", () => {
+    expect(
+      blueskyAdapter.readMedia(
+        renderPost(
+          '<div role="link" style="background-image:url(https://video.bsky.app/watch/did/cid/thumbnail.jpg)"><img data-testid="userAvatarImage"></div>',
+        ),
+      ),
+    ).toEqual({ hasImage: false, hasVideo: false });
+  });
+
+  it("引用内のGIFを除外して、本人のGIFは動画として残す", () => {
+    const gif = '<video src="https://t.gifs.bsky.app/gif/1.mp4"></video>';
+    expect(blueskyAdapter.readMedia(renderPost(quote(gif)))).toEqual({
+      hasImage: false,
+      hasVideo: false,
+    });
+    expect(blueskyAdapter.readMedia(renderPost(gif + quote(photo)))).toEqual({
+      hasImage: false,
+      hasVideo: true,
+    });
+  });
+
   it("投稿自身の画像を読む", () => {
     const card = renderPost(
       '<button><img src="https://cdn.bsky.app/img/feed_thumbnail/plain/did/1@jpeg"></button>',

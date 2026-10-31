@@ -351,6 +351,31 @@ export async function observations(page: Page, target: CompatibilityCase) {
           ].filter((node) =>
             node.querySelector('[data-testid="Tweet-User-Avatar"]'),
           );
+          // メディアは投稿自身の添付だけを照合する。引用カードの画像・動画は含めない。
+          const ownStatus = card
+            .querySelector("time[datetime]")
+            ?.closest("a")
+            ?.getAttribute("href")
+            ?.match(/\/status\/(\d+)/)?.[1];
+          const mediaQuotes = [
+            ...card.querySelectorAll(
+              'div[role="link"], article[data-testid="tweet"], [data-testid="nestedQuotePreviewMedia"]',
+            ),
+          ].filter(
+            (node) =>
+              node.matches(
+                'article[data-testid="tweet"], [data-testid="nestedQuotePreviewMedia"]',
+              ) ||
+              node.querySelector(
+                '[data-testid="Tweet-User-Avatar"], [data-testid="userAvatarImage"], a[href*="/post/"]',
+              ) ||
+              [...node.querySelectorAll('a[href*="/status/"]')].some((link) => {
+                const id = link
+                  .getAttribute("href")
+                  ?.match(/\/status\/(\d+)/)?.[1];
+                return id && id !== ownStatus;
+              }),
+          );
           const labels = [...card.querySelectorAll("a, span, div[dir]")]
             .filter(
               (node) =>
@@ -458,11 +483,22 @@ export async function observations(page: Page, target: CompatibilityCase) {
               checkOpacity: true,
             }),
             height: cell.getBoundingClientRect().height,
-            media: Boolean(
-              card.querySelector(
-                '[data-testid="tweetPhoto"], a[href*="/photo/"] img[src*="pbs.twimg.com/media/"], [data-testid="videoPlayer"], [data-testid="nestedQuotePreviewMedia"], button img[src*="/img/feed_thumbnail/"], [style*="video.bsky.app"], video[src*="t.gifs.bsky.app"]',
+            media: [
+              ...card.querySelectorAll(
+                '[data-testid="tweetPhoto"], a[href*="/photo/"] img[src*="pbs.twimg.com/media/"], [data-testid="videoPlayer"], [data-testid="videoComponent"], [data-testid="nestedQuotePreviewMedia"], button img[src*="/img/feed_thumbnail/"], button img[src*="/img/feed_fullsize/"], [role="button"] img[src*="/img/feed_thumbnail/"], [role="button"] img[src*="/img/feed_fullsize/"], [style*="video.bsky.app"], video[src*="t.gifs.bsky.app"]',
               ),
-            ),
+            ].some((node) => {
+              if (mediaQuotes.some((quote) => quote.contains(node)))
+                return false;
+              const link = node.closest("a");
+              return !(
+                location.hostname === "bsky.app" &&
+                node.matches("img") &&
+                link &&
+                link !== card &&
+                card.contains(link)
+              );
+            }),
           };
         }),
     selection.metric,

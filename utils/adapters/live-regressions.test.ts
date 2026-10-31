@@ -91,8 +91,9 @@ describe("実機で見つかった表示構造の回帰", () => {
   ])("Xの動画枠を画像と判定しない: %s", (video) => {
     const tag = video.split(" ")[0];
     const root = render(
-      `<article><div data-testid="tweetPhoto"><${video}></${tag}></div></article>`,
-    );
+      `<article data-testid="tweet"><div data-testid="tweetPhoto"><${video}></${tag}></div></article>`,
+    ).firstElementChild;
+    if (!root) throw new Error("投稿がありません");
     expect(xAdapter.readMedia(root)).toEqual({
       hasImage: false,
       hasVideo: true,
