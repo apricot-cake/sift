@@ -28,6 +28,14 @@ export async function element(
   selector: string,
   index = 0,
 ): Promise<ElementHandle<Element>> {
+  if (index === 0) {
+    const chosen = await page.waitForSelector(selector, {
+      visible: true,
+      timeout: 10000,
+    });
+    if (!chosen) throw new Error(`対象要素がありません: ${selector}`);
+    return chosen;
+  }
   await expect
     .poll(() => page.$$eval(selector, (nodes) => nodes.length), {
       timeout: 10000,
