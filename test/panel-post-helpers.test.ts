@@ -4,12 +4,12 @@ import { openFilterControls, readPanelPosts } from "../e2e/panel-posts.ts";
 
 afterEach(() => document.body.replaceChildren());
 
-function fixture(fail = false) {
+function fixture(fail = false, settledBeforeEvaluate = false) {
   document.body.innerHTML = `<div role="tablist" data-panel-tabs>
     <button role="tab" data-panel-tab="posts" aria-selected="true" aria-controls="posts">投稿</button>
     <button role="tab" data-panel-tab="filters" aria-selected="false" aria-controls="filters">絞り込み条件</button>
     </div>
-    <section id="posts" role="tabpanel"><a data-post-link href="https://x.com/NASA/status/123" target="_blank" rel="noreferrer">投稿</a><button data-show-more-posts>さらに表示</button></section>
+    <div id="posts" role="tabpanel" tabindex="0" data-posts-panel><section data-has-more-collected="true"><a data-post-link href="https://x.com/NASA/status/123" target="_blank" rel="noreferrer">投稿</a></section></div>
     <section id="filters" role="tabpanel" hidden><input value="100"></section>`;
   const clicks: string[] = [];
   for (const tab of document.querySelectorAll<HTMLButtonElement>(
@@ -25,14 +25,21 @@ function fixture(fail = false) {
         if (pane) pane.hidden = tab !== other;
       }
     };
-  const more = document.querySelector<HTMLButtonElement>(
-    "[data-show-more-posts]",
+  const keyInputs: string[] = [];
+  const collection = document.querySelector<HTMLElement>(
+    "[data-has-more-collected]",
   );
-  if (more)
-    more.onclick = () => {
-      expect(document.getElementById("posts")?.hidden).toBe(false);
-      more.remove();
-    };
+  document.getElementById("posts")?.addEventListener("keydown", (event) => {
+    expect(document.getElementById("posts")?.hidden).toBe(false);
+    expect(event.bubbles).toBe(true);
+    expect(collection?.dataset.hasMoreCollected).toBe("true");
+    keyInputs.push((event as KeyboardEvent).key);
+    collection?.insertAdjacentHTML(
+      "beforeend",
+      '<a data-post-link href="https://x.com/NASA/status/456" target="_blank" rel="noreferrer">収集済みの次の投稿</a>',
+    );
+    if (collection) collection.dataset.hasMoreCollected = "false";
+  });
   const node = (selector: string) => {
     const element = document.querySelector<HTMLElement>(selector);
     if (!element) throw Error(selector);
@@ -57,15 +64,22 @@ function fixture(fail = false) {
     $: async (selector: string) => {
       const element = document.querySelector<HTMLElement>(selector);
       return element
-        ? { click: async () => element.click(), dispose: async () => {} }
+        ? {
+            evaluate: async (callback: (element: Element) => unknown) => {
+              if (settledBeforeEvaluate && collection)
+                collection.dataset.hasMoreCollected = "false";
+              return callback(element);
+            },
+            dispose: async () => {},
+          }
         : null;
     },
   } as unknown as Page;
-  return { page, clicks };
+  return { page, clicks, keyInputs };
 }
 
 it("投稿を読む間だけ投稿タブを実クリックし、条件タブと入力値を復元する", async () => {
-  const { page, clicks } = fixture();
+  const { page, clicks, keyInputs } = fixture();
   await openFilterControls(page);
   const input = document.querySelector("input");
   const posts = await readPanelPosts(page);
@@ -75,7 +89,13 @@ it("投稿を読む間だけ投稿タブを実クリックし、条件タブと�
       target: "_blank",
       rel: "noreferrer",
     },
+    {
+      url: "https://x.com/NASA/status/456",
+      target: "_blank",
+      rel: "noreferrer",
+    },
   ]);
+  expect(keyInputs).toEqual(["End"]);
   expect(clicks).toEqual(["filters", "posts", "filters"]);
   expect(document.querySelector("input")).toBe(input);
   expect(input?.value).toBe("100");
@@ -92,7 +112,13 @@ it("読取失敗でも呼出時の条件タブを復元する", async () => {
 
 it("投稿タブから読む場合は不要なタブ切替をしない", async () => {
   const { page, clicks } = fixture();
-  expect(await readPanelPosts(page)).toHaveLength(1);
+  expect(await readPanelPosts(page)).toHaveLength(2);
   expect(clicks).toEqual([]);
   expect(document.getElementById("posts")?.hidden).toBe(false);
+});
+
+it("操作直前に未表示の収集済み投稿がなくなった場合は、追加取得につながるキーを送らない", async () => {
+  const { page, keyInputs } = fixture(false, true);
+  expect(await readPanelPosts(page)).toHaveLength(1);
+  expect(keyInputs).toEqual([]);
 });

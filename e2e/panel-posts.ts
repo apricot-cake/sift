@@ -47,14 +47,40 @@ export async function readPanelPosts(panel: Page) {
   );
   await selectPanelTab(panel, "posts");
   try {
-    // 追加表示は収集済みの結果だけを展開する。実サイトのスクロールや取得は行わない。
+    // 未表示の収集済み投稿がある間だけ展開し、追加取得は開始しない。
     for (let count = 0; count < 20; count += 1) {
-      const more = await panel.$("button[data-show-more-posts]");
+      const more = await panel.$('[data-has-more-collected="true"]');
       if (!more) break;
+      await more.dispose();
+      await new Promise((resolve) => setTimeout(resolve, 250));
+      const pane = await panel.$("[data-posts-panel]");
+      if (!pane) throw Error("投稿タブのスクロール領域がありません");
       try {
-        await more.click();
+        const before = await panel.$$eval(
+          "a[data-post-link]",
+          (links) => links.length,
+        );
+        // 照合用の準備は同一タスク内で行い、画像の遅延描画やパネルの入力フォーカスに依存させない。
+        // 外部取得の実機ケースでは、別途ネイティブのホイール・キー・タッチ入力を使う。
+        const expanded = await pane.evaluate((node) => {
+          if (!node.querySelector('[data-has-more-collected="true"]'))
+            return false;
+          const element = node as HTMLElement;
+          element.scrollTop = element.scrollHeight;
+          element.dispatchEvent(
+            new KeyboardEvent("keydown", { key: "End", bubbles: true }),
+          );
+          return true;
+        });
+        if (!expanded) continue;
+        await expect
+          .poll(
+            () => panel.$$eval("a[data-post-link]", (links) => links.length),
+            { timeout: 3000 },
+          )
+          .toBeGreaterThan(before);
       } finally {
-        await more.dispose();
+        await pane.dispose();
       }
     }
     return await panel.$$eval("a[data-post-link]", (links) =>
@@ -252,7 +278,9 @@ export async function assertPanelLoadsOneBatch(
   source: Page,
   panel: Page,
   site: "x" | "bluesky",
-  trigger: "panel-scroll" | "button" = site === "x" ? "panel-scroll" : "button",
+  trigger: "panel-scroll" | "panel-key" | "panel-touch" = site === "x"
+    ? "panel-scroll"
+    : "panel-key",
 ) {
   await selectPanelTab(panel, "posts");
   const selector =
@@ -344,7 +372,7 @@ export async function assertPanelLoadsOneBatch(
   );
   expect(beforeRequests, "明示操作前に追加取得を開始していないこと").toBe(0);
 
-  if (trigger === "panel-scroll") {
+  {
     // 前のクリックの操作意図を残さず、拡張パネルだけを末尾60px前へ準備する。
     await new Promise((resolve) => setTimeout(resolve, 850));
     const statusBefore = await panel.$$eval(
@@ -354,13 +382,14 @@ export async function assertPanelLoadsOneBatch(
     const pane = await panel.$("[data-posts-panel]");
     if (!pane) throw Error("投稿タブのスクロール領域がありません");
     try {
-      await pane.evaluate((node) => {
+      await pane.evaluate((node, trigger) => {
         const element = node as HTMLElement;
         const last = element.scrollHeight - element.clientHeight;
-        if (last <= 60)
+        if (trigger === "panel-scroll" && last <= 60)
           throw Error("実スクロールに必要な投稿の高さがありません");
-        element.scrollTop = last - 60;
-      });
+        element.scrollTop =
+          trigger === "panel-scroll" ? last - 180 : Math.max(0, last);
+      }, trigger);
       // プログラムによる準備だけでは追加取得を開始しない。
       await new Promise((resolve) => setTimeout(resolve, 100));
       expect(
@@ -370,13 +399,42 @@ export async function assertPanelLoadsOneBatch(
       ).toEqual(statusBefore);
       const rect = await pane.boundingBox();
       if (!rect) throw Error("投稿タブの実スクロール位置を取得できません");
-      await panel.mouse.move(rect.x + rect.width / 2, rect.y + rect.height / 2);
-      await panel.mouse.wheel({ deltaY: 160 });
+      const x = rect.x + rect.width / 2;
+      const y = rect.y + rect.height / 2;
+      if (trigger === "panel-scroll") {
+        await panel.mouse.move(x, y);
+        await panel.mouse.wheel({ deltaY: 160 });
+      } else if (trigger === "panel-key") {
+        await pane.focus();
+        await panel.keyboard.press("PageDown");
+      } else {
+        const touch = await panel.createCDPSession();
+        try {
+          await touch.send("Emulation.setTouchEmulationEnabled", {
+            enabled: true,
+          });
+          await touch.send("Input.dispatchTouchEvent", {
+            type: "touchStart",
+            touchPoints: [{ x, y, id: 1 }],
+          });
+          await touch.send("Input.dispatchTouchEvent", {
+            type: "touchMove",
+            touchPoints: [{ x, y: y - 100, id: 1 }],
+          });
+          await touch.send("Input.dispatchTouchEvent", {
+            type: "touchEnd",
+            touchPoints: [],
+          });
+        } finally {
+          await touch.send("Emulation.setTouchEmulationEnabled", {
+            enabled: false,
+          });
+          await touch.detach();
+        }
+      }
     } finally {
       await pane.dispose();
     }
-  } else {
-    await panel.locator("button[data-load-more-posts]").click();
   }
   const result = () =>
     panel.$eval("[data-load-more-status]", (node) => ({
@@ -456,14 +514,11 @@ export async function assertPanelLoadsOneBatch(
     path: `${process.cwd()}/test-results/post-load-more-${site}.png`,
     fullPage: false,
   });
-  const loadControl = await panel.$(
-    "button[data-load-more-posts], button[data-show-more-posts]",
-  );
-  if (!loadControl)
-    throw Error("取得完了後の追加表示・読み込み操作がありません");
+  const loadControl = await panel.$("[data-load-more-hint]");
+  if (!loadControl) throw Error("取得完了後の操作ヒントがありません");
   try {
     await loadControl.screenshot({
-      path: `${process.cwd()}/test-results/post-load-more-control-${site}.png`,
+      path: `${process.cwd()}/test-results/post-load-more-hint-${site}.png`,
     });
   } finally {
     await loadControl.dispose();

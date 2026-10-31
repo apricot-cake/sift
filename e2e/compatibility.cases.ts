@@ -1047,7 +1047,7 @@ export function createCompatibilityCases(): LiveCase[] {
                   page,
                   panel,
                   target.site,
-                  target.id === "x-pinned-list" ? "button" : undefined,
+                  target.id === "x-pinned-list" ? "panel-touch" : undefined,
                 ),
               ),
               contentType: "application/json",

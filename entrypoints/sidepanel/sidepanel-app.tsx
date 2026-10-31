@@ -737,19 +737,96 @@ function PostList({
     if (!pane) return;
     let intentUntil = 0;
     let previous = pane.scrollTop;
-    const wheel = (event: WheelEvent) => {
-      intentUntil = event.deltaY > 0 ? Date.now() + 800 : 0;
+    let wheelUsed = false;
+    let wheelTimer: ReturnType<typeof setTimeout> | undefined;
+    let intentSource: "wheel" | "touch" | "other" = "other";
+    let touchStart: { x: number; y: number } | null = null;
+    let touchUsed = false;
+    const atEnd = () =>
+      pane.scrollHeight - pane.clientHeight - pane.scrollTop < 160;
+    const consume = () => {
+      if (pane.hidden || Date.now() >= intentUntil || !atEnd()) return;
+      intentUntil = 0;
+      if (intentSource === "wheel") wheelUsed = true;
+      if (intentSource === "touch") touchUsed = true;
+      more.current();
     };
-    const touch = () => {
+    const wheel = (event: WheelEvent) => {
+      clearTimeout(wheelTimer);
+      // 慣性を含む一連の入力は1操作。取得完了を起点とする待機は設けない。
+      wheelTimer = setTimeout(() => {
+        wheelUsed = false;
+      }, 200);
+      if (
+        event.ctrlKey ||
+        event.shiftKey ||
+        event.deltaY <= 0 ||
+        Math.abs(event.deltaX) > Math.abs(event.deltaY)
+      ) {
+        intentUntil = 0;
+        return;
+      }
+      if (wheelUsed) return;
+      intentSource = "wheel";
       intentUntil = Date.now() + 800;
+      consume();
+    };
+    const startTouch = (event: TouchEvent) => {
+      const point = event.touches.length === 1 ? event.touches[0] : null;
+      touchStart = point ? { x: point.clientX, y: point.clientY } : null;
+      touchUsed = false;
+      intentUntil = 0;
+    };
+    const moveTouch = (event: TouchEvent) => {
+      const point = event.touches.length === 1 ? event.touches[0] : null;
+      if (!touchStart || !point || touchUsed) return;
+      const down = touchStart.y - point.clientY;
+      if (down < 30 || down <= Math.abs(touchStart.x - point.clientX)) {
+        intentUntil = 0;
+        return;
+      }
+      intentSource = "touch";
+      intentUntil = Date.now() + 800;
+      consume();
+    };
+    const endTouch = () => {
+      touchStart = null;
+      // 指を離した後の慣性スクロールでは次の取得を開始しない。
+      intentUntil = 0;
     };
     const drag = (event: PointerEvent) => {
-      if (event.buttons !== 0) intentUntil = Date.now() + 800;
+      if (
+        event.target === pane &&
+        event.pointerType !== "touch" &&
+        event.buttons !== 0
+      ) {
+        intentSource = "other";
+        intentUntil = Date.now() + 800;
+      }
+    };
+    const releasePointer = () => {
+      if (intentSource === "other") intentUntil = 0;
     };
     const key = (event: KeyboardEvent) => {
+      if (
+        event.repeat ||
+        event.shiftKey ||
+        event.ctrlKey ||
+        event.altKey ||
+        event.metaKey ||
+        (event.target instanceof Element &&
+          event.target.closest(
+            'button, input, textarea, select, [role="button"], [role="combobox"], [contenteditable]:not([contenteditable="false"])',
+          ))
+      ) {
+        intentUntil = 0;
+        return;
+      }
+      intentSource = "other";
       intentUntil = ["ArrowDown", "PageDown", "End", " "].includes(event.key)
         ? Date.now() + 800
         : 0;
+      consume();
     };
     const scroll = () => {
       const down = pane.scrollTop > previous;
@@ -760,21 +837,31 @@ function PostList({
         down &&
         pane.scrollHeight - pane.clientHeight - pane.scrollTop < 160
       ) {
-        intentUntil = 0;
-        more.current();
+        consume();
       }
     };
     pane.addEventListener("wheel", wheel, { passive: true });
-    pane.addEventListener("touchmove", touch, { passive: true });
-    pane.addEventListener("pointerdown", touch);
+    pane.addEventListener("touchstart", startTouch, { passive: true });
+    pane.addEventListener("touchmove", moveTouch, { passive: true });
+    pane.addEventListener("touchend", endTouch, { passive: true });
+    pane.addEventListener("touchcancel", endTouch, { passive: true });
+    pane.addEventListener("pointerdown", drag);
     pane.addEventListener("pointermove", drag, { passive: true });
+    pane.addEventListener("pointerup", releasePointer);
+    pane.addEventListener("pointercancel", releasePointer);
     pane.addEventListener("keydown", key);
     pane.addEventListener("scroll", scroll, { passive: true });
     return () => {
       pane.removeEventListener("wheel", wheel);
-      pane.removeEventListener("touchmove", touch);
-      pane.removeEventListener("pointerdown", touch);
+      clearTimeout(wheelTimer);
+      pane.removeEventListener("touchstart", startTouch);
+      pane.removeEventListener("touchmove", moveTouch);
+      pane.removeEventListener("touchend", endTouch);
+      pane.removeEventListener("touchcancel", endTouch);
+      pane.removeEventListener("pointerdown", drag);
       pane.removeEventListener("pointermove", drag);
+      pane.removeEventListener("pointerup", releasePointer);
+      pane.removeEventListener("pointercancel", releasePointer);
       pane.removeEventListener("keydown", key);
       pane.removeEventListener("scroll", scroll);
     };
@@ -803,22 +890,21 @@ function PostList({
                       ? t("sidepanelLoadFailed")
                       : "";
   const hasMoreCollected = posts.length > visibleCount;
-  const inlineStatus = load.loading || load.result?.status === "loaded";
-  const actionLabel = hasMoreCollected
-    ? t("sidepanelShowMorePosts")
-    : load.loading
-      ? t("sidepanelLoadLoading")
-      : stopped
-        ? t("sidepanelLoadStopped")
-        : load.result !== null && load.result.status !== "loaded"
-          ? t("sidepanelLoadRetry")
-          : t("sidepanelLoadMore");
+  const retry =
+    !load.loading &&
+    !stopped &&
+    load.result !== null &&
+    load.result.status !== "loaded";
+  const showHint =
+    hasMoreCollected ||
+    (!truncated && !reading && !load.loading && !stopped && !retry);
   return (
     <section
       ref={section}
       aria-label={t("sidepanelPostsTitle")}
       aria-busy={load.loading}
       data-load-request-count={load.requestCount}
+      data-has-more-collected={hasMoreCollected}
     >
       {truncated && (
         <p
@@ -859,37 +945,31 @@ function PostList({
           data-added={load.result?.added ?? 0}
           data-request-count={load.requestCount}
           className={
-            inlineStatus || !statusMessage
-              ? "sr-only"
-              : "m-0 text-xs leading-5 text-muted-foreground"
+            statusMessage
+              ? "m-0 text-xs leading-5 text-muted-foreground"
+              : "sr-only"
           }
         >
           {statusMessage}
         </p>
-        {(hasMoreCollected || !truncated) && (
-          <Button
-            className="h-auto min-h-9 w-full flex-col gap-0.5 whitespace-normal py-2"
-            variant="outline"
-            data-show-more-posts={hasMoreCollected ? "" : undefined}
-            data-load-more-posts={hasMoreCollected ? undefined : ""}
-            aria-describedby={statusMessage ? statusId : undefined}
-            disabled={!hasMoreCollected && (load.loading || stopped || reading)}
-            onClick={() =>
-              hasMoreCollected
-                ? setVisibleCount((count) => count + POSTS_PER_PAGE)
-                : void load.loadMore()
-            }
+        {showHint && (
+          <p
+            className="m-0 py-2 text-center text-xs leading-5 text-muted-foreground"
+            data-load-more-hint=""
           >
-            {actionLabel}
-            {inlineStatus && statusMessage !== actionLabel && (
-              <span
-                aria-hidden="true"
-                data-load-more-summary=""
-                className="text-xs font-normal leading-5 text-muted-foreground"
-              >
-                {statusMessage}
-              </span>
-            )}
+            {t("sidepanelLoadHint")}
+          </p>
+        )}
+        {retry && !truncated && (
+          <Button
+            className="w-full"
+            variant="outline"
+            data-load-more-posts=""
+            aria-describedby={statusMessage ? statusId : undefined}
+            disabled={reading}
+            onClick={() => void load.loadMore()}
+          >
+            {t("sidepanelLoadRetry")}
           </Button>
         )}
         {load.loading && (
