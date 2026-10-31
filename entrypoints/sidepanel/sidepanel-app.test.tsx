@@ -302,7 +302,7 @@ describe("パネルの投稿一覧", () => {
   });
 
   it("初期状態で投稿タブを選び、投稿へのリンクを表示する", async () => {
-    request = async () => postsContext([post(1)]);
+    request = async () => postsContext([post(1), post(2)], 1000);
     await mount(false);
     expect(
       container
@@ -317,9 +317,20 @@ describe("パネルの投稿一覧", () => {
     expect(link?.target).toBe("_blank");
     expect(link?.rel).toBe("noreferrer");
     expect(link?.textContent).toContain("投稿の本文");
-    expect(container.querySelector("[data-post-count]")?.textContent).toBe(
-      t("sidepanelPostCount", { count: "1", total: "1" }),
+    const postsTab = container.querySelector("[data-panel-tab=posts]");
+    expect(postsTab?.getAttribute("aria-label")).toBe(t("sidepanelPostsTab"));
+    const badge = postsTab?.querySelector("[data-post-count]");
+    expect(badge?.textContent).toBe("2");
+    expect(badge?.getAttribute("aria-live")).toBe("polite");
+    expect(badge?.getAttribute("title")).toBe(
+      t("sidepanelMatchingCount", { count: "2" }),
     );
+    const pane = container.querySelector("[data-posts-panel]");
+    const total = pane?.querySelector("[data-collected-count]");
+    expect(total?.textContent).toBe(
+      t("sidepanelCollectedCount", { count: (1000).toLocaleString() }),
+    );
+    expect(pane?.firstElementChild).toBe(total);
   });
 
   it("投稿本文を文字として表示し、画像は遅延読み込みする", async () => {
@@ -427,10 +438,41 @@ describe("パネルの投稿一覧", () => {
     request = async () => postsContext([]);
     await mount(false);
     expect(container.textContent).toContain(t("sidepanelNoCollectedPosts"));
+    const postsTab = container.querySelector<HTMLButtonElement>(
+      "[data-panel-tab=posts]",
+    );
+    const badge = postsTab?.querySelector("[data-post-count]");
+    expect(badge?.textContent).toBe("0");
+    expect(container.querySelector("[data-collected-count]")?.textContent).toBe(
+      t("sidepanelCollectedCount", { count: "0" }),
+    );
     request = async () => postsContext([], 3);
     await act(async () => vi.advanceTimersByTimeAsync(750));
     expect(container.textContent).toContain(t("sidepanelNoMatchingPosts"));
     expect(container.textContent).not.toContain(t("sidepanelNoCollectedPosts"));
+    expect(badge?.textContent).toBe("0");
+    expect(container.querySelector("[data-collected-count]")?.textContent).toBe(
+      t("sidepanelCollectedCount", { count: "3" }),
+    );
+    await act(async () =>
+      container
+        .querySelector<HTMLButtonElement>("[data-panel-tab=filters]")
+        ?.click(),
+    );
+    request = async () => postsContext([post(1), post(2)], 5);
+    await act(async () => vi.advanceTimersByTimeAsync(750));
+    expect(badge?.textContent).toBe("2");
+    expect(badge?.closest("[hidden]")).toBeNull();
+    expect(badge?.getAttribute("title")).toBe(
+      t("sidepanelMatchingCount", { count: "2" }),
+    );
+    const total = container.querySelector("[data-collected-count]");
+    expect(total?.textContent).toBe(
+      t("sidepanelCollectedCount", { count: "5" }),
+    );
+    expect(total?.closest<HTMLElement>("[data-posts-panel]")?.hidden).toBe(
+      true,
+    );
   });
 
   it("保存した条件で一覧を取り直し、保存前の遅い応答を破棄する", async () => {

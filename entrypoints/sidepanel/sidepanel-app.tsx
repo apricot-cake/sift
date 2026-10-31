@@ -513,14 +513,6 @@ function PanelViews({
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <header className="shrink-0 border-b border-border">
-        <div className="flex justify-end px-4 pb-1 pt-3 text-xs text-muted-foreground">
-          <span data-post-count="" aria-live="polite">
-            {t("sidepanelPostCount", {
-              count: postCount.toLocaleString(),
-              total: collectedCount.toLocaleString(),
-            })}
-          </span>
-        </div>
         <div
           role="tablist"
           aria-label={t("sidepanelViewLabel")}
@@ -535,6 +527,7 @@ function PanelViews({
             aria-selected={selected === "posts"}
             aria-controls={`${id}-pane-posts`}
             aria-label={t("sidepanelPostsTab")}
+            aria-describedby={`${id}-post-count`}
             tabIndex={selected === "posts" ? 0 : -1}
             data-panel-tab="posts"
             onFocus={() => select("posts")}
@@ -542,6 +535,21 @@ function PanelViews({
             onKeyDown={(event) => moveFocus(event, "posts")}
           >
             {t("sidepanelPostsTab")}
+            <span
+              id={`${id}-post-count`}
+              data-post-count=""
+              role="status"
+              aria-live="polite"
+              aria-label={t("sidepanelMatchingCount", {
+                count: postCount.toLocaleString(),
+              })}
+              title={t("sidepanelMatchingCount", {
+                count: postCount.toLocaleString(),
+              })}
+              className="rounded-full bg-primary/10 px-1.5 py-0.5 text-xs tabular-nums text-primary"
+            >
+              {postCount.toLocaleString()}
+            </span>
           </button>
           <button
             ref={filterTab}
@@ -583,6 +591,14 @@ function PanelViews({
         hidden={selected !== "posts"}
         className="min-h-0 flex-1 overflow-y-auto p-3 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring"
       >
+        <p
+          data-collected-count=""
+          className="mb-3 mt-0 text-xs text-muted-foreground"
+        >
+          {t("sidepanelCollectedCount", {
+            count: collectedCount.toLocaleString(),
+          })}
+        </p>
         {posts}
       </div>
       <div

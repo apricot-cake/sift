@@ -113,15 +113,43 @@ export async function assertPanelTabsPreserveState(panel: Page): Promise<void> {
   const beforeSettings = await settings();
   const beforePosts = await readPanelPosts(panel);
   const tabs = await panel.$$eval('[data-panel-tabs] [role="tab"]', (nodes) =>
-    nodes.map((node) => {
-      const copy = node.cloneNode(true) as Element;
-      copy.querySelectorAll('[aria-hidden="true"]').forEach((child) => {
-        child.remove();
-      });
-      return copy.textContent?.trim();
-    }),
+    nodes.map((node) => node.getAttribute("aria-label")),
   );
   expect(tabs).toEqual(["投稿", "絞り込み条件"]);
+  await expect
+    .poll(async () => {
+      const posts = await readPanelPosts(panel);
+      return panel.$eval(
+        '[data-panel-tab="posts"] [data-post-count]',
+        (node, expected) => {
+          const label = `条件に一致する投稿${expected.toLocaleString()}件`;
+          return (
+            node.textContent?.trim() === expected.toLocaleString() &&
+            node.getAttribute("role") === "status" &&
+            node.getAttribute("aria-live") === "polite" &&
+            node.getAttribute("aria-label") === label &&
+            node.parentElement?.getAttribute("aria-describedby") === node.id
+          );
+        },
+        posts.length,
+      );
+    })
+    .toBe(true);
+  const collected = await panel.$eval("[data-collected-count]", (node) => ({
+    text: node.textContent?.trim() ?? "",
+    firstInPosts:
+      node.parentElement?.matches("[data-posts-panel]") === true &&
+      node.parentElement.firstElementChild === node,
+    inHeader: node.closest("header") !== null,
+    inFilters: node.closest("[data-filter-panel]") !== null,
+  }));
+  expect(collected.text).toMatch(/^取得済み[\d,]+件$/);
+  expect(Number(collected.text.replace(/[^\d]/g, ""))).toBeGreaterThanOrEqual(
+    beforePosts.length,
+  );
+  expect(collected.firstInPosts).toBe(true);
+  expect(collected.inHeader).toBe(false);
+  expect(collected.inFilters).toBe(false);
   await selectPanelTab(panel, "posts");
   const afterPosts = new Set(
     (await readPanelPosts(panel)).map((post) => postKey(post.url)),
