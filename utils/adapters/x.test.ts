@@ -452,6 +452,16 @@ describe("引用投稿を読む", () => {
 });
 
 describe("リポストを読む", () => {
+  it.each(["/i/communities/1801234567890123456", "/i/lists/42", "/home"])(
+    "プロフィール以外の見出しリンク %s をリポストとして読まない",
+    (href) => {
+      const card = renderPost(
+        `<a href="${href}"><span data-testid="socialContext">コミュニティ</span></a>`,
+      );
+      expect(xAdapter.readIsRepost(card)).toBe(false);
+    },
+  );
+
   // リポストの矢印は socialContext の前にあり、文言はリポストした人のプロフィール
   // へのリンクの中に入る。表示言語が違っても、この構造は変わらない。
   it.each([

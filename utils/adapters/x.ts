@@ -420,14 +420,17 @@ export const xAdapter = Object.freeze({
 
   readIsRepost(postCard: Element) {
     // 表示文言は読者の言語で変わる。リポストの socialContext だけは、リポスト
-    // した人のプロフィールへの相対リンクに入る。固定ポストの socialContext は
-    // リンク外なので、文言ではなくこの構造で区別する。
+    // した人のプロフィールへの相対リンクに入る。コミュニティへのリンクや、
+    // リンク外にある固定ポストは含めない。
     return Array.from(
       postCard.querySelectorAll(X_SELECTORS.socialContext),
-    ).some(
-      (socialContext) =>
-        socialContext.closest(X_SELECTORS.postCard) === postCard &&
-        Boolean(socialContext.closest('a[href^="/"]')),
-    );
+    ).some((socialContext) => {
+      if (socialContext.closest(X_SELECTORS.postCard) !== postCard)
+        return false;
+      const href =
+        socialContext.closest('a[href^="/"]')?.getAttribute("href") ?? "";
+      const account = /^\/([\w]{1,15})\/?(?:[?#]|$)/.exec(href)?.[1];
+      return Boolean(account && !X_RESERVED_PATHS.has(account.toLowerCase()));
+    });
   },
 }) satisfies ServiceAdapter;
