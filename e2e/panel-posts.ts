@@ -113,44 +113,73 @@ export async function assertPanelTabsPreserveState(panel: Page): Promise<void> {
   const beforeSettings = await settings();
   const beforePosts = await readPanelPosts(panel);
   const tabs = await panel.$$eval('[data-panel-tabs] [role="tab"]', (nodes) =>
-    nodes.map((node) => node.getAttribute("aria-label")),
+    nodes.map((node) => ({
+      name: node.getAttribute("aria-label"),
+      text: node.textContent?.trim(),
+    })),
   );
-  expect(tabs).toEqual(["投稿", "絞り込み条件"]);
+  expect(tabs).toEqual([
+    { name: "投稿", text: "投稿" },
+    { name: "絞り込み条件", text: "絞り込み条件" },
+  ]);
   await expect
     .poll(async () => {
       const posts = await readPanelPosts(panel);
       return panel.$eval(
-        '[data-panel-tab="posts"] [data-post-count]',
+        "[data-panel-counts] [data-post-count]",
         (node, expected) => {
-          const label = `条件に一致する投稿${expected.toLocaleString()}件`;
+          const status = node.closest("[data-panel-counts]");
           return (
-            node.textContent?.trim() === expected.toLocaleString() &&
-            node.getAttribute("role") === "status" &&
-            node.getAttribute("aria-live") === "polite" &&
-            node.getAttribute("aria-label") === label &&
-            node.parentElement?.getAttribute("aria-describedby") === node.id
+            node.textContent?.trim() ===
+              `ヒット${expected.toLocaleString()}件` &&
+            status?.getAttribute("role") === "status" &&
+            status.getAttribute("aria-live") === "polite"
           );
         },
         posts.length,
       );
     })
     .toBe(true);
-  const collected = await panel.$eval("[data-collected-count]", (node) => ({
-    text: node.textContent?.trim() ?? "",
-    firstInPosts:
-      node.parentElement?.matches("[data-posts-panel]") === true &&
-      node.parentElement.firstElementChild === node,
-    inHeader: node.closest("header") !== null,
-    inFilters: node.closest("[data-filter-panel]") !== null,
-  }));
-  expect(collected.text).toMatch(/^取得済み[\d,]+件$/);
+  const collected = await panel.$eval(
+    "[data-panel-counts] [data-collected-count]",
+    (node) => ({
+      text: node.textContent?.trim() ?? "",
+      outsidePanes:
+        node.closest("[data-posts-panel], [data-filter-panel]") === null,
+      visible: node.checkVisibility({
+        checkVisibilityCSS: true,
+        checkOpacity: true,
+      }),
+    }),
+  );
+  expect(collected.text).toMatch(/^読み込み済み[\d,]+件$/);
   expect(Number(collected.text.replace(/[^\d]/g, ""))).toBeGreaterThanOrEqual(
     beforePosts.length,
   );
-  expect(collected.firstInPosts).toBe(true);
-  expect(collected.inHeader).toBe(false);
-  expect(collected.inFilters).toBe(false);
+  expect(collected.outsidePanes).toBe(true);
+  expect(collected.visible).toBe(true);
   await selectPanelTab(panel, "posts");
+  const fixedCounts = () =>
+    panel.$eval("[data-panel-counts]", (node) => {
+      const rect = node.getBoundingClientRect();
+      return {
+        top: rect.top,
+        bottom: rect.bottom,
+        visible: node.checkVisibility({
+          checkVisibilityCSS: true,
+          checkOpacity: true,
+        }),
+      };
+    });
+  const beforeScroll = await fixedCounts();
+  // パネル内の位置だけを変え、追加取得の操作意図は発生させない。
+  await panel.$eval("[data-posts-panel]", (node) => {
+    (node as HTMLElement).scrollTop = node.scrollHeight;
+  });
+  const afterScroll = await fixedCounts();
+  expect(afterScroll.visible).toBe(true);
+  expect(afterScroll.top).toBeCloseTo(beforeScroll.top, 0);
+  expect(afterScroll.bottom).toBeCloseTo(beforeScroll.bottom, 0);
   const afterPosts = new Set(
     (await readPanelPosts(panel)).map((post) => postKey(post.url)),
   );
@@ -158,6 +187,10 @@ export async function assertPanelTabsPreserveState(panel: Page): Promise<void> {
     true,
   );
   await openFilterControls(panel);
+  const inFilters = await fixedCounts();
+  expect(inFilters.visible).toBe(true);
+  expect(inFilters.top).toBeCloseTo(beforeScroll.top, 0);
+  expect(inFilters.bottom).toBeCloseTo(beforeScroll.bottom, 0);
   expect(await settings()).toEqual(beforeSettings);
 }
 

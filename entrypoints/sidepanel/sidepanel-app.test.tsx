@@ -319,18 +319,39 @@ describe("パネルの投稿一覧", () => {
     expect(link?.textContent).toContain("投稿の本文");
     const postsTab = container.querySelector("[data-panel-tab=posts]");
     expect(postsTab?.getAttribute("aria-label")).toBe(t("sidepanelPostsTab"));
-    const badge = postsTab?.querySelector("[data-post-count]");
-    expect(badge?.textContent).toBe("2");
-    expect(badge?.getAttribute("aria-live")).toBe("polite");
-    expect(badge?.getAttribute("title")).toBe(
+    expect(postsTab?.textContent).toBe(t("sidepanelPostsTab"));
+    expect(postsTab?.querySelector("[data-post-count]")).toBeNull();
+    const counts = container.querySelector("[data-panel-counts]");
+    expect(counts?.getAttribute("role")).toBe("status");
+    expect(counts?.getAttribute("aria-live")).toBe("polite");
+    expect(counts?.querySelector("[data-post-count]")?.textContent).toBe(
       t("sidepanelMatchingCount", { count: "2" }),
     );
     const pane = container.querySelector("[data-posts-panel]");
-    const total = pane?.querySelector("[data-collected-count]");
+    const filters = container.querySelector("[data-filter-panel]");
+    const total = counts?.querySelector("[data-collected-count]");
     expect(total?.textContent).toBe(
       t("sidepanelCollectedCount", { count: (1000).toLocaleString() }),
     );
-    expect(pane?.firstElementChild).toBe(total);
+    expect(counts?.closest('[role="tabpanel"]')).toBeNull();
+    expect(counts?.parentElement).toBe(pane?.parentElement);
+    expect(counts?.parentElement).toBe(filters?.parentElement);
+    expect(
+      pane &&
+        counts &&
+        Boolean(
+          pane.compareDocumentPosition(counts) &
+            Node.DOCUMENT_POSITION_FOLLOWING,
+        ),
+    ).toBe(true);
+    expect(
+      filters &&
+        counts &&
+        Boolean(
+          filters.compareDocumentPosition(counts) &
+            Node.DOCUMENT_POSITION_FOLLOWING,
+        ),
+    ).toBe(true);
   });
 
   it("投稿本文を文字として表示し、画像は遅延読み込みする", async () => {
@@ -438,11 +459,11 @@ describe("パネルの投稿一覧", () => {
     request = async () => postsContext([]);
     await mount(false);
     expect(container.textContent).toContain(t("sidepanelNoCollectedPosts"));
-    const postsTab = container.querySelector<HTMLButtonElement>(
-      "[data-panel-tab=posts]",
+    const counts = container.querySelector("[data-panel-counts]");
+    const matching = counts?.querySelector("[data-post-count]");
+    expect(matching?.textContent).toBe(
+      t("sidepanelMatchingCount", { count: "0" }),
     );
-    const badge = postsTab?.querySelector("[data-post-count]");
-    expect(badge?.textContent).toBe("0");
     expect(container.querySelector("[data-collected-count]")?.textContent).toBe(
       t("sidepanelCollectedCount", { count: "0" }),
     );
@@ -450,7 +471,9 @@ describe("パネルの投稿一覧", () => {
     await act(async () => vi.advanceTimersByTimeAsync(750));
     expect(container.textContent).toContain(t("sidepanelNoMatchingPosts"));
     expect(container.textContent).not.toContain(t("sidepanelNoCollectedPosts"));
-    expect(badge?.textContent).toBe("0");
+    expect(matching?.textContent).toBe(
+      t("sidepanelMatchingCount", { count: "0" }),
+    );
     expect(container.querySelector("[data-collected-count]")?.textContent).toBe(
       t("sidepanelCollectedCount", { count: "3" }),
     );
@@ -461,18 +484,25 @@ describe("パネルの投稿一覧", () => {
     );
     request = async () => postsContext([post(1), post(2)], 5);
     await act(async () => vi.advanceTimersByTimeAsync(750));
-    expect(badge?.textContent).toBe("2");
-    expect(badge?.closest("[hidden]")).toBeNull();
-    expect(badge?.getAttribute("title")).toBe(
+    expect(matching?.textContent).toBe(
       t("sidepanelMatchingCount", { count: "2" }),
     );
+    expect(counts?.closest("[hidden]")).toBeNull();
     const total = container.querySelector("[data-collected-count]");
     expect(total?.textContent).toBe(
       t("sidepanelCollectedCount", { count: "5" }),
     );
-    expect(total?.closest<HTMLElement>("[data-posts-panel]")?.hidden).toBe(
-      true,
-    );
+    expect(
+      total?.closest("[data-posts-panel], [data-filter-panel]"),
+    ).toBeNull();
+    expect(
+      container.querySelector<HTMLElement>("[data-posts-panel]")?.hidden,
+    ).toBe(true);
+    expect(
+      [...container.querySelectorAll('[data-panel-tabs] [role="tab"]')].map(
+        (tab) => tab.textContent,
+      ),
+    ).toEqual([t("sidepanelPostsTab"), t("sidepanelFilterConditions")]);
   });
 
   it("保存した条件で一覧を取り直し、保存前の遅い応答を破棄する", async () => {

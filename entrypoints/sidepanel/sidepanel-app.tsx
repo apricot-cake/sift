@@ -171,14 +171,6 @@ export function SidepanelApp(): React.JSX.Element {
     !currentPageIsEditable ||
     (activeContext !== null && !activeContext.timelineAvailable);
 
-  const conditionCount = [
-    selectedSettings.minReactionsEnabled,
-    selectedSettings.mediaEnabled,
-    selectedSettings.hideReplies,
-    selectedSettings.hideQuotes,
-    selectedSettings.hideReposts,
-  ].filter(Boolean).length;
-
   return (
     <main
       className="flex h-dvh min-h-0 flex-col overflow-hidden bg-background text-foreground"
@@ -262,7 +254,6 @@ export function SidepanelApp(): React.JSX.Element {
             key={`${activeContext.site}:${activeContext.pageKey}`}
             postCount={activeContext.posts.length}
             collectedCount={activeContext.collectedCount}
-            conditionCount={conditionCount}
             onSelectFilters={postLoading.cancel}
             posts={
               <PostList
@@ -466,14 +457,12 @@ type PanelTab = "posts" | "filters";
 function PanelViews({
   postCount,
   collectedCount,
-  conditionCount,
   onSelectFilters,
   posts,
   conditions,
 }: {
   postCount: number;
   collectedCount: number;
-  conditionCount: number;
   onSelectFilters: () => void;
   posts: React.ReactNode;
   conditions: React.ReactNode;
@@ -527,7 +516,6 @@ function PanelViews({
             aria-selected={selected === "posts"}
             aria-controls={`${id}-pane-posts`}
             aria-label={t("sidepanelPostsTab")}
-            aria-describedby={`${id}-post-count`}
             tabIndex={selected === "posts" ? 0 : -1}
             data-panel-tab="posts"
             onFocus={() => select("posts")}
@@ -535,21 +523,6 @@ function PanelViews({
             onKeyDown={(event) => moveFocus(event, "posts")}
           >
             {t("sidepanelPostsTab")}
-            <span
-              id={`${id}-post-count`}
-              data-post-count=""
-              role="status"
-              aria-live="polite"
-              aria-label={t("sidepanelMatchingCount", {
-                count: postCount.toLocaleString(),
-              })}
-              title={t("sidepanelMatchingCount", {
-                count: postCount.toLocaleString(),
-              })}
-              className="rounded-full bg-primary/10 px-1.5 py-0.5 text-xs tabular-nums text-primary"
-            >
-              {postCount.toLocaleString()}
-            </span>
           </button>
           <button
             ref={filterTab}
@@ -566,17 +539,6 @@ function PanelViews({
             onKeyDown={(event) => moveFocus(event, "filters")}
           >
             {t("sidepanelFilterConditions")}
-            {conditionCount > 0 && (
-              <span
-                aria-hidden="true"
-                title={t("sidepanelActiveConditions", {
-                  count: conditionCount,
-                })}
-                className="rounded-full bg-primary/10 px-1.5 py-0.5 text-xs tabular-nums text-primary"
-              >
-                {conditionCount}
-              </span>
-            )}
           </button>
         </div>
       </header>
@@ -591,14 +553,6 @@ function PanelViews({
         hidden={selected !== "posts"}
         className="min-h-0 flex-1 overflow-y-auto p-3 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring"
       >
-        <p
-          data-collected-count=""
-          className="mb-3 mt-0 text-xs text-muted-foreground"
-        >
-          {t("sidepanelCollectedCount", {
-            count: collectedCount.toLocaleString(),
-          })}
-        </p>
         {posts}
       </div>
       <div
@@ -613,6 +567,23 @@ function PanelViews({
         className="min-h-0 flex-1 overflow-y-auto p-4 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring"
       >
         {conditions}
+      </div>
+      <div
+        data-panel-counts=""
+        role="status"
+        aria-live="polite"
+        className="flex shrink-0 flex-wrap items-center justify-between gap-x-4 gap-y-1 border-t border-border px-4 py-2 text-xs tabular-nums text-muted-foreground"
+      >
+        <span data-collected-count="">
+          {t("sidepanelCollectedCount", {
+            count: collectedCount.toLocaleString(),
+          })}
+        </span>
+        <span data-post-count="">
+          {t("sidepanelMatchingCount", {
+            count: postCount.toLocaleString(),
+          })}
+        </span>
       </div>
     </div>
   );
