@@ -17,6 +17,8 @@ X・Blueskyでイラストを探すための Chrome 拡張機能です。いつ�
 
 [Chrome ウェブストア](https://chromewebstore.google.com/detail/sift/jglehalaegleehefcefnfmmbblgkomeh)からインストールします。
 
+バージョンごとの変更内容は [GitHub Releases](https://github.com/apricot-cake/sift/releases) を参照してください。
+
 ## 使い方
 
 1. X または Bluesky の対応するタイムラインやリストを開きます。
@@ -29,10 +31,6 @@ X・Blueskyでイラストを探すための Chrome 拡張機能です。いつ�
 「投稿」タブの末尾へスクロールするか、追加読み込みのボタンを押すと、1回分だけ続きを読み込みます。読み込み中は元ページを一時的にスクロールし、取得後に閲覧位置を戻します。新しい投稿を取得できなかった場合は、自動で読み進めずに停止します。
 
 絞り込みはブラウザー内で行います。投稿の内容を開発者へ送信しません。設定の同期など、扱うデータの詳細は [プライバシーポリシー](PRIVACY.md) をご覧ください。
-
-## 更新履歴
-
-[リリースノート](https://github.com/apricot-cake/sift/releases)
 
 ## 開発者向け
 
