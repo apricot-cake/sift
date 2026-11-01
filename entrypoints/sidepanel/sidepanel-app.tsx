@@ -546,18 +546,12 @@ function PanelViews({
         data-panel-counts=""
         role="status"
         aria-live="polite"
-        className="flex shrink-0 flex-wrap items-center justify-between gap-x-4 gap-y-1 px-4 py-2 text-xs tabular-nums text-muted-foreground"
+        className="shrink-0 px-4 py-2 text-xs tabular-nums text-muted-foreground"
       >
-        <span data-collected-count="">
-          {t("sidepanelCollectedCount", {
-            count: collectedCount.toLocaleString(),
-          })}
-        </span>
-        <span data-post-count="">
-          {t("sidepanelMatchingCount", {
-            count: postCount.toLocaleString(),
-          })}
-        </span>
+        {t("sidepanelPostSummary", {
+          total: collectedCount.toLocaleString(),
+          count: postCount.toLocaleString(),
+        })}
       </div>
       <div
         ref={postsPane}
@@ -965,12 +959,17 @@ function PostRow({ post }: { post: PanelPost }): React.JSX.Element {
         )}
         <p className="m-0 flex items-center gap-1.5 p-3 text-xs text-muted-foreground">
           <Heart className="size-3.5" aria-hidden="true" />
-          <span>
+          <span className="sr-only">
             {post.metricCount === null
               ? t("sidepanelLikesUnknown")
               : t("sidepanelPostLikes", {
                   count: reactionFormatter.format(post.metricCount),
                 })}
+          </span>
+          <span aria-hidden="true">
+            {post.metricCount === null
+              ? "—"
+              : reactionFormatter.format(post.metricCount)}
           </span>
         </p>
       </a>

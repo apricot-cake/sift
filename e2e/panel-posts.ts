@@ -126,34 +126,33 @@ export async function assertPanelTabsPreserveState(panel: Page): Promise<void> {
     .poll(async () => {
       const posts = await readPanelPosts(panel);
       return panel.$eval(
-        "[data-panel-counts] [data-post-count]",
+        "[data-panel-counts]",
         (node, expected) => {
-          const status = node.closest("[data-panel-counts]");
+          const match = node.textContent
+            ?.trim()
+            .match(/^([\d,]+)件中([\d,]+)件ヒット$/);
           return (
-            node.textContent?.trim() ===
-              `ヒット${expected.toLocaleString()}件` &&
-            status?.getAttribute("role") === "status" &&
-            status.getAttribute("aria-live") === "polite"
+            Number(match?.[2]?.replace(/,/g, "")) === expected &&
+            node.getAttribute("role") === "status" &&
+            node.getAttribute("aria-live") === "polite"
           );
         },
         posts.length,
       );
     })
     .toBe(true);
-  const collected = await panel.$eval(
-    "[data-panel-counts] [data-collected-count]",
-    (node) => ({
-      text: node.textContent?.trim() ?? "",
-      outsidePanes:
-        node.closest("[data-posts-panel], [data-filter-panel]") === null,
-      visible: node.checkVisibility({
-        checkVisibilityCSS: true,
-        checkOpacity: true,
-      }),
+  const collected = await panel.$eval("[data-panel-counts]", (node) => ({
+    text: node.textContent?.trim() ?? "",
+    outsidePanes:
+      node.closest("[data-posts-panel], [data-filter-panel]") === null,
+    visible: node.checkVisibility({
+      checkVisibilityCSS: true,
+      checkOpacity: true,
     }),
-  );
-  expect(collected.text).toMatch(/^読み込み済み[\d,]+件$/);
-  expect(Number(collected.text.replace(/[^\d]/g, ""))).toBeGreaterThanOrEqual(
+  }));
+  const summary = collected.text.match(/^([\d,]+)件中([\d,]+)件ヒット$/);
+  expect(summary).not.toBeNull();
+  expect(Number(summary?.[1]?.replace(/,/g, ""))).toBeGreaterThanOrEqual(
     beforePosts.length,
   );
   expect(collected.outsidePanes).toBe(true);
