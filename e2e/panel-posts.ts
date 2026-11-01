@@ -335,12 +335,94 @@ export async function assertPanelPhoto(
         height: img.naturalHeight,
       };
     });
-    const themes: {
+    const readAppearance = () =>
+      handle.evaluate((node) => {
+        const panel = document.querySelector("[data-sift-sidepanel]");
+        const card = node.closest("[data-post-link]");
+        const author = card?.querySelector("p");
+        if (!panel || !card || !author)
+          throw Error("投稿カードの色を取得できません");
+        const body =
+          card.querySelector("p.whitespace-pre-line") ??
+          panel.querySelector("[data-post-link] p.whitespace-pre-line");
+        const bodyText = body ?? author;
+        const bodyCard = bodyText.closest("[data-post-link]");
+        if (!bodyCard) throw Error("本文の投稿カードがありません");
+        const media = node.closest("[data-post-media]");
+        const canvas = document.createElement("canvas");
+        canvas.width = canvas.height = 1;
+        const context = canvas.getContext("2d", { colorSpace: "srgb" });
+        if (!context) throw Error("sRGB色変換用canvasを作成できません");
+        const rgba = (color: string): number[] => {
+          context.clearRect(0, 0, 1, 1);
+          context.fillStyle = color;
+          context.fillRect(0, 0, 1, 1);
+          return Array.from(context.getImageData(0, 0, 1, 1).data);
+        };
+        const luminance = (color: string): number => {
+          const channels = rgba(color);
+          if (channels[3] !== 255)
+            throw Error("不透明色以外のコントラストは判定しません");
+          const linear = channels.slice(0, 3).map((channel) => {
+            const value = channel / 255;
+            return value <= 0.04045
+              ? value / 12.92
+              : ((value + 0.055) / 1.055) ** 2.4;
+          });
+          return (
+            (linear[0] ?? 0) * 0.2126 +
+            (linear[1] ?? 0) * 0.7152 +
+            (linear[2] ?? 0) * 0.0722
+          );
+        };
+        const contrast = (foreground: string, background: string): number => {
+          const left = luminance(foreground);
+          const right = luminance(background);
+          return (
+            (Math.max(left, right) + 0.05) / (Math.min(left, right) + 0.05)
+          );
+        };
+        const panelBackground = getComputedStyle(panel).backgroundColor;
+        const cardBackground = getComputedStyle(card).backgroundColor;
+        const bodyCardBackground = getComputedStyle(bodyCard).backgroundColor;
+        const bodyColor = getComputedStyle(bodyText).color;
+        const authorColor = getComputedStyle(author).color;
+        const foreground = getComputedStyle(panel)
+          .getPropertyValue("--foreground")
+          .trim();
+        const auxiliaryColors = Array.from(
+          card.querySelectorAll("p.text-muted-foreground"),
+          (text) => getComputedStyle(text).color,
+        );
+        if (!auxiliaryColors.length) throw Error("補助テキストがありません");
+        return {
+          panelBackground,
+          cardBackground,
+          bodyCardBackground,
+          bodyColor,
+          bodyFallbackToAuthor: body === null,
+          authorColor,
+          foreground,
+          backgroundsMatch:
+            cardBackground === panelBackground &&
+            bodyCardBackground === panelBackground,
+          textFollowsForeground: [bodyColor, authorColor].every(
+            (color) => rgba(color).join(",") === rgba(foreground).join(","),
+          ),
+          bodyContrast: contrast(bodyColor, bodyCardBackground),
+          authorContrast: contrast(authorColor, cardBackground),
+          auxiliaryContrast: Math.min(
+            ...auxiliaryColors.map((color) => contrast(color, cardBackground)),
+          ),
+          imageBackground: getComputedStyle(node).backgroundColor,
+          mediaBackground: media
+            ? getComputedStyle(media).backgroundColor
+            : null,
+        };
+      });
+    const themes: (Awaited<ReturnType<typeof readAppearance>> & {
       scheme: "light" | "dark";
-      panelBackground: string;
-      imageBackground: string;
-      mediaBackground: string | null;
-    }[] = [];
+    })[] = [];
     for (const scheme of ["light", "dark"] as const) {
       await panel.emulateMediaFeatures([
         { name: "prefers-color-scheme", value: scheme },
@@ -353,18 +435,29 @@ export async function assertPanelPhoto(
           ),
         )
         .toBe(true);
-      const appearance = await handle.evaluate((node) => {
-        const panel = document.querySelector("[data-sift-sidepanel]");
-        if (!panel) throw Error("パネルの背景を取得できません");
-        const media = node.closest("[data-post-media]");
-        return {
-          panelBackground: getComputedStyle(panel).backgroundColor,
-          imageBackground: getComputedStyle(node).backgroundColor,
-          mediaBackground: media
-            ? getComputedStyle(media).backgroundColor
-            : null,
-        };
-      });
+      // transition-colorsの途中の色を撮らず、背景と通常文字がテーマ色へ到達するまで待つ。
+      await expect
+        .poll(async () => {
+          const appearance = await readAppearance();
+          return {
+            backgroundsMatch: appearance.backgroundsMatch,
+            textFollowsForeground: appearance.textFollowsForeground,
+          };
+        })
+        .toEqual({ backgroundsMatch: true, textFollowsForeground: true });
+      const appearance = await readAppearance();
+      expect(
+        appearance.bodyContrast,
+        `${scheme}の通常本文のコントラスト`,
+      ).toBeGreaterThanOrEqual(4.5);
+      expect(
+        appearance.authorContrast,
+        `${scheme}の著者名のコントラスト`,
+      ).toBeGreaterThanOrEqual(4.5);
+      expect(
+        appearance.auxiliaryContrast,
+        `${scheme}の補助テキストのコントラスト`,
+      ).toBeGreaterThanOrEqual(4.5);
       expect(
         appearance.imageBackground,
         `${scheme}で実画像の背景が白であること`,
@@ -375,7 +468,7 @@ export async function assertPanelPhoto(
       ).toBe("rgb(255, 255, 255)");
       themes.push({ scheme, ...appearance });
       await panel.screenshot({
-        path: `${process.cwd()}/test-results/white-media-${site}-${scheme}.png`,
+        path: `${process.cwd()}/test-results/panel-contrast-${site}-${scheme}.png`,
         fullPage: false,
       });
     }

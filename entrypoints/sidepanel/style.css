@@ -12,8 +12,6 @@ body {
   --panel-group-gap: 1.25rem;
 }
 
-[data-sift-sidepanel],
-[data-sift-sidepanel] [data-setting-row],
 [data-sift-sidepanel] footer button,
 [role="listbox"] {
   color: var(--muted-foreground);
