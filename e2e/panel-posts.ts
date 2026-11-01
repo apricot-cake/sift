@@ -130,7 +130,7 @@ export async function assertPanelTabsPreserveState(panel: Page): Promise<void> {
         (node, expected) => {
           const match = node.textContent
             ?.trim()
-            .match(/^([\d,]+)件中([\d,]+)件ヒット$/);
+            .match(/^([\d,]+) 件中 ([\d,]+) 件ヒット$/);
           return (
             Number(match?.[2]?.replace(/,/g, "")) === expected &&
             node.getAttribute("role") === "status" &&
@@ -150,7 +150,7 @@ export async function assertPanelTabsPreserveState(panel: Page): Promise<void> {
       checkOpacity: true,
     }),
   }));
-  const summary = collected.text.match(/^([\d,]+)件中([\d,]+)件ヒット$/);
+  const summary = collected.text.match(/^([\d,]+) 件中 ([\d,]+) 件ヒット$/);
   expect(summary).not.toBeNull();
   expect(Number(summary?.[1]?.replace(/,/g, ""))).toBeGreaterThanOrEqual(
     beforePosts.length,

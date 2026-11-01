@@ -1,10 +1,8 @@
 import {
-  CircleMinus,
   ExternalLink,
   Heart,
   Image,
   ImageOff,
-  ListFilter,
   type LucideIcon,
   MessageCircle,
   Quote,
@@ -277,7 +275,7 @@ export function SidepanelApp(): React.JSX.Element {
                     <div>
                       <section data-minimum-group="">
                         <h2 className="m-0 pb-3 text-sm font-medium">
-                          <ItemLabel icon={ListFilter}>
+                          <ItemLabel icon={Heart}>
                             {t("optionsMinLikes")}
                           </ItemLabel>
                         </h2>
@@ -323,11 +321,6 @@ export function SidepanelApp(): React.JSX.Element {
                     </div>
 
                     <section data-filter-section="">
-                      <h2>
-                        <ItemLabel icon={CircleMinus}>
-                          {t("optionsSectionExclude")}
-                        </ItemLabel>
-                      </h2>
                       <SettingRow
                         icon={MessageCircle}
                         label={t("optionsHideReplies")}
@@ -363,10 +356,7 @@ export function SidepanelApp(): React.JSX.Element {
                       </SettingRow>
                     </section>
                   </fieldset>
-                  <p className="mb-0 mt-5 text-xs leading-5 text-muted-foreground">
-                    {t("sidepanelSettingsSavedPerSite")}
-                  </p>
-                  <footer className="mt-5 flex justify-end border-t border-border pt-4">
+                  <footer className="mt-8 flex justify-end">
                     <Button
                       onClick={() =>
                         runPanelAction(() => {

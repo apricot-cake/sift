@@ -105,7 +105,6 @@ describe("抽出の操作入口", () => {
     expect(group).not.toContain("<CardContent");
     expect(group).toContain("disabled={!filteringIsAvailable}");
     expect(group).not.toContain('t("optionsSectionDisplayConditions")');
-    expect(group.match(/t\("optionsSectionExclude"\)/g)).toHaveLength(1);
     expect(group).not.toContain("data-master-filter");
     expect(group).not.toContain("sidepanelFiltering");
     expect(group).not.toContain("divide-y");
