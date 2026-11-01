@@ -615,8 +615,8 @@ function PostImage({
       onError={() => setFailed(true)}
       className={
         multiple
-          ? "h-44 w-full bg-muted object-contain"
-          : "max-h-96 w-full bg-muted object-contain"
+          ? "h-44 w-full bg-white object-contain"
+          : "max-h-96 w-full bg-white object-contain"
       }
     />
   );
@@ -945,8 +945,8 @@ function PostRow({ post }: { post: PanelPost }): React.JSX.Element {
             data-post-media=""
             className={
               post.images.length > 1
-                ? "grid grid-cols-2 gap-px bg-border"
-                : "bg-muted"
+                ? "grid grid-cols-2 gap-px bg-white"
+                : "bg-white"
             }
           >
             {post.images.map((image) => (

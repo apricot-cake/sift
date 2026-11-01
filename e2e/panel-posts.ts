@@ -325,7 +325,7 @@ export async function assertPanelPhoto(
         { message: "CDNの実画像が読み込まれること" },
       )
       .toBe(true);
-    return handle.evaluate((node) => {
+    const photo = await handle.evaluate((node) => {
       const img = node as HTMLImageElement;
       return {
         post: (img.closest("a") as HTMLAnchorElement).href,
@@ -335,8 +335,62 @@ export async function assertPanelPhoto(
         height: img.naturalHeight,
       };
     });
+    const themes: {
+      scheme: "light" | "dark";
+      panelBackground: string;
+      imageBackground: string;
+      mediaBackground: string | null;
+    }[] = [];
+    for (const scheme of ["light", "dark"] as const) {
+      await panel.emulateMediaFeatures([
+        { name: "prefers-color-scheme", value: scheme },
+      ]);
+      await expect
+        .poll(() =>
+          panel.evaluate(
+            (value) => matchMedia(`(prefers-color-scheme: ${value})`).matches,
+            scheme,
+          ),
+        )
+        .toBe(true);
+      const appearance = await handle.evaluate((node) => {
+        const panel = document.querySelector("[data-sift-sidepanel]");
+        if (!panel) throw Error("パネルの背景を取得できません");
+        const media = node.closest("[data-post-media]");
+        return {
+          panelBackground: getComputedStyle(panel).backgroundColor,
+          imageBackground: getComputedStyle(node).backgroundColor,
+          mediaBackground: media
+            ? getComputedStyle(media).backgroundColor
+            : null,
+        };
+      });
+      expect(
+        appearance.imageBackground,
+        `${scheme}で実画像の背景が白であること`,
+      ).toBe("rgb(255, 255, 255)");
+      expect(
+        appearance.mediaBackground,
+        `${scheme}で画像領域の背景が白であること`,
+      ).toBe("rgb(255, 255, 255)");
+      themes.push({ scheme, ...appearance });
+      await panel.screenshot({
+        path: `${process.cwd()}/test-results/white-media-${site}-${scheme}.png`,
+        fullPage: false,
+      });
+    }
+    expect(
+      themes[0]?.panelBackground,
+      "パネル全体は明暗テーマに追従すること",
+    ).not.toBe(themes[1]?.panelBackground);
+    return { ...photo, themes };
   } finally {
-    await handle.dispose();
+    try {
+      // features省略で、この検証が設定したメディア特性のエミュレーションを解除する。
+      await panel.emulateMediaFeatures();
+    } finally {
+      await handle.dispose();
+    }
   }
 }
 
