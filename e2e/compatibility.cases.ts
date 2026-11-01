@@ -737,6 +737,24 @@ async function categoricalFilter(
       await panelClick(
         await element(panel, aria("combobox", "コンテンツタイプ")),
       );
+      await expect
+        .poll(() =>
+          panel.evaluate(() => {
+            const trigger = document.querySelector('[role="combobox"]');
+            const menu = document.querySelector('[role="listbox"]');
+            if (!trigger || !menu) return Number.POSITIVE_INFINITY;
+            return Math.abs(
+              trigger.getBoundingClientRect().width -
+                menu.getBoundingClientRect().width,
+            );
+          }),
+        )
+        .toBeLessThanOrEqual(1);
+      if (enabled) {
+        await panel.screenshot({
+          path: `${process.cwd()}/test-results/media-menu-${target.site}.png`,
+        });
+      }
       await panelClick(
         await element(
           panel,
