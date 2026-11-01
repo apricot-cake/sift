@@ -1160,11 +1160,7 @@ describe("最低いいね数の直接入力", () => {
       minReactionsEnabled: true,
     });
     await act(async () => input().blur());
-    await act(async () =>
-      container
-        .querySelector<HTMLButtonElement>("[data-minimum-group] button")
-        ?.click(),
-    );
+    await enter("");
     await flush();
     expect(input().value).toBe("");
     expect(input().placeholder).toBe(t("optionsMinimumNone"));

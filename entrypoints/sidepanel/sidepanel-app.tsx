@@ -294,15 +294,6 @@ export function SidepanelApp(): React.JSX.Element {
                             }
                             onValueChange={setMinimum}
                           />
-                          <Button
-                            type="button"
-                            variant="outline"
-                            className="h-10"
-                            onClick={() => setMinimum(null)}
-                            disabled={!selectedSettings.minReactionsEnabled}
-                          >
-                            {t("optionsMinimumNone")}
-                          </Button>
                         </div>
                       </section>
                       <MediaSetting

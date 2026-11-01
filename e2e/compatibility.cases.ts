@@ -629,7 +629,7 @@ async function inclusionFilter(
     contentType: "application/json",
   });
   session.loadGuard.setContext(target.id, "minimum-clear");
-  await panelClick(await element(panel, aria("button", "指定なし")));
+  await fillNumber(panel, input, null);
   await expect
     .poll(() => panel.$eval(input, (node) => (node as HTMLInputElement).value))
     .toBe("");
@@ -653,7 +653,7 @@ async function inclusionFilter(
   if (target.id === "x-profile" || target.id === "bluesky-profile") {
     await fillNumber(panel, input, threshold);
     await expect.poll(matched).toBe(true);
-    await panelClick(await element(panel, aria("button", "指定なし")));
+    await fillNumber(panel, input, null);
     await expect
       .poll(() =>
         panel.$eval(input, (node) => (node as HTMLInputElement).value),

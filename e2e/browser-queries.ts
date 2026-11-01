@@ -51,7 +51,11 @@ export async function element(
 }
 
 /** controlled な数値入力を、選択範囲への入力1回で置き換える。 */
-export async function fillNumber(page: Page, selector: string, value: number) {
+export async function fillNumber(
+  page: Page,
+  selector: string,
+  value: number | null,
+) {
   const input = await element(page, selector);
   try {
     await input.click();
@@ -61,11 +65,12 @@ export async function fillNumber(page: Page, selector: string, value: number) {
     } finally {
       await page.keyboard.up("Control");
     }
-    await page.keyboard.sendCharacter(String(value));
+    if (value === null) await input.press("Backspace");
+    else await page.keyboard.sendCharacter(String(value));
     await input.press("Enter");
     await expect
       .poll(() => input.evaluate((node) => (node as HTMLInputElement).value))
-      .toBe(String(value));
+      .toBe(value === null ? "" : String(value));
   } finally {
     await input.dispose();
   }
