@@ -36,7 +36,7 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
-      - uses: pnpm/setup@a0881977cd8ea73b1ed212236c99ca10dcc80cf4 # v3.1.1
+      - uses: pnpm/setup@fa36a5ef7dcdefc3a7cb25655c122e00cf6e636e # v3.1.2
         with:
           node-version-file: .node-version
           cache: true
@@ -64,7 +64,7 @@ jobs:
           echo "version=$version" >> "$GITHUB_OUTPUT"
 
       - run: pnpm install --frozen-lockfile
-      - uses: crate-ci/typos@7f9d0819ca1c008ade73f4b41fa9d258d48f605b # v1.51.1
+      - uses: crate-ci/typos@4c8b7f51ca60df14e3c5ca82770dfbbe6c3dae85 # v1.52.0
       - run: echo "$RUNNER_TEMP" >> "$GITHUB_PATH"
       - run: pnpm run check
       - run: pnpm run package:store
