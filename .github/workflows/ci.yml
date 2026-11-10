@@ -60,7 +60,7 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: pnpm/setup@a0881977cd8ea73b1ed212236c99ca10dcc80cf4 # v3.1.1
+      - uses: pnpm/setup@fa36a5ef7dcdefc3a7cb25655c122e00cf6e636e # v3.1.2
         with:
           node-version-file: .node-version
           cache: true
@@ -70,7 +70,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
 
       - name: スペル検査とtyposの準備
-        uses: crate-ci/typos@7f9d0819ca1c008ade73f4b41fa9d258d48f605b # v1.51.1
+        uses: crate-ci/typos@4c8b7f51ca60df14e3c5ca82770dfbbe6c3dae85 # v1.52.0
 
       - name: ローカルと同じtyposコマンドを使う
         run: echo "$RUNNER_TEMP" >> "$GITHUB_PATH"
